@@ -1,5 +1,6 @@
 from computeengine import Computation, States
 import six
+from collections import namedtuple
 
 
 def test_basic():
@@ -108,3 +109,14 @@ def test_serialization():
     for n in cpu.dag.nodes():
         assert cpu.dag.node[n].get('state', None) == foo.dag.node[n].get('state', None)
         assert cpu.dag.node[n].get('value', None) == foo.dag.node[n].get('value', None)
+
+
+def test_namedtuple_expansion():
+    cpu = Computation()
+    Coordinate = namedtuple("Coordinate", ['x', 'y'])
+    cpu.add_node("a")
+    cpu.add_named_tuple_expansion("a", Coordinate)
+    cpu.insert("a", Coordinate(1, 2))
+    cpu.compute_all()
+    assert cpu.value("a.x") == 1
+    assert cpu.value("a.y") == 2

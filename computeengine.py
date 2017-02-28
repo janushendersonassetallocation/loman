@@ -129,3 +129,12 @@ class Computation(object):
                 return dill.load(f)
         else:
             return dill.load(file_)
+
+    def add_named_tuple_expansion(self, name, namedtuple_type):
+        def make_f(field):
+            def get_field_value(tuple):
+                return getattr(tuple, field)
+            return get_field_value
+        for field in namedtuple_type._fields:
+            node_name = "{}.{}".format(name, field)
+            self.add_node(node_name, make_f(field), {'tuple': name})
