@@ -32,8 +32,11 @@ class Computation(object):
                 self.dag.add_edge(source, name, arg_name=arg)
         self._try_set_computable(name)
 
-    def draw(self):
-        labels = {k: "{}: {}".format(k, v.get('value')) for k,v in self.dag.node.items()}
+    def draw(self, show_values=True):
+        if show_values:
+            labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
+        else:
+            labels = {k: "{}".format(k) for k, v in self.dag.node.items()}
         nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s')
 
     def insert(self, name, value):
