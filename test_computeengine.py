@@ -120,3 +120,16 @@ def test_namedtuple_expansion():
     cpu.compute_all()
     assert cpu.value("a.x") == 1
     assert cpu.value("a.y") == 2
+
+
+def test_zero_parameter_functions():
+    cpu = Computation()
+
+    def a():
+        return 1
+    cpu.add_node('a', a)
+    assert cpu.state('a') == States.COMPUTABLE
+
+    cpu.compute_all()
+    assert cpu.state('a') == States.UPTODATE
+    assert cpu.value('a') == 1

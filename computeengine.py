@@ -30,6 +30,7 @@ class Computation(object):
                 else:
                     source = arg
                 self.dag.add_edge(source, name, arg_name=arg)
+        self._try_set_computable(name)
 
     def draw(self):
         labels = {k: "{}: {}".format(k, v.get('value')) for k,v in self.dag.node.items()}
@@ -51,10 +52,11 @@ class Computation(object):
             self.dag.node[n]['state'] = state
 
     def _try_set_computable(self, name):
-        for n in self.dag.predecessors(name):
-            if self.dag.node[n]['state'] != States.UPTODATE:
-                return
-        self.dag.node[name]['state'] = States.COMPUTABLE
+        if 'func' in self.dag.node[name]:
+            for n in self.dag.predecessors(name):
+                if self.dag.node[n]['state'] != States.UPTODATE:
+                    return
+            self.dag.node[name]['state'] = States.COMPUTABLE
 
     def _compute_node(self, name):
         f = self.dag.node[name]['func']
