@@ -5,6 +5,7 @@ import inspect
 import decorator
 import dill
 import six
+import seaborn as sns
 
 
 class States(Enum):
@@ -14,6 +15,15 @@ class States(Enum):
     UPTODATE = 4
     ERROR = 5
 
+
+state_colors = {
+    None: sns.xkcd_rgb['white'],
+    States.UNINITIALIZED: sns.xkcd_rgb['blue'],
+    States.STALE: sns.xkcd_rgb['yellow'],
+    States.COMPUTABLE: sns.xkcd_rgb['bright yellow green'],
+    States.UPTODATE: sns.xkcd_rgb['green'],
+    States.ERROR: sns.xkcd_rgb['red']
+}
 
 class Computation(object):
     def __init__(self):
@@ -38,7 +48,8 @@ class Computation(object):
             labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
         else:
             labels = {k: "{}".format(k) for k, v in self.dag.node.items()}
-        nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s')
+        node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
+        nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
 
     def insert(self, name, value):
         self.dag.node[name]['value'] = value
