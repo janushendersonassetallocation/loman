@@ -97,3 +97,9 @@ class Computation(object):
                 self._compute_node(n)
             if not any_computable:
                 break
+
+    def value(self, name):
+        return self.dag.node[name]['value']
+
+    def state(self, name):
+        return self.dag.node[name]['state']

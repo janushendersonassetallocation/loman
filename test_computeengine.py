@@ -17,35 +17,35 @@ def test_basic():
     cpu.add_node("c", c, ["a"])
     cpu.add_node("d", d, ["b", "c"])
 
-    assert cpu.dag.node['a']['state'] == States.UNINITIALIZED
-    assert cpu.dag.node['b']['state'] == States.UNINITIALIZED
-    assert cpu.dag.node['c']['state'] == States.UNINITIALIZED
-    assert cpu.dag.node['d']['state'] == States.UNINITIALIZED
+    assert cpu.state('a') == States.UNINITIALIZED
+    assert cpu.state('c') == States.UNINITIALIZED
+    assert cpu.state('b') == States.UNINITIALIZED
+    assert cpu.state('d') == States.UNINITIALIZED
 
     cpu.insert("a", 1)
-    assert cpu.dag.node['a']['state'] == States.UPTODATE
-    assert cpu.dag.node['b']['state'] == States.COMPUTABLE
-    assert cpu.dag.node['c']['state'] == States.COMPUTABLE
-    assert cpu.dag.node['d']['state'] == States.STALE
-    assert cpu.dag.node['a']['value'] == 1
+    assert cpu.state('a') == States.UPTODATE
+    assert cpu.state('b') == States.COMPUTABLE
+    assert cpu.state('c') == States.COMPUTABLE
+    assert cpu.state('d') == States.STALE
+    assert cpu.value('a') == 1
 
     cpu.compute_all()
-    assert cpu.dag.node['a']['state'] == States.UPTODATE
-    assert cpu.dag.node['b']['state'] == States.UPTODATE
-    assert cpu.dag.node['c']['state'] == States.UPTODATE
-    assert cpu.dag.node['d']['state'] == States.UPTODATE
-    assert cpu.dag.node['a']['value'] == 1
-    assert cpu.dag.node['b']['value'] == 2
-    assert cpu.dag.node['c']['value'] == 2
-    assert cpu.dag.node['d']['value'] == 4
+    assert cpu.state('a') == States.UPTODATE
+    assert cpu.state('b') == States.UPTODATE
+    assert cpu.state('c') == States.UPTODATE
+    assert cpu.state('d') == States.UPTODATE
+    assert cpu.value('a') == 1
+    assert cpu.value('b') == 2
+    assert cpu.value('c') == 2
+    assert cpu.value('d') == 4
 
     cpu.insert("a", 2)
     cpu.compute("b")
-    assert cpu.dag.node['a']['state'] == States.UPTODATE
-    assert cpu.dag.node['b']['state'] == States.UPTODATE
-    assert cpu.dag.node['c']['state'] == States.COMPUTABLE
-    assert cpu.dag.node['d']['state'] == States.STALE
-    assert cpu.dag.node['a']['value'] == 2
-    assert cpu.dag.node['b']['value'] == 3
+    assert cpu.state('a') == States.UPTODATE
+    assert cpu.state('b') == States.UPTODATE
+    assert cpu.state('c') == States.COMPUTABLE
+    assert cpu.state('d') == States.STALE
+    assert cpu.value('a') == 2
+    assert cpu.value('b') == 3
 
     assert set(cpu._get_calc_nodes("d")) == set(['c', 'd'])
