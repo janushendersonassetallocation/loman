@@ -12,6 +12,7 @@ class States(Enum):
     STALE = 2
     COMPUTABLE = 3
     UPTODATE = 4
+    ERROR = 5
 
 
 class Computation(object):
@@ -69,12 +70,19 @@ class Computation(object):
             edge_data = self.dag.get_edge_data(n, name)
             arg_name = edge_data['arg_name']
             params[arg_name] = value
-        value = f(**params)
-        self.dag.node[name]['state'] = States.UPTODATE
-        self.dag.node[name]['value'] = value
-        self._set_descendents(name, States.STALE)
-        for n in self.dag.successors(name):
-            self._try_set_computable(n)
+        try:
+            value = f(**params)
+            self.dag.node[name]['state'] = States.UPTODATE
+            self.dag.node[name]['value'] = value
+            self.dag.node[name].pop('exception', None)
+            self._set_descendents(name, States.STALE)
+            for n in self.dag.successors(name):
+                self._try_set_computable(n)
+        except Exception as e:
+            self.dag.node[name]['state'] = States.ERROR
+            self.dag.node[name].pop('value', None)
+            self.dag.node[name]['exception'] = e
+            self._set_descendents(name, States.STALE)
 
     def _get_calc_nodes(self, name):
         process_nodes = deque([name])
@@ -102,7 +110,10 @@ class Computation(object):
             self._compute_node(n)
 
     def _get_computable_nodes_iter(self):
-        return (n for n, node in self.dag.nodes_iter(data=True) if node['state'] == States.COMPUTABLE)
+        for n, node in self.dag.nodes_iter(data=True):
+
+            if node['state'] == States.COMPUTABLE:
+                yield n
 
     def compute_all(self):
         while True:
@@ -119,6 +130,9 @@ class Computation(object):
 
     def state(self, name):
         return self.dag.node[name]['state']
+
+    def exception(self, name):
+        return self.dag.node[name]['exception']
 
     def write_pickle(self, file_):
         if isinstance(file_, six.string_types):

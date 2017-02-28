@@ -133,3 +133,16 @@ def test_zero_parameter_functions():
     cpu.compute_all()
     assert cpu.state('a') == States.UPTODATE
     assert cpu.value('a') == 1
+
+
+def test_exceptions():
+    def b(a):
+        raise Exception("Infinite sadness")
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', b)
+    comp.insert('a', 1)
+    comp.compute_all()
+
+    assert comp.state('b') == States.ERROR
+    assert comp.exception('b').message == "Infinite sadness"
