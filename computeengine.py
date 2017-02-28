@@ -21,9 +21,13 @@ class Computation(object):
         self.dag.node[name]['state'] = States.UNINITIALIZED
         if func:
             self.dag.node[name]['func'] = func
-        if sources:
-            for source in sources:
-                self.dag.add_edge(source, name)
+            argspec = inspect.getargspec(func)
+            for arg in argspec.args:
+                if sources:
+                    source = sources.get(arg, arg)
+                else:
+                    source = arg
+                self.dag.add_edge(source, name, arg_name=arg)
 
     def draw(self):
         labels = {k: "{}: {}".format(k, v.get('value')) for k,v in self.dag.node.items()}
@@ -52,7 +56,12 @@ class Computation(object):
 
     def _compute_node(self, name):
         f = self.dag.node[name]['func']
-        params = {n: self.dag.node[n].get('value') for n in self.dag.predecessors(name)}
+        params = {}
+        for n in self.dag.predecessors(name):
+            value = self.value(n)
+            edge_data = self.dag.get_edge_data(n, name)
+            arg_name = edge_data['arg_name']
+            params[arg_name] = value
         value = f(**params)
         self.dag.node[name]['state'] = States.UPTODATE
         self.dag.node[name]['value'] = value
