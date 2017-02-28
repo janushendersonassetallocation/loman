@@ -6,6 +6,8 @@ import decorator
 import dill
 import six
 import seaborn as sns
+import pandas as pd
+import traceback
 
 
 class States(Enum):
@@ -24,6 +26,7 @@ state_colors = {
     States.UPTODATE: sns.xkcd_rgb['green'],
     States.ERROR: sns.xkcd_rgb['red']
 }
+
 
 class Computation(object):
     def __init__(self):
@@ -86,6 +89,7 @@ class Computation(object):
             self.dag.node[name]['state'] = States.UPTODATE
             self.dag.node[name]['value'] = value
             self.dag.node[name].pop('exception', None)
+            self.dag.node[name].pop('traceback', None)
             self._set_descendents(name, States.STALE)
             for n in self.dag.successors(name):
                 self._try_set_computable(n)
@@ -93,6 +97,7 @@ class Computation(object):
             self.dag.node[name]['state'] = States.ERROR
             self.dag.node[name].pop('value', None)
             self.dag.node[name]['exception'] = e
+            self.dag.node[name]['traceback'] = traceback.format_exc()
             self._set_descendents(name, States.STALE)
 
     def _get_calc_nodes(self, name):
@@ -168,3 +173,13 @@ class Computation(object):
         for field in namedtuple_type._fields:
             node_name = "{}.{}".format(name, field)
             self.add_node(node_name, make_f(field), {'tuple': name})
+            self.dag.node[node_name]['is_expansion'] = True
+
+    def get_df(self):
+        df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
+        df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
+        df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
+        df['exception'] = pd.Series(nx.get_node_attributes(self.dag, 'exception'))
+        df['traceback'] = pd.Series(nx.get_node_attributes(self.dag, 'traceback'))
+        df['is_expansion'] = pd.Series(nx.get_node_attributes(self.dag, 'is_expansion'))
+        return df
