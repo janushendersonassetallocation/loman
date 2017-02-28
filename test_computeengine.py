@@ -1,4 +1,5 @@
 from computeengine import Computation, States
+import six
 
 
 def test_basic():
@@ -77,3 +78,33 @@ def test_defined_sources():
     assert cpu.value('b') == 2
     assert cpu.value('c') == 2
     assert cpu.value('d') == 4
+
+
+def test_serialization():
+    def b(x):
+        return x + 1
+
+    def c(x):
+        return 2 * x
+
+    def d(x, y):
+        return x + y
+
+    cpu = Computation()
+    cpu.add_node("a")
+    cpu.add_node("b", b, {'x': 'a'})
+    cpu.add_node("c", c, {'x': 'a'})
+    cpu.add_node("d", d, {'x': 'b', 'y': 'c'})
+
+    cpu.insert("a", 1)
+    cpu.compute_all()
+    f = six.StringIO()
+    cpu.write_pickle(f)
+
+    f.seek(0)
+    foo = Computation.read_pickle(f)
+
+    assert set(cpu.dag.nodes()) == set(foo.dag.nodes())
+    for n in cpu.dag.nodes():
+        assert cpu.dag.node[n].get('state', None) == foo.dag.node[n].get('state', None)
+        assert cpu.dag.node[n].get('value', None) == foo.dag.node[n].get('value', None)

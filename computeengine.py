@@ -3,6 +3,8 @@ from enum import Enum
 from collections import OrderedDict, deque, namedtuple
 import inspect
 import decorator
+import dill
+import six
 
 
 class States(Enum):
@@ -112,3 +114,18 @@ class Computation(object):
 
     def state(self, name):
         return self.dag.node[name]['state']
+
+    def write_pickle(self, file_):
+        if isinstance(file_, six.string_types):
+            with open(file_, 'wb') as f:
+                dill.dump(self, f)
+        else:
+            dill.dump(self, file_)
+
+    @staticmethod
+    def read_pickle(file_):
+        if isinstance(file_, six.string_types):
+            with open(file_, 'rb') as f:
+                return dill.load(f)
+        else:
+            return dill.load(file_)
