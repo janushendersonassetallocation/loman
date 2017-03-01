@@ -146,3 +146,80 @@ def test_exceptions():
 
     assert comp.state('b') == States.ERROR
     assert comp.exception('b').message == "Infinite sadness"
+
+
+def test_update_function():
+    def b1(a):
+        return a + 1
+    def b2(a):
+        return a + 2
+    def c(b):
+        return 10 * b
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', b1)
+    comp.add_node('c', c)
+
+    comp.insert('a', 1)
+
+    comp.compute_all()
+    assert comp.state('a') == States.UPTODATE
+    assert comp.state('b') == States.UPTODATE
+    assert comp.state('c') == States.UPTODATE
+    assert comp.value('a') == 1
+    assert comp.value('b') == 2
+    assert comp.value('c') == 20
+
+    comp.add_node('b', b2)
+    assert comp.state('a') == States.UPTODATE
+    assert comp.state('b') == States.COMPUTABLE
+    assert comp.state('c') == States.STALE
+    assert comp.value('a') == 1
+
+    comp.compute_all()
+    assert comp.state('a') == States.UPTODATE
+    assert comp.state('b') == States.UPTODATE
+    assert comp.state('c') == States.UPTODATE
+    assert comp.value('a') == 1
+    assert comp.value('b') == 3
+    assert comp.value('c') == 30
+
+
+def test_update_function_with_structure_change():
+    def b1(a1):
+        return a1 + 1
+    def b2(a2):
+        return a2 + 2
+    def c(b):
+        return 10 * b
+    comp = Computation()
+    comp.add_node('a1')
+    comp.add_node('a2')
+    comp.add_node('b', b1)
+    comp.add_node('c', c)
+
+    comp.insert('a1', 1)
+    comp.insert('a2', 2)
+
+    comp.compute_all()
+    assert comp.state('a1') == States.UPTODATE
+    assert comp.state('b') == States.UPTODATE
+    assert comp.state('c') == States.UPTODATE
+    assert comp.value('a1') == 1
+    assert comp.value('b') == 2
+    assert comp.value('c') == 20
+
+    comp.add_node('b', b2)
+    assert comp.state('a2') == States.UPTODATE
+    assert comp.state('b') == States.COMPUTABLE
+    assert comp.state('c') == States.STALE
+    assert comp.value('a2') == 2
+
+    comp.compute_all()
+    assert comp.state('a2') == States.UPTODATE
+    assert comp.state('b') == States.UPTODATE
+    assert comp.state('c') == States.UPTODATE
+    assert comp.value('a2') == 2
+    assert comp.value('b') == 4
+    assert comp.value('c') == 40
+

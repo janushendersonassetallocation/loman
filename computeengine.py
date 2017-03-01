@@ -38,6 +38,8 @@ class Computation(object):
 
     def add_node(self, name, func=None, sources=None):
         self.dag.add_node(name)
+        self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
+        self.dag.node[name].clear()
         self.dag.node[name]['state'] = States.UNINITIALIZED
         if func:
             self.dag.node[name]['func'] = func
@@ -47,7 +49,12 @@ class Computation(object):
                     source = sources.get(arg, arg)
                 else:
                     source = arg
+                if not self.dag.has_node(source):
+                    raise Exception("No such node: {}".format(source))
                 self.dag.add_edge(source, name, arg_name=arg)
+        for n in nx.dag.descendants(self.dag, name):
+            if self.dag.node[n]['state'] in (States.COMPUTABLE, States.ERROR, States.UPTODATE):
+                self.dag.node[n]['state'] = States.STALE
         self._try_set_computable(name)
 
     def draw(self, show_values=True):
@@ -100,6 +107,8 @@ class Computation(object):
     def _try_set_computable(self, name):
         if 'func' in self.dag.node[name]:
             for n in self.dag.predecessors(name):
+                if not self.dag.has_node(n):
+                    return
                 if self.dag.node[n]['state'] != States.UPTODATE:
                     return
             self.dag.node[name]['state'] = States.COMPUTABLE
