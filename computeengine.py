@@ -8,6 +8,10 @@ import six
 import seaborn as sns
 import pandas as pd
 import traceback
+import graphviz
+import py.path
+import os
+from IPython.display import Image
 
 
 class States(Enum):
@@ -53,6 +57,30 @@ class Computation(object):
             labels = {k: "{}".format(k) for k, v in self.dag.node.items()}
         node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
         nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
+
+    def draw2(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+        nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
+        node_index_map = {name: short_name for short_name, name, data in nodes}
+        show_nodes = set()
+        g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
+        for name1, name2, n in self.dag.edges_iter(data=True):
+            if not show_expansion and (self.dag.node[name2].get('is_expansion', False)):
+                continue
+            show_nodes.add(name1)
+            show_nodes.add(name2)
+        for name, n in self.dag.nodes_iter(data=True):
+            if name in show_nodes:
+                short_name = node_index_map[name]
+                node_color = state_colors[n.get('state', None)]
+                g.node(short_name, name, style='filled', fillcolor=node_color)
+        for name1, name2, n in self.dag.edges_iter(data=True):
+            if name1 in show_nodes and name2 in show_nodes:
+                short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
+                g.edge(short_name1, short_name2)
+        with open('tmp.dot', 'w') as f:
+            f.write(g.source)
+        os.system('dot tmp.dot -Tpng -o test.png')
+        return Image(filename='test.png')
 
     def insert(self, name, value):
         self.dag.node[name]['value'] = value
