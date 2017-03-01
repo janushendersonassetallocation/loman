@@ -223,3 +223,56 @@ def test_update_function_with_structure_change():
     assert comp.value('b') == 4
     assert comp.value('c') == 40
 
+
+def test_copy():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1)
+
+    comp.insert("a", 1)
+    comp.compute_all()
+    assert comp.state("a") == States.UPTODATE
+    assert comp.state("b") == States.UPTODATE
+    assert comp.value("a") == 1
+    assert comp.value("b") == 2
+
+    comp2 = comp.copy()
+    comp2.insert("a", 5)
+    comp2.compute_all()
+    assert comp2.state("a") == States.UPTODATE
+    assert comp2.state("b") == States.UPTODATE
+    assert comp2.value("a") == 5
+    assert comp2.value("b") == 6
+
+    assert comp.state("a") == States.UPTODATE
+    assert comp.state("b") == States.UPTODATE
+    assert comp.value("a") == 1
+    assert comp.value("b") == 2
+
+
+def test_serialization_skip_flag():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1, serialize=False)
+    comp.add_node("c", lambda b: b + 1)
+
+    comp.insert("a", 1)
+    comp.compute_all()
+    f = six.StringIO()
+    comp.write_pickle(f)
+
+    assert comp.state("a") == States.UPTODATE
+    assert comp.state("b") == States.UPTODATE
+    assert comp.state("c") == States.UPTODATE
+    assert comp.value("a") == 1
+    assert comp.value("b") == 2
+    assert comp.value("c") == 3
+
+    f.seek(0)
+    comp2 = Computation.read_pickle(f)
+    assert comp2.state("a") == States.UPTODATE
+    assert comp2.state("b") == States.UNINITIALIZED
+    assert comp2.state("c") == States.UPTODATE
+    assert comp2.value("a") == 1
+    assert comp2.value("c") == 3
+

@@ -36,11 +36,14 @@ class Computation(object):
     def __init__(self):
         self.dag = nx.DiGraph()
 
-    def add_node(self, name, func=None, sources=None):
+    def add_node(self, name, func=None, sources=None, serialize=True):
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         self.dag.node[name].clear()
+
         self.dag.node[name]['state'] = States.UNINITIALIZED
+        self.dag.node[name]['serialize'] = serialize
+
         if func:
             self.dag.node[name]['func'] = func
             argspec = inspect.getargspec(func)
@@ -103,6 +106,13 @@ class Computation(object):
     def _set_descendents(self, name, state):
         for n in nx.dag.descendants(self.dag, name):
             self.dag.node[n]['state'] = state
+
+    def _set_uninitialized(self, name):
+        n = self.dag.node[name]
+        n['state'] = States.UNINITIALIZED
+        n.pop('value', None)
+        n.pop('error', None)
+        n.pop('traceback', None)
 
     def _try_set_computable(self, name):
         if 'func' in self.dag.node[name]:
@@ -188,11 +198,20 @@ class Computation(object):
         return self.dag.node[name]['exception']
 
     def write_pickle(self, file_):
+        node_serialize = nx.get_node_attributes(self.dag, 'serialize')
+        if all(serialize for name, serialize in node_serialize.items()):
+            obj = self
+        else:
+            obj = self.copy()
+            for name, serialize in node_serialize.items():
+                if not serialize:
+                    obj._set_uninitialized(name)
+
         if isinstance(file_, six.string_types):
             with open(file_, 'wb') as f:
-                dill.dump(self, f)
+                dill.dump(obj, f)
         else:
-            dill.dump(self, file_)
+            dill.dump(obj, file_)
 
     @staticmethod
     def read_pickle(file_):
@@ -201,6 +220,11 @@ class Computation(object):
                 return dill.load(f)
         else:
             return dill.load(file_)
+
+    def copy(self):
+        obj = Computation()
+        obj.dag = self.dag.copy()
+        return obj
 
     def add_named_tuple_expansion(self, name, namedtuple_type):
         def make_f(field):
