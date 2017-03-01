@@ -220,3 +220,6 @@ class Computation(object):
         df['traceback'] = pd.Series(nx.get_node_attributes(self.dag, 'traceback'))
         df['is_expansion'] = pd.Series(nx.get_node_attributes(self.dag, 'is_expansion'))
         return df
+
+    def get_value_dict(self):
+        return nx.get_node_attributes(self.dag, 'value')
