@@ -197,7 +197,7 @@ class Computation(object):
     def exception(self, name):
         return self.dag.node[name]['exception']
 
-    def write_pickle(self, file_):
+    def write_dill(self, file_):
         node_serialize = nx.get_node_attributes(self.dag, 'serialize')
         if all(serialize for name, serialize in node_serialize.items()):
             obj = self
@@ -214,7 +214,7 @@ class Computation(object):
             dill.dump(obj, file_)
 
     @staticmethod
-    def read_pickle(file_):
+    def read_dill(file_):
         if isinstance(file_, six.string_types):
             with open(file_, 'rb') as f:
                 return dill.load(f)
@@ -223,7 +223,7 @@ class Computation(object):
 
     def copy(self):
         obj = Computation()
-        obj.dag = self.dag.copy()
+        obj.dag = nx.DiGraph(self.dag)
         return obj
 
     def add_named_tuple_expansion(self, name, namedtuple_type):
@@ -247,3 +247,10 @@ class Computation(object):
 
     def get_value_dict(self):
         return nx.get_node_attributes(self.dag, 'value')
+
+    def insert_from(self, other, nodes=None):
+        if nodes is None:
+            nodes = set(self.dag.nodes())
+            nodes.intersection_update(other.dag.nodes())
+        for name in nodes:
+            self.insert(name, other.value(name))

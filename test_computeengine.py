@@ -100,10 +100,10 @@ def test_serialization():
     cpu.insert("a", 1)
     cpu.compute_all()
     f = six.StringIO()
-    cpu.write_pickle(f)
+    cpu.write_dill(f)
 
     f.seek(0)
-    foo = Computation.read_pickle(f)
+    foo = Computation.read_dill(f)
 
     assert set(cpu.dag.nodes()) == set(foo.dag.nodes())
     for n in cpu.dag.nodes():
@@ -259,7 +259,7 @@ def test_serialization_skip_flag():
     comp.insert("a", 1)
     comp.compute_all()
     f = six.StringIO()
-    comp.write_pickle(f)
+    comp.write_dill(f)
 
     assert comp.state("a") == States.UPTODATE
     assert comp.state("b") == States.UPTODATE
@@ -269,10 +269,44 @@ def test_serialization_skip_flag():
     assert comp.value("c") == 3
 
     f.seek(0)
-    comp2 = Computation.read_pickle(f)
+    comp2 = Computation.read_dill(f)
     assert comp2.state("a") == States.UPTODATE
     assert comp2.state("b") == States.UNINITIALIZED
     assert comp2.state("c") == States.UPTODATE
     assert comp2.value("a") == 1
     assert comp2.value("c") == 3
 
+
+def test_insert_from():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1, serialize=False)
+    comp.add_node("c", lambda b: b + 1)
+
+    comp.insert("a", 1)
+    comp2 = comp.copy()
+
+    comp.compute_all()
+    assert comp.state("a") == States.UPTODATE
+    assert comp.state("b") == States.UPTODATE
+    assert comp.state("c") == States.UPTODATE
+    assert comp.value("a") == 1
+    assert comp.value("b") == 2
+    assert comp.value("c") == 3
+    assert comp2.state("a") == States.UPTODATE
+    assert comp2.state("b") == States.COMPUTABLE
+    assert comp2.state("c") == States.STALE
+    assert comp2.value("a") == 1
+
+    comp2.insert_from(comp, ['a', 'c'])
+    assert comp.state("a") == States.UPTODATE
+    assert comp.state("b") == States.UPTODATE
+    assert comp.state("c") == States.UPTODATE
+    assert comp.value("a") == 1
+    assert comp.value("b") == 2
+    assert comp.value("c") == 3
+    assert comp2.state("a") == States.UPTODATE
+    assert comp2.state("b") == States.COMPUTABLE
+    assert comp2.state("c") == States.UPTODATE
+    assert comp2.value("a") == 1
+    assert comp2.value("c") == 3
