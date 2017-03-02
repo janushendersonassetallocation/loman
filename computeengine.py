@@ -73,6 +73,31 @@ class Computation(object):
         for n in self.dag.successors(name):
             self._try_set_computable(n)
 
+    def insert_multi(self, name_value_pairs):
+        names = set()
+        stale = set()
+        maybe_computable = set()
+        for name, value in name_value_pairs:
+            node = self.dag.node[name]
+            node['value'] = value
+            node['state'] = States.UPTODATE
+            names.add(name)
+            stale.update(nx.dag.descendants(self.dag, name))
+            maybe_computable.update(self.dag.successors(name))
+        stale.difference_update(names)
+        maybe_computable.difference_update(names)
+        for name in stale:
+            self.dag.node[name]['state'] = States.STALE
+        for name in maybe_computable:
+            self._try_set_computable(name)
+
+    def insert_from(self, other, nodes=None):
+        if nodes is None:
+            nodes = set(self.dag.nodes())
+            nodes.intersection_update(other.dag.nodes())
+        name_value_pairs = [(name, other.value(name)) for name in nodes]
+        self.insert_multi(name_value_pairs)
+
     def _set_descendents(self, name, state):
         for n in nx.dag.descendants(self.dag, name):
             self.dag.node[n]['state'] = state
@@ -219,13 +244,6 @@ class Computation(object):
 
     def get_value_dict(self):
         return nx.get_node_attributes(self.dag, 'value')
-
-    def insert_from(self, other, nodes=None):
-        if nodes is None:
-            nodes = set(self.dag.nodes())
-            nodes.intersection_update(other.dag.nodes())
-        for name in nodes:
-            self.insert(name, other.value(name))
 
     def draw(self, show_values=True):
         if show_values:

@@ -1,6 +1,7 @@
 from computeengine import Computation, States
 import six
 from collections import namedtuple
+import random
 
 
 def test_basic():
@@ -310,6 +311,39 @@ def test_insert_from():
     assert comp2.state("c") == States.UPTODATE
     assert comp2.value("a") == 1
     assert comp2.value("c") == 3
+
+
+def test_insert_from_large():
+    def make_chain(comp, f, l):
+        prev = None
+        for i in l:
+            if prev is None:
+                comp.add_node(i)
+            else:
+                comp.add_node(i, f, {"x": prev})
+            prev = i
+
+    def add_one(x):
+        return x + 1
+
+    comp1 = Computation()
+    make_chain(comp1, add_one, range(100))
+    comp1.insert(0, 0)
+    comp1.compute_all()
+
+    for i in range(100):
+        assert comp1.state(i) == States.UPTODATE
+        assert comp1.value(i) == i
+
+    comp2 = Computation()
+    l1 = range(100)
+    random.shuffle(l1)
+    make_chain(comp2, add_one, l1)
+
+    comp2.insert_from(comp1)
+    for i in range(100):
+        assert comp2.state(i) == States.UPTODATE
+        assert comp2.value(i) == i
 
 
 def test_get_df():
