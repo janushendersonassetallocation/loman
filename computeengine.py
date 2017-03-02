@@ -249,7 +249,7 @@ class Computation(object):
             if name in show_nodes:
                 short_name = node_index_map[name]
                 node_color = state_colors[n.get('state', None)]
-                g.node(short_name, name, style='filled', fillcolor=node_color)
+                g.node(short_name, str(name), style='filled', fillcolor=node_color)
         for name1, name2, n in self.dag.edges_iter(data=True):
             if name1 in show_nodes and name2 in show_nodes:
                 short_name1, short_name2 = node_index_map[name1], node_index_map[name2]

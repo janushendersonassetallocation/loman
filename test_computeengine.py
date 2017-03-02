@@ -324,3 +324,20 @@ def test_get_df():
     assert df.loc['a', 'state'] == States.UPTODATE
     assert df.loc['b', 'value'] == 2
     assert df.loc['b', 'state'] == States.UPTODATE
+
+
+def test_tuple_node_key():
+    def add(a, b):
+        return a + b
+
+    comp = Computation()
+    comp.add_node(('fib', 1))
+    comp.add_node(('fib', 2))
+    for i in range(3, 11):
+        comp.add_node(('fib', i), add, {'a': ('fib', i - 2), 'b': ('fib', i - 1)})
+
+    comp.insert(('fib', 1), 0)
+    comp.insert(('fib', 2), 1)
+    comp.compute_all()
+
+    assert comp.value(('fib', 10)) == 34
