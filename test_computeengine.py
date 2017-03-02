@@ -145,7 +145,7 @@ def test_exceptions():
     comp.compute_all()
 
     assert comp.state('b') == States.ERROR
-    assert comp.exception('b').message == "Infinite sadness"
+    assert comp.value('b').exception.message == "Infinite sadness"
 
 
 def test_update_function():
@@ -310,3 +310,17 @@ def test_insert_from():
     assert comp2.state("c") == States.UPTODATE
     assert comp2.value("a") == 1
     assert comp2.value("c") == 3
+
+
+def test_get_df():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a + 1)
+    comp.insert('a', 1)
+    comp.compute_all()
+    df = comp.get_df()
+
+    assert df.loc['a', 'value'] == 1
+    assert df.loc['a', 'state'] == States.UPTODATE
+    assert df.loc['b', 'value'] == 2
+    assert df.loc['b', 'state'] == States.UPTODATE

@@ -31,6 +31,9 @@ state_colors = {
     States.ERROR: sns.xkcd_rgb['red']
 }
 
+Error = namedtuple('Error', ['exception', 'traceback'])
+NodeData = namedtuple('NodeData', ['state', 'value'])
+
 
 class Computation(object):
     def __init__(self):
@@ -39,13 +42,15 @@ class Computation(object):
     def add_node(self, name, func=None, sources=None, serialize=True):
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
-        self.dag.node[name].clear()
+        node = self.dag.node[name]
+        node.clear()
 
-        self.dag.node[name]['state'] = States.UNINITIALIZED
-        self.dag.node[name]['serialize'] = serialize
+        node['state'] = States.UNINITIALIZED
+        node['value'] = None
+        node['serialize'] = serialize
 
         if func:
-            self.dag.node[name]['func'] = func
+            node['func'] = func
             argspec = inspect.getargspec(func)
             for arg in argspec.args:
                 if sources:
@@ -60,48 +65,13 @@ class Computation(object):
                 self.dag.node[n]['state'] = States.STALE
         self._try_set_computable(name)
 
-    def draw(self, show_values=True):
-        if show_values:
-            labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
-        else:
-            labels = {k: "{}".format(k) for k, v in self.dag.node.items()}
-        node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
-        nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
-
-    def draw2(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
-        nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
-        node_index_map = {name: short_name for short_name, name, data in nodes}
-        show_nodes = set()
-        g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
-        for name1, name2, n in self.dag.edges_iter(data=True):
-            if not show_expansion and (self.dag.node[name2].get('is_expansion', False)):
-                continue
-            show_nodes.add(name1)
-            show_nodes.add(name2)
-        for name, n in self.dag.nodes_iter(data=True):
-            if name in show_nodes:
-                short_name = node_index_map[name]
-                node_color = state_colors[n.get('state', None)]
-                g.node(short_name, name, style='filled', fillcolor=node_color)
-        for name1, name2, n in self.dag.edges_iter(data=True):
-            if name1 in show_nodes and name2 in show_nodes:
-                short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
-                g.edge(short_name1, short_name2)
-        with open('tmp.dot', 'w') as f:
-            f.write(g.source)
-        os.system('dot tmp.dot -Tpng -o test.png')
-        return Image(filename='test.png')
-
     def insert(self, name, value):
-        self.dag.node[name]['value'] = value
-        self.dag.node[name]['state'] = States.UPTODATE
+        node = self.dag.node[name]
+        node['value'] = value
+        node['state'] = States.UPTODATE
         self._set_descendents(name, States.STALE)
         for n in self.dag.successors(name):
             self._try_set_computable(n)
-
-    def _set_all(self, state):
-        for n in self.dag.nodes():
-            self.dag.node[n]['state'] = state
 
     def _set_descendents(self, name, state):
         for n in nx.dag.descendants(self.dag, name):
@@ -111,8 +81,20 @@ class Computation(object):
         n = self.dag.node[name]
         n['state'] = States.UNINITIALIZED
         n.pop('value', None)
-        n.pop('error', None)
-        n.pop('traceback', None)
+
+    def _set_uptodate(self, name, value):
+        node = self.dag.node[name]
+        node['state'] = States.UPTODATE
+        node['value'] = value
+        self._set_descendents(name, States.STALE)
+        for n in self.dag.successors(name):
+            self._try_set_computable(n)
+
+    def _set_error(self, name, error):
+        node = self.dag.node[name]
+        node['state'] = States.ERROR
+        node['value'] = error
+        self._set_descendents(name, States.STALE)
 
     def _try_set_computable(self, name):
         if 'func' in self.dag.node[name]:
@@ -124,7 +106,8 @@ class Computation(object):
             self.dag.node[name]['state'] = States.COMPUTABLE
 
     def _compute_node(self, name):
-        f = self.dag.node[name]['func']
+        node = self.dag.node[name]
+        f = node['func']
         params = {}
         for n in self.dag.predecessors(name):
             value = self.value(n)
@@ -133,19 +116,9 @@ class Computation(object):
             params[arg_name] = value
         try:
             value = f(**params)
-            self.dag.node[name]['state'] = States.UPTODATE
-            self.dag.node[name]['value'] = value
-            self.dag.node[name].pop('exception', None)
-            self.dag.node[name].pop('traceback', None)
-            self._set_descendents(name, States.STALE)
-            for n in self.dag.successors(name):
-                self._try_set_computable(n)
+            self._set_uptodate(name, value)
         except Exception as e:
-            self.dag.node[name]['state'] = States.ERROR
-            self.dag.node[name].pop('value', None)
-            self.dag.node[name]['exception'] = e
-            self.dag.node[name]['traceback'] = traceback.format_exc()
-            self._set_descendents(name, States.STALE)
+            self._set_error(name, Error(e, traceback.format_exc()))
 
     def _get_calc_nodes(self, name):
         process_nodes = deque([name])
@@ -188,14 +161,15 @@ class Computation(object):
             if not any_computable:
                 break
 
-    def value(self, name):
-        return self.dag.node[name]['value']
-
     def state(self, name):
         return self.dag.node[name]['state']
 
-    def exception(self, name):
-        return self.dag.node[name]['exception']
+    def value(self, name):
+        return self.dag.node[name]['value']
+
+    def __getitem__(self, name):
+        node = self.dag.node[name]
+        return NodeData(node['state'], node['value'])
 
     def write_dill(self, file_):
         node_serialize = nx.get_node_attributes(self.dag, 'serialize')
@@ -240,8 +214,6 @@ class Computation(object):
         df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
         df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
         df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
-        df['exception'] = pd.Series(nx.get_node_attributes(self.dag, 'exception'))
-        df['traceback'] = pd.Series(nx.get_node_attributes(self.dag, 'traceback'))
         df['is_expansion'] = pd.Series(nx.get_node_attributes(self.dag, 'is_expansion'))
         return df
 
@@ -254,3 +226,35 @@ class Computation(object):
             nodes.intersection_update(other.dag.nodes())
         for name in nodes:
             self.insert(name, other.value(name))
+
+    def draw(self, show_values=True):
+        if show_values:
+            labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
+        else:
+            labels = {k: "{}".format(k) for k, v in self.dag.node.items()}
+        node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
+        nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
+
+    def draw2(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+        nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
+        node_index_map = {name: short_name for short_name, name, data in nodes}
+        show_nodes = set()
+        g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
+        for name1, name2, n in self.dag.edges_iter(data=True):
+            if not show_expansion and (self.dag.node[name2].get('is_expansion', False)):
+                continue
+            show_nodes.add(name1)
+            show_nodes.add(name2)
+        for name, n in self.dag.nodes_iter(data=True):
+            if name in show_nodes:
+                short_name = node_index_map[name]
+                node_color = state_colors[n.get('state', None)]
+                g.node(short_name, name, style='filled', fillcolor=node_color)
+        for name1, name2, n in self.dag.edges_iter(data=True):
+            if name1 in show_nodes and name2 in show_nodes:
+                short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
+                g.edge(short_name1, short_name2)
+        with open('tmp.dot', 'w') as f:
+            f.write(g.source)
+        os.system('dot tmp.dot -Tpng -o test.png')
+        return Image(filename='test.png')
