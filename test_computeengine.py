@@ -375,3 +375,30 @@ def test_tuple_node_key():
     comp.compute_all()
 
     assert comp.value(('fib', 10)) == 34
+
+
+def test_get_item():
+    comp = Computation()
+    comp.add_node('a', lambda: 1)
+    comp.add_node('b', lambda a: a + 1)
+    comp.compute_all()
+    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['b'] == (States.UPTODATE, 2)
+
+
+def test_set_stale():
+    comp = Computation()
+    comp.add_node('a', lambda: 1)
+    comp.add_node('b', lambda a: a + 1)
+    comp.compute_all()
+
+    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['b'] == (States.UPTODATE, 2)
+
+    comp.set_stale('a')
+    assert comp.state('a') == States.COMPUTABLE
+    assert comp.state('b') == States.STALE
+
+    comp.compute_all()
+    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['b'] == (States.UPTODATE, 2)

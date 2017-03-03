@@ -98,6 +98,12 @@ class Computation(object):
         name_value_pairs = [(name, other.value(name)) for name in nodes]
         self.insert_multi(name_value_pairs)
 
+    def set_stale(self, name):
+        self.dag.node[name]['state'] = States.STALE
+        for n in nx.dag.descendants(self.dag, name):
+            self.dag.node[n]['state'] = States.STALE
+        self._try_set_computable(name)
+
     def _set_descendents(self, name, state):
         for n in nx.dag.descendants(self.dag, name):
             self.dag.node[n]['state'] = state
