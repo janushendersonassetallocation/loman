@@ -10,8 +10,6 @@ import pandas as pd
 import traceback
 import graphviz
 import py.path
-import os
-from IPython.display import Image
 
 
 class States(Enum):
@@ -251,7 +249,7 @@ class Computation(object):
     def get_value_dict(self):
         return nx.get_node_attributes(self.dag, 'value')
 
-    def draw(self, show_values=True):
+    def draw_nx(self, show_values=True):
         if show_values:
             labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
         else:
@@ -259,7 +257,7 @@ class Computation(object):
         node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
         nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
 
-    def draw2(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw_graphviz(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
         show_nodes = set()
@@ -278,7 +276,4 @@ class Computation(object):
             if name1 in show_nodes and name2 in show_nodes:
                 short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
                 g.edge(short_name1, short_name2)
-        with open('tmp.dot', 'w') as f:
-            f.write(g.source)
-        os.system('dot tmp.dot -Tpng -o test.png')
-        return Image(filename='test.png')
+        return g
