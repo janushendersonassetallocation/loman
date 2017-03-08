@@ -402,3 +402,27 @@ def test_set_stale():
     comp.compute_all()
     assert comp['a'] == (States.UPTODATE, 1)
     assert comp['b'] == (States.UPTODATE, 2)
+
+
+def test_error_stops_compute_all():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a/0)
+    comp.add_node('c', lambda b: b+1)
+    comp.insert('a', 1)
+    comp.compute_all()
+    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp.state('b') == States.ERROR
+    assert comp.state('c') == States.STALE
+
+
+def test_error_stops_compute():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a/0)
+    comp.add_node('c', lambda b: b+1)
+    comp.insert('a', 1)
+    comp.compute('c')
+    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp.state('b') == States.ERROR
+    assert comp.state('c') == States.STALE

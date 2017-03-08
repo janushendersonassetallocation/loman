@@ -172,7 +172,8 @@ class Computation(object):
 
     def compute(self, name):
         for n in self._get_calc_nodes(name):
-            self._compute_node(n)
+            if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in self.dag.predecessors(n)):
+                self._compute_node(n)
 
     def _get_computable_nodes_iter(self):
         for n, node in self.dag.nodes_iter(data=True):
