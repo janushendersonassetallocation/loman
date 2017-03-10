@@ -33,6 +33,16 @@ Error = namedtuple('Error', ['exception', 'traceback'])
 NodeData = namedtuple('NodeData', ['state', 'value'])
 
 
+class ComputationException(Exception):
+    pass
+
+
+class MapException(ComputationException):
+    def __init__(self, message, results):
+        super(MapException, self).__init__(message)
+        self.results = results
+
+
 class Computation(object):
     def __init__(self):
         self.dag = nx.DiGraph()
@@ -249,6 +259,24 @@ class Computation(object):
 
     def get_value_dict(self):
         return nx.get_node_attributes(self.dag, 'value')
+
+    def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
+        def f(xs):
+            results = []
+            is_error = False
+            for x in xs:
+                subgraph.insert(subgraph_input_node, x)
+                subgraph.compute(subgraph_output_node)
+                if subgraph.state(subgraph_output_node) == States.UPTODATE:
+                    results.append(subgraph.value(subgraph_output_node))
+                else:
+                    is_error = True
+                    results.append(subgraph.copy())
+            if is_error:
+                raise MapException("Unable to calculate {}".format(result_node), results)
+            return results
+        self.add_node(result_node, f, {'xs': input_node})
+
 
     def draw_nx(self, show_values=True):
         if show_values:

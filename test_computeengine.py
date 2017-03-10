@@ -1,4 +1,4 @@
-from computeengine import Computation, States
+from computeengine import Computation, States, MapException
 import six
 from collections import namedtuple
 import random
@@ -426,3 +426,34 @@ def test_error_stops_compute():
     assert comp['a'] == (States.UPTODATE, 1)
     assert comp.state('b') == States.ERROR
     assert comp.state('c') == States.STALE
+
+
+def test_map_graph():
+    subcomp = Computation()
+    subcomp.add_node('a')
+    subcomp.add_node('b', lambda a: 2*a)
+    comp=Computation()
+    comp.add_node('inputs')
+    comp.add_map_node('results', 'inputs', subcomp, 'a', 'b')
+    comp.insert('inputs', [1, 2, 3])
+    comp.compute_all()
+    assert comp['results'] == (States.UPTODATE, [2, 4, 6])
+
+
+def test_map_graph_error():
+    subcomp = Computation()
+    subcomp.add_node('a')
+    subcomp.add_node('b', lambda a: 1/(a-2))
+    comp=Computation()
+    comp.add_node('inputs')
+    comp.add_map_node('results', 'inputs', subcomp, 'a', 'b')
+    comp.insert('inputs', [1, 2, 3])
+    comp.compute_all()
+    assert comp.state('results') == States.ERROR
+    assert isinstance(comp.value('results').exception, MapException)
+    results = comp.value('results').exception.results
+    assert results[0] == -1
+    assert results[2] == 1
+    assert isinstance(results[1], Computation)
+    failed_graph = results[1]
+    assert failed_graph.state('b') == States.ERROR
