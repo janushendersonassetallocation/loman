@@ -1,4 +1,4 @@
-from computeengine import Computation, States, MapException
+from loman import Computation, States, MapException
 import six
 from collections import namedtuple
 import random
@@ -100,7 +100,7 @@ def test_serialization():
 
     cpu.insert("a", 1)
     cpu.compute_all()
-    f = six.StringIO()
+    f = six.BytesIO()
     cpu.write_dill(f)
 
     f.seek(0)
@@ -146,7 +146,7 @@ def test_exceptions():
     comp.compute_all()
 
     assert comp.state('b') == States.ERROR
-    assert comp.value('b').exception.message == "Infinite sadness"
+    assert str(comp.value('b').exception) == "Infinite sadness"
 
 
 def test_update_function():
@@ -259,7 +259,7 @@ def test_serialization_skip_flag():
 
     comp.insert("a", 1)
     comp.compute_all()
-    f = six.StringIO()
+    f = six.BytesIO()
     comp.write_dill(f)
 
     assert comp.state("a") == States.UPTODATE
@@ -336,7 +336,7 @@ def test_insert_from_large():
         assert comp1.value(i) == i
 
     comp2 = Computation()
-    l1 = range(100)
+    l1 = list(range(100))
     random.shuffle(l1)
     make_chain(comp2, add_one, l1)
 
