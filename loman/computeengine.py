@@ -45,16 +45,22 @@ class MapException(ComputationException):
         self.results = results
 
 
-class Computation(object):
-    class _ParameterType(Enum):
-        ARG = 1
-        KWD = 2
-    _ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
+class _ParameterType(Enum):
+    ARG = 1
+    KWD = 2
 
+_ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
+
+
+class Computation(object):
     def __init__(self):
         self.dag = nx.DiGraph()
 
-    def add_node(self, name, func=None, *, args=None, kwds=None, value=None, serialize=True):
+    def add_node(self, name, func=None, **kwargs):
+        args = kwargs.get('args', None)
+        kwds = kwargs.get('kwds', None)
+        value = kwargs.get('value', None)
+        serialize = kwargs.get('serialize', True)
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         node = self.dag.node[name]
@@ -69,19 +75,28 @@ class Computation(object):
 
         if func:
             node['func'] = func
-            sig = inspect.signature(func)
+            if six.PY3:
+                sig = inspect.signature(func)
+                pk = inspect._ParameterKind
+                has_var_args = any(p.kind == pk.VAR_POSITIONAL for p in sig.parameters.values())
+                has_var_kwds = any(p.kind == pk.VAR_KEYWORD for p in sig.parameters.values())
+                all_keyword_params = [param_name for param_name, param in sig.parameters.items()
+                                      if param.kind in (pk.POSITIONAL_OR_KEYWORD, pk.KEYWORD_ONLY)]
+            elif six.PY2:
+                argspec = inspect.getargspec(func)
+                has_var_args = argspec.varargs is not None
+                has_var_kwds = argspec.keywords is not None
+                all_keyword_params = argspec.args
+            else:
+                raise Exception("Only Pythons 2 and 3 supported")
             if args:
                 for i, param_name in enumerate(args):
                     if not self.dag.has_node(param_name):
                         self.dag.add_node(param_name, state=States.PLACEHOLDER)
-                    self.dag.add_edge(param_name, name, param=(Computation._ParameterType.ARG, i))
-            has_var_args = any(p.kind == inspect._ParameterKind.VAR_POSITIONAL for p in sig.parameters.values())
-            has_var_kwds = any(p.kind == inspect._ParameterKind.VAR_KEYWORD for p in sig.parameters.values())
+                    self.dag.add_edge(param_name, name, param=(_ParameterType.ARG, i))
             param_names = set()
             if not has_var_args:
-                param_names.update(param_name for param_name, param in sig.parameters.items()
-                              if param.kind in (inspect._ParameterKind.POSITIONAL_OR_KEYWORD,
-                                                inspect._ParameterKind.KEYWORD_ONLY))
+                param_names.update(all_keyword_params)
             if has_var_kwds:
                 if kwds:
                     param_names.update(kwds.keys())
@@ -89,7 +104,7 @@ class Computation(object):
                 in_node_name = kwds.get(param_name, param_name) if kwds else param_name
                 if not self.dag.has_node(in_node_name):
                     self.dag.add_node(in_node_name, state=States.PLACEHOLDER)
-                self.dag.add_edge(in_node_name, name, param=(Computation._ParameterType.KWD, param_name))
+                self.dag.add_edge(in_node_name, name, param=(_ParameterType.KWD, param_name))
             self._set_descendents(name, States.STALE)
             if node['state'] == States.UNINITIALIZED:
                 self._try_set_computable(name)
@@ -178,19 +193,19 @@ class Computation(object):
             param_value = self.dag.node[in_node_name]['value']
             edge = self.dag.edge[in_node_name][name]
             param_type, param_name = edge['param']
-            yield Computation._ParameterItem(param_type, param_name, param_value)
+            yield _ParameterItem(param_type, param_name, param_value)
 
     def _compute_node(self, name):
         node = self.dag.node[name]
         f = node['func']
         args, kwds = [], {}
         for param in self._get_parameter_data(name):
-            if param.type == Computation._ParameterType.ARG:
+            if param.type == _ParameterType.ARG:
                 idx = param.name
                 while len(args) <= idx:
                     args.append(None)
                 args[idx] = param.value
-            elif param.type == Computation._ParameterType.KWD:
+            elif param.type == _ParameterType.KWD:
                 kwds[param.name] = param.value
             else:
                 raise Exception("Unexpected param type: {}".format(param.type))
