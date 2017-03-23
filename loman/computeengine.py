@@ -13,6 +13,7 @@ import py.path
 
 
 class States(Enum):
+    PLACEHOLDER = 0
     UNINITIALIZED = 1
     STALE = 2
     COMPUTABLE = 3
@@ -22,6 +23,7 @@ class States(Enum):
 
 state_colors = {
     None: sns.xkcd_rgb['white'],
+    States.PLACEHOLDER: sns.xkcd_rgb['orange'],
     States.UNINITIALIZED: sns.xkcd_rgb['blue'],
     States.STALE: sns.xkcd_rgb['yellow'],
     States.COMPUTABLE: sns.xkcd_rgb['bright yellow green'],
@@ -44,34 +46,63 @@ class MapException(ComputationException):
 
 
 class Computation(object):
+    class _ParameterType(Enum):
+        ARG = 1
+        KWD = 2
+    _ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
+
     def __init__(self):
         self.dag = nx.DiGraph()
 
-    def add_node(self, name, func=None, sources=None, serialize=True):
+    def add_node(self, name, func=None, *, args=None, kwds=None, value=None, serialize=True):
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         node = self.dag.node[name]
-        node.clear()
 
         node['state'] = States.UNINITIALIZED
         node['value'] = None
         node['serialize'] = serialize
 
+        if value is not None:
+            node['state'] = States.UPTODATE
+            node['value'] = value
+
         if func:
             node['func'] = func
-            argspec = inspect.getargspec(func)
-            for arg in argspec.args:
-                if sources:
-                    source = sources.get(arg, arg)
-                else:
-                    source = arg
-                if not self.dag.has_node(source):
-                    raise Exception("No such node: {}".format(source))
-                self.dag.add_edge(source, name, arg_name=arg)
-        for n in nx.dag.descendants(self.dag, name):
-            if self.dag.node[n]['state'] in (States.COMPUTABLE, States.ERROR, States.UPTODATE):
-                self.dag.node[n]['state'] = States.STALE
-        self._try_set_computable(name)
+            sig = inspect.signature(func)
+            if args:
+                for i, param_name in enumerate(args):
+                    if not self.dag.has_node(param_name):
+                        self.dag.add_node(param_name, state=States.PLACEHOLDER)
+                    self.dag.add_edge(param_name, name, param=(Computation._ParameterType.ARG, i))
+            has_var_args = any(p.kind == inspect._ParameterKind.VAR_POSITIONAL for p in sig.parameters.values())
+            has_var_kwds = any(p.kind == inspect._ParameterKind.VAR_KEYWORD for p in sig.parameters.values())
+            param_names = set()
+            if not has_var_args:
+                param_names.update(param_name for param_name, param in sig.parameters.items()
+                              if param.kind in (inspect._ParameterKind.POSITIONAL_OR_KEYWORD,
+                                                inspect._ParameterKind.KEYWORD_ONLY))
+            if has_var_kwds:
+                if kwds:
+                    param_names.update(kwds.keys())
+            for param_name in param_names:
+                in_node_name = kwds.get(param_name, param_name) if kwds else param_name
+                if not self.dag.has_node(in_node_name):
+                    self.dag.add_node(in_node_name, state=States.PLACEHOLDER)
+                self.dag.add_edge(in_node_name, name, param=(Computation._ParameterType.KWD, param_name))
+            self._set_descendents(name, States.STALE)
+            if node['state'] == States.UNINITIALIZED:
+                self._try_set_computable(name)
+
+    def delete_node(self, name):
+        if len(self.dag.successors(name)) == 0:
+            preds = self.dag.predecessors(name)
+            self.dag.remove_node(name)
+            for n in preds:
+                if self.dag.node[n]['state'] == States.PLACEHOLDER:
+                    self.delete_node(n)
+        else:
+            self.dag.node[name]['state'] = States.PLACEHOLDER
 
     def insert(self, name, value):
         node = self.dag.node[name]
@@ -81,22 +112,20 @@ class Computation(object):
         for n in self.dag.successors(name):
             self._try_set_computable(n)
 
-    def insert_multi(self, name_value_pairs):
-        names = set()
+    def insert_many(self, name_value_pairs):
         stale = set()
-        maybe_computable = set()
+        computable = set()
         for name, value in name_value_pairs:
-            node = self.dag.node[name]
-            node['value'] = value
-            node['state'] = States.UPTODATE
-            names.add(name)
+            self.dag.node[name]['value'] = value
+            self.dag.node[name]['state'] = States.UPTODATE
             stale.update(nx.dag.descendants(self.dag, name))
-            maybe_computable.update(self.dag.successors(name))
+            computable.update(self.dag.successors(name))
+        names = set([name for name, value in name_value_pairs])
         stale.difference_update(names)
-        maybe_computable.difference_update(names)
+        computable.difference_update(names)
         for name in stale:
             self.dag.node[name]['state'] = States.STALE
-        for name in maybe_computable:
+        for name in computable:
             self._try_set_computable(name)
 
     def insert_from(self, other, nodes=None):
@@ -104,7 +133,7 @@ class Computation(object):
             nodes = set(self.dag.nodes())
             nodes.intersection_update(other.dag.nodes())
         name_value_pairs = [(name, other.value(name)) for name in nodes]
-        self.insert_multi(name_value_pairs)
+        self.insert_many(name_value_pairs)
 
     def set_stale(self, name):
         self.dag.node[name]['state'] = States.STALE
@@ -144,20 +173,39 @@ class Computation(object):
                     return
             self.dag.node[name]['state'] = States.COMPUTABLE
 
+    def _get_parameter_data(self, name):
+        for in_node_name in self.dag.predecessors(name):
+            param_value = self.dag.node[in_node_name]['value']
+            edge = self.dag.edge[in_node_name][name]
+            param_type, param_name = edge['param']
+            yield Computation._ParameterItem(param_type, param_name, param_value)
+
     def _compute_node(self, name):
         node = self.dag.node[name]
         f = node['func']
-        params = {}
-        for n in self.dag.predecessors(name):
-            value = self.value(n)
-            edge_data = self.dag.get_edge_data(n, name)
-            arg_name = edge_data['arg_name']
-            params[arg_name] = value
+        args, kwds = [], {}
+        for param in self._get_parameter_data(name):
+            if param.type == Computation._ParameterType.ARG:
+                idx = param.name
+                while len(args) <= idx:
+                    args.append(None)
+                args[idx] = param.value
+            elif param.type == Computation._ParameterType.KWD:
+                kwds[param.name] = param.value
+            else:
+                raise Exception("Unexpected param type: {}".format(param.type))
         try:
-            value = f(**params)
-            self._set_uptodate(name, value)
+            value = f(*args, **kwds)
+            node['state'] = States.UPTODATE
+            node['value'] = value
+            self._set_descendents(name, States.STALE)
+            for n in self.dag.successors(name):
+                self._try_set_computable(n)
         except Exception as e:
-            self._set_error(name, Error(e, traceback.format_exc()))
+            node['state'] = States.ERROR
+            tb = traceback.format_exc()
+            node['value'] = Error(e, tb)
+            self._set_descendents(name, States.STALE)
 
     def _get_calc_nodes(self, name):
         process_nodes = deque([name])
@@ -168,15 +216,17 @@ class Computation(object):
             seen.add(n)
             node = self.dag.node[n]
             state = node['state']
-            if state == States.UNINITIALIZED:
-                raise Exception()
-            elif state == States.STALE or state == States.COMPUTABLE:
-                calc_nodes.append(n)
-                for n1 in self.dag.predecessors(n):
-                    if n1 not in seen:
-                        process_nodes.append(n1)
-            elif state == States.UPTODATE:
-                pass
+            if state == States.UPTODATE:
+                continue
+            preds = self.dag.predecessors(n)
+            if state == States.UNINITIALIZED and len(preds) == 0:
+                raise Exception("Cannot compute {} because {} uninitialized".format(name, n))
+            if state == States.PLACEHOLDER:
+                raise Exception("Cannot compute {} because {} is placeholder".format(name, n))
+            calc_nodes.append(n)
+            for n1 in self.dag.predecessors(n):
+                if n1 not in seen:
+                    process_nodes.append(n1)
         calc_nodes.reverse()
         return calc_nodes
 
@@ -247,7 +297,7 @@ class Computation(object):
             return get_field_value
         for field in namedtuple_type._fields:
             node_name = "{}.{}".format(name, field)
-            self.add_node(node_name, make_f(field), {'tuple': name})
+            self.add_node(node_name, make_f(field), kwds={'tuple': name})
             self.dag.node[node_name]['is_expansion'] = True
 
     def get_df(self):
@@ -275,7 +325,7 @@ class Computation(object):
             if is_error:
                 raise MapException("Unable to calculate {}".format(result_node), results)
             return results
-        self.add_node(result_node, f, {'xs': input_node})
+        self.add_node(result_node, f, kwds={'xs': input_node})
 
 
     def draw_nx(self, show_values=True):
