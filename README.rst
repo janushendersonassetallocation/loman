@@ -32,7 +32,13 @@ Loman makes it easy to ingest data from multiple sources, clean and integrate th
 Installation
 ------------
 
-Download from github: https://github.com/janusassetallocation/loman
+To install loman:
+.. code-block:: bash
+
+    $ pip install loman
+
+
+Or download from github: https://github.com/janusassetallocation/loman
 
 Documentation
 -------------
