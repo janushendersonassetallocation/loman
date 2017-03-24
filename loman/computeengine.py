@@ -5,11 +5,9 @@ import inspect
 import decorator
 import dill
 import six
-import seaborn as sns
 import pandas as pd
 import traceback
 import graphviz
-import py.path
 
 
 class States(Enum):
@@ -22,13 +20,13 @@ class States(Enum):
 
 
 state_colors = {
-    None: sns.xkcd_rgb['white'],
-    States.PLACEHOLDER: sns.xkcd_rgb['orange'],
-    States.UNINITIALIZED: sns.xkcd_rgb['blue'],
-    States.STALE: sns.xkcd_rgb['yellow'],
-    States.COMPUTABLE: sns.xkcd_rgb['bright yellow green'],
-    States.UPTODATE: sns.xkcd_rgb['green'],
-    States.ERROR: sns.xkcd_rgb['red']
+    None: '#ffffff', # xkcd white
+    States.PLACEHOLDER: '#f97306', # xkcd orange
+    States.UNINITIALIZED: '#0343df', # xkcd blue
+    States.STALE: '#ffff14', # xkcd yellow
+    States.COMPUTABLE: '#9dff00', # xkcd bright yellow green
+    States.UPTODATE: '#15b01a', # xkcd green
+    States.ERROR: '#e50000'
 }
 
 Error = namedtuple('Error', ['exception', 'traceback'])
