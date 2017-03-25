@@ -55,6 +55,7 @@ class Computation(object):
         self.dag = nx.DiGraph()
 
     def add_node(self, name, func=None, **kwargs):
+        """Adds or updates a node in a computation"""
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
         value = kwargs.get('value', None)

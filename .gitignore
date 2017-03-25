@@ -95,3 +95,7 @@ ENV/
 
 # PyCharm project settings
 .idea
+
+# Other
+/MANIFEST
+/README.html

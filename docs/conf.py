@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Loman documentation build configuration file, created by
-# sphinx-quickstart on Thu Mar 23 02:17:38 2017.
+# loman documentation build configuration file, created by
+# sphinx-quickstart on Sat Mar 25 16:18:54 2017.
 #
 # This file is execfile()d with the current directory set to its
 # containing dir.
@@ -17,9 +17,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath(r'..'))
 
 
 # -- General configuration ------------------------------------------------
@@ -31,7 +31,10 @@
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.doctest', 'sphinx.ext.graphviz']
+extensions = ['sphinx.ext.autodoc',
+    'sphinx.ext.doctest',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.mathjax']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -46,7 +49,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'Loman'
+project = 'loman'
 copyright = '2017, Ed Parcell'
 author = 'Ed Parcell'
 
@@ -100,7 +103,7 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'Lomandoc'
+htmlhelp_basename = 'lomandoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -127,7 +130,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'Loman.tex', 'Loman Documentation',
+    (master_doc, 'loman.tex', 'loman Documentation',
      'Ed Parcell', 'manual'),
 ]
 
@@ -137,7 +140,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'loman', 'Loman Documentation',
+    (master_doc, 'loman', 'loman Documentation',
      [author], 1)
 ]
 
@@ -148,10 +151,13 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'Loman', 'Loman Documentation',
-     author, 'Loman', 'One line description of project.',
+    (master_doc, 'loman', 'loman Documentation',
+     author, 'loman', 'One line description of project.',
      'Miscellaneous'),
 ]
 
 
 
+
+# Example configuration for intersphinx: refer to the Python standard library.
+intersphinx_mapping = {'https://docs.python.org/': None}
