@@ -1,11 +1,23 @@
 Loman
 =====
 
-.. image:: https://img.shields.io/badge/License-BSD%203--Clause-blue.svg
+.. image:: https://img.shields.io/pypi/v/loman.svg
+    :target: https://pypi.python.org/pypi/loman
+
+.. image:: https://img.shields.io/pypi/wheel/loman.svg
+    :target: https://pypi.python.org/pypi/loman
+
+.. image:: https://img.shields.io/pypi/pyversions/loman.svg
+    :target: https://pypi.python.org/pypi/loman
+
+.. image:: https://img.shields.io/pypi/l/loman.svg
     :target: https://opensource.org/licenses/BSD-3-Clause
 
 .. image:: https://travis-ci.org/janusassetallocation/loman.svg?branch=master
     :target: https://travis-ci.org/janusassetallocation/loman
+
+.. image:: https://readthedocs.org/projects/loman/badge/?version=latest
+    :target: http://loman.readthedocs.io/
 
 Loman tracks the state of your computations, and the dependencies between them, allowing full and partial recalculations.
 
@@ -43,5 +55,5 @@ Or download from github: https://github.com/janusassetallocation/loman
 Documentation
 -------------
 
-Documentation coming soon. In the meantime, the test suite provides examples how to use Loman.
+Documentation is at http://loman.readthedocs.io/
 
