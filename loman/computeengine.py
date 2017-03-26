@@ -11,6 +11,7 @@ import graphviz
 
 
 class States(Enum):
+    """Possible states for a computation node"""
     PLACEHOLDER = 0
     UNINITIALIZED = 1
     STALE = 2
@@ -109,6 +110,7 @@ class Computation(object):
                 self._try_set_computable(name)
 
     def delete_node(self, name):
+        """Delete a node from a computation"""
         if len(self.dag.successors(name)) == 0:
             preds = self.dag.predecessors(name)
             self.dag.remove_node(name)
@@ -119,6 +121,7 @@ class Computation(object):
             self.dag.node[name]['state'] = States.PLACEHOLDER
 
     def insert(self, name, value):
+        """Insert a value into a node of a computation"""
         node = self.dag.node[name]
         node['value'] = value
         node['state'] = States.UPTODATE
@@ -127,6 +130,7 @@ class Computation(object):
             self._try_set_computable(n)
 
     def insert_many(self, name_value_pairs):
+        """Insert values into many nodes of a computation simultaneously"""
         stale = set()
         computable = set()
         for name, value in name_value_pairs:
@@ -143,6 +147,7 @@ class Computation(object):
             self._try_set_computable(name)
 
     def insert_from(self, other, nodes=None):
+        """Insert values into a computation from another computation"""
         if nodes is None:
             nodes = set(self.dag.nodes())
             nodes.intersection_update(other.dag.nodes())
@@ -150,6 +155,7 @@ class Computation(object):
         self.insert_many(name_value_pairs)
 
     def set_stale(self, name):
+        """Set a node and all its dependencies as stale"""
         self.dag.node[name]['state'] = States.STALE
         for n in nx.dag.descendants(self.dag, name):
             self.dag.node[n]['state'] = States.STALE
@@ -245,6 +251,7 @@ class Computation(object):
         return calc_nodes
 
     def compute(self, name):
+        """Compute a node and all necessary predecessors"""
         for n in self._get_calc_nodes(name):
             if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in self.dag.predecessors(n)):
                 self._compute_node(n)
@@ -256,6 +263,7 @@ class Computation(object):
                 yield n
 
     def compute_all(self):
+        """Compute all nodes of a computation that can be computed"""
         while True:
             computable = self._get_computable_nodes_iter()
             any_computable = False
@@ -266,16 +274,32 @@ class Computation(object):
                 break
 
     def state(self, name):
+        """Get the state of a node"""
         return self.dag.node[name]['state']
 
     def value(self, name):
+        """Get the current value of a node"""
         return self.dag.node[name]['value']
 
     def __getitem__(self, name):
+        """Get the state and current value of a node"""
         node = self.dag.node[name]
         return NodeData(node['state'], node['value'])
 
+    def get_df(self):
+        """Get a dataframe containing the states and value of all nodes of computation"""
+        df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
+        df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
+        df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
+        df['is_expansion'] = pd.Series(nx.get_node_attributes(self.dag, 'is_expansion'))
+        return df
+
+    def get_value_dict(self):
+        """Get a dictionary containing the values of all nodes of a computation"""
+        return nx.get_node_attributes(self.dag, 'value')
+
     def write_dill(self, file_):
+        """Serialize a computation to a file or file-like object"""
         node_serialize = nx.get_node_attributes(self.dag, 'serialize')
         if all(serialize for name, serialize in node_serialize.items()):
             obj = self
@@ -293,6 +317,7 @@ class Computation(object):
 
     @staticmethod
     def read_dill(file_):
+        """Deserialize a computation from a file or file-like object"""
         if isinstance(file_, six.string_types):
             with open(file_, 'rb') as f:
                 return dill.load(f)
@@ -300,11 +325,13 @@ class Computation(object):
             return dill.load(file_)
 
     def copy(self):
+        """Create a copy of a computation"""
         obj = Computation()
         obj.dag = nx.DiGraph(self.dag)
         return obj
 
     def add_named_tuple_expansion(self, name, namedtuple_type):
+        """Automatically add nodes to extract each element of a named tuple type"""
         def make_f(field):
             def get_field_value(tuple):
                 return getattr(tuple, field)
@@ -314,17 +341,8 @@ class Computation(object):
             self.add_node(node_name, make_f(field), kwds={'tuple': name})
             self.dag.node[node_name]['is_expansion'] = True
 
-    def get_df(self):
-        df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
-        df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
-        df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
-        df['is_expansion'] = pd.Series(nx.get_node_attributes(self.dag, 'is_expansion'))
-        return df
-
-    def get_value_dict(self):
-        return nx.get_node_attributes(self.dag, 'value')
-
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
+        """Apply a graph to each element of iterable"""
         def f(xs):
             results = []
             is_error = False
@@ -343,6 +361,7 @@ class Computation(object):
 
 
     def draw_nx(self, show_values=True):
+        """Draw a computation's current state using NetworkX's plotting routines"""
         if show_values:
             labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
         else:
@@ -351,6 +370,7 @@ class Computation(object):
         nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
 
     def draw_graphviz(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+        """Draw a computation's current state using the GraphViz utility"""
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
         show_nodes = set()
