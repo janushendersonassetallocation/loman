@@ -17,7 +17,7 @@ can guide you through the process.
 Dependency on graphviz
 ----------------------
 
-Loman uses the `graphviz <http://www.graphviz.org/>` tool, and the Python `graphviz library <https://pypi.python.org/pypi/graphviz>` to draw dependency graphs. If you are using Continuum's excellent `Anaconda Python <https://www.continuum.io/downloads>` distribution (recommended), then you can install them by running these commands:
+Loman uses the `graphviz <http://www.graphviz.org/>`_ tool, and the Python `graphviz library <https://pypi.python.org/pypi/graphviz>`_ to draw dependency graphs. If you are using Continuum's excellent `Anaconda Python <https://www.continuum.io/downloads>`_ distribution (recommended), then you can install them by running these commands:
 
 .. code-block:: bash
 
