@@ -601,7 +601,7 @@ It is also possible to request that a particular node not be serialized, in whic
             n0 -> n1
     }
 
-NOTE: The serialization format is not currently stabilized. While it is convenient to be able to inspect the results of previous calculations, this method should *not* be relied on for long-term storage.
+.. note:: The serialization format is not currently stabilized. While it is convenient to be able to inspect the results of previous calculations, this method should *not* be relied on for long-term storage.
 
 Non-string node names
 ---------------------
