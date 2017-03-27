@@ -1,7 +1,9 @@
 Quick Start
 ===========
 
-In Loman, a computation is represented as a set of nodes. Each node can be either an input node, which must be provided, or a calculation node which can be calculated from input nodes or other calculation nodes.
+In Loman, a computation is represented as a set of nodes. Each node can be either an input node, which must be provided, or a calculation node which can be calculated from input nodes or other calculation nodes. In this quick start guide, we walk through creating computations in Loman, inspecting the results and controlling recalculation.
+
+To keep things simple, the examples will perform simple calculations on integers. Our focus initially is on the dependency between various calculated items, rather than the calculations themselves, which are deliberately trivial. In a real system, it is likely that rather than integers, we would be dealing with more interesting objects such as Pandas DataFrames.
 
 Creating and Running a Computation
 ----------------------------------
@@ -11,6 +13,9 @@ Let's start by creating a computation object and adding a couple of nodes to it:
     >>> comp = Computation()
     >>> comp.add_node('a')
     >>> comp.add_node('b', lambda a: a + 1)
+
+Loman's computations have a method ``draw_graphviz`` which lets us easily see a visualization of the computation we just created::
+
     >>> comp.draw_graphviz()
 
 .. graphviz::
@@ -407,3 +412,238 @@ We can even add new nodes, and change the dependencies of existing calculations.
     >>> comp.value('result2')
     15.0
 
+Error-handling
+--------------
+
+If trying to calculate a node causes an exception, then Loman will mark its state as error. Loman will also retain the exception and the stacktrace that caused the exception, which can be useful in large codebases. Downstream nodes cannot be calculated of course, but any other nodes that could be calculated will be. This allows us to discover multiple errors at once, avoiding the frustration of lenthgy-run-discover-next-error cycles::
+
+    >>> comp = Computation()
+    >>> comp.add_node('a', value=1)
+    >>> comp.add_node('b', lambda a: a + 1)
+    >>> comp.add_node('c', lambda a: a / 0) # This will cause an exception
+    >>> comp.add_node('d', lambda b, c: b + c)
+    >>> comp.compute_all()
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=a fillcolor="#15b01a" style=filled]
+        n1 [label=b fillcolor="#15b01a" style=filled]
+        n2 [label=c fillcolor="#e50000" style=filled]
+        n3 [label=d fillcolor="#ffff14" style=filled]
+            n0 -> n1
+            n0 -> n2
+            n1 -> n3
+            n2 -> n3
+    }
+
+::
+
+    >>> comp.state('c')
+    <States.ERROR: 5>
+    >>> comp.value('c').exception
+    ZeroDivisionError('division by zero')
+    >>> print(comp.value('c').traceback)
+    Traceback (most recent call last):
+      File "C:\ProgramData\Anaconda3\lib\site-packages\loman\computeengine.py", line 211, in _compute_node
+      File "<ipython-input-79-028365426246>", line 4, in <lambda>
+        comp.add_node('c', lambda a: a / 0) # This will cause an exception
+    ZeroDivisionError: division by zero
+
+We can use Loman's facilities of changing calculations or overriding values to quickly correct errors in-place, and without having to recompute upstreams, or wait to redownload large data-sets::
+
+    >>> comp.add_node('c', lambda a: a / 1)
+    >>> comp.compute_all()
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=a fillcolor="#15b01a" style=filled]
+        n1 [label=b fillcolor="#15b01a" style=filled]
+        n2 [label=c fillcolor="#15b01a" style=filled]
+        n3 [label=d fillcolor="#15b01a" style=filled]
+            n0 -> n1
+            n0 -> n2
+            n1 -> n3
+            n2 -> n3
+    }
+
+Missing upstream nodes
+----------------------
+
+Loman has a special state, "Placeholder" for missing upstream nodes. This can occur when a node depends on a node that was not created, or when an existing node was deleted, which can be done with the ``delete_node`` method::
+
+    >>> comp = Computation()
+    >>> comp.add_node('b', lambda a: a)
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=b fillcolor="#0343df" style=filled]
+        n1 [label=a fillcolor="#f97306" style=filled]
+            n1 -> n0
+    }
+
+::
+
+    >>> comp.state('a')
+    <States.PLACEHOLDER: 0>
+    >>> comp.add_node('a')
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=b fillcolor="#0343df" style=filled]
+        n1 [label=a fillcolor="#0343df" style=filled]
+            n1 -> n0
+    }
+
+::
+
+    >> comp.delete_node('a')
+
+.. graphviz::
+
+    digraph {
+        n0 [label=b fillcolor="#0343df" style=filled]
+        n1 [label=a fillcolor="#f97306" style=filled]
+            n1 -> n0
+    }
+
+Automatically expanding named tuples
+------------------------------------
+
+Often, a calculation will return more than one result. For example, a numerical solver may return the best solution it found, along with a status indicating whether the solver converged. Python introduced namedtuples in version 2.6. A namedtuple is a tuple-like object where each element can be accessed by name, as well as by position. If a node will always contain a given type of namedtuple, Loman has a convenience method ``add_named_tuple_expansion`` which will create new nodes for each element of a namedtuple, using the naming convention **parent_node.tuple_element_name**. This can be useful for clarity when different downstream nodes depend on different parts of computation result::
+
+    >>> Coordinate = namedtuple('Coordinate', ['x', 'y'])
+    >>> comp = Computation()
+    >>> comp.add_node('a', value=1)
+    >>> comp.add_node('b', lambda a: Coordinate(a+1, a+2))
+    >>> comp.add_named_tuple_expansion('b', Coordinate)
+    >>> comp.add_node('c', lambda *args: sum(args), args=['b.x', 'b.y'])
+    >>> comp.compute_all()
+    >>> comp.get_value_dict()
+    {'a': 1, 'b': Coordinate(x=2, y=3), 'b.x': 2, 'b.y': 3, 'c': 5}
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=a fillcolor="#15b01a" style=filled]
+        n1 [label=b fillcolor="#9dff00" style=filled]
+        n2 [label="b.x" fillcolor="#0343df" style=filled]
+        n3 [label="b.y" fillcolor="#0343df" style=filled]
+        n4 [label=c fillcolor="#0343df" style=filled]
+            n0 -> n1
+            n1 -> n2
+            n1 -> n3
+            n2 -> n4
+            n3 -> n4
+    }
+
+Serializing computations
+------------------------
+
+Loman can serialize computations to disk using the dill package. This can be useful to have a system store the inputs, intermediates and results of a scheduled calculation for later inspection if required::
+
+    >>> comp = Computation()
+    >>> comp.add_node('a', value=1)
+    >>> comp.add_node('b', lambda a: a + 1)
+    >>> comp.compute_all()
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=a fillcolor="#15b01a" style=filled]
+        n1 [label=b fillcolor="#15b01a" style=filled]
+            n0 -> n1
+    }
+
+::
+
+    >>> comp.get_value_dict()
+    {'a': 1, 'b': 2}
+    >>> comp.write_dill('foo.dill')
+    >>> comp2 = Computation.read_dill('foo.dill')
+    >>> comp2.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=a fillcolor="#15b01a" style=filled]
+        n1 [label=b fillcolor="#15b01a" style=filled]
+            n0 -> n1
+    }
+
+::
+
+    >>> comp.get_value_dict()
+    {'a': 1, 'b': 2}
+
+It is also possible to request that a particular node not be serialized, in which case it will have no value, and uninitialized state when it is deserialized. This can be useful where an object is not serializable, or where data is not licensed to be distributed::
+
+    >>> comp.add_node('a', value=1, serialize=False)
+    >>> comp.compute_all()
+    >>> comp.write_dill('foo.dill')
+    >>> comp2 = Computation.read_dill('foo.dill')
+    >>> comp2.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label=a fillcolor="#0343df" style=filled]
+        n1 [label=b fillcolor="#15b01a" style=filled]
+            n0 -> n1
+    }
+
+NOTE: The serialization format is not currently stabilized. While it is convenient to be able to inspect the results of previous calculations, this method should *not* be relied on for long-term storage.
+
+Non-string node names
+---------------------
+
+In the previous example, the nodes have all been given strings as keys. This is not a requirement, and in fact any object that could be used as a key in a dictionary can be a key for a node. As function parameters can only be strings, we have to rely on the ``kwds`` argument to ``add_node`` to specify which nodes should be used as inputs for calculation nodes' functions. For a simple but frivolous example, we can represent a finite part of the Fibonacci sequence using tuples of the form ``('fib', [int])`` as keys::
+
+    >>> comp = Computation()
+    >>> comp.add_node(('fib', 1), value=1)
+    >>> comp.add_node(('fib', 2), value=1)
+    >>> for i in range(3,7):
+    ...    comp.add_node(('fib', i), lambda x, y: x + y, kwds={'x': ('fib', i - 1), 'y': ('fib', i - 2)})
+    ...
+    >>> comp.draw_graphviz()
+
+.. graphviz::
+
+    digraph {
+        n0 [label="('fib', 1)" fillcolor="#15b01a" style=filled]
+        n1 [label="('fib', 2)" fillcolor="#15b01a" style=filled]
+        n2 [label="('fib', 3)" fillcolor="#9dff00" style=filled]
+        n3 [label="('fib', 4)" fillcolor="#0343df" style=filled]
+        n4 [label="('fib', 5)" fillcolor="#0343df" style=filled]
+        n5 [label="('fib', 6)" fillcolor="#0343df" style=filled]
+            n0 -> n2
+            n1 -> n2
+            n1 -> n3
+            n2 -> n3
+            n2 -> n4
+            n3 -> n4
+            n3 -> n5
+            n4 -> n5
+    }
+
+::
+
+    >>> comp.compute_all()
+    >>> comp.value(('fib', 6))
+    8
+
+A final word
+------------
+
+This quickstart is intended to help you understand how to create computations using Loman, how to update inputs, correct errors, and how to control the execution of your computations. The examples here are deliberately contrived to emphasize the dependency structures that Loman lets you create. The actual calculations performed are deliberately simplified for ease of exposition. In reality, nodes are likely to be complex objects, such as Numpy arrays, Pandas DataFrames, or classes you create, and calculation functions are likely to be longer than one line. In fact, we recommend that Loman nodes are fairly coarse grained - you should have a node for each intermediate value in a calculation that you might care to inspect or overide, but not one for each line of sequential program.
+
+For more recommendations on how to use Loman in various contexts, you are invited to read the next section, :doc:`Strategies for using Loman in the Real World <strategies>`.

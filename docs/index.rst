@@ -17,6 +17,7 @@ User Guide
    user/intro
    user/install
    user/quickstart
+   user/strategies
 
 API Reference
 -------------
