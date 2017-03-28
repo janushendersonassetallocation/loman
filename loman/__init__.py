@@ -1,1 +1,1 @@
-from loman.computeengine import Computation, States, MapException
+from loman.computeengine import Computation, States, MapException, LoopDetectedException

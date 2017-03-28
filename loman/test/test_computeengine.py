@@ -1,7 +1,8 @@
-from loman import Computation, States, MapException
+from loman import Computation, States, MapException, LoopDetectedException
 import six
 from collections import namedtuple
 import random
+from nose.tools import raises
 
 
 def test_basic():
@@ -684,3 +685,13 @@ def test_args_and_kwds():
     assert comp.value('res') == {'a': 'a', 'b': 'b', 'c': 'c',
                                  'args': ('p', 'q', 'r'),
                                  'kwds': {'x': 'x', 'y': 'y', 'z': 'z'}}
+
+
+@raises(LoopDetectedException)
+def test_avoid_infinite_loop_compute_all():
+    comp = Computation()
+    comp.add_node('a', lambda c: c+1)
+    comp.add_node('b', lambda a: a+1)
+    comp.add_node('c', lambda b: b+1)
+    comp.insert('a', 1)
+    comp.compute_all()

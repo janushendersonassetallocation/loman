@@ -44,6 +44,10 @@ class MapException(ComputationException):
         self.results = results
 
 
+class LoopDetectedException(ComputationException):
+    pass
+
+
 class _ParameterType(Enum):
     ARG = 1
     KWD = 2
@@ -264,12 +268,16 @@ class Computation(object):
 
     def compute_all(self):
         """Compute all nodes of a computation that can be computed"""
+        computed = set()
         while True:
             computable = self._get_computable_nodes_iter()
             any_computable = False
             for n in computable:
+                if n in computed:
+                    raise LoopDetectedException("compute_all is calculating {} for the second time".format(n))
                 any_computable = True
                 self._compute_node(n)
+                computed.add(n)
             if not any_computable:
                 break
 
@@ -358,7 +366,6 @@ class Computation(object):
                 raise MapException("Unable to calculate {}".format(result_node), results)
             return results
         self.add_node(result_node, f, kwds={'xs': input_node})
-
 
     def draw_nx(self, show_values=True):
         """Draw a computation's current state using NetworkX's plotting routines"""
