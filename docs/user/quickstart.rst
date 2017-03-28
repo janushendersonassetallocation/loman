@@ -26,7 +26,7 @@ Loman's computations have a method ``draw_graphviz`` which lets us easily see a 
             n0 -> n1
     }
 
-Loman gives us a quick and easy way to visualize our computations. The graph above shows us that node **b** depends on node **a**. Both are colored blue as neither has a value. Let's insert a value into node **a**::
+Loman gives us a quick and easy way to visualize our computations as a graph data structure. Each node of the graph is a colored oval, representing an input value or calculated value, and each edge (line) shows where the calculation of one node depends on another. The graph above shows us that node **b** depends on node **a**. Both are colored blue as neither has a value. Let's insert a value into node **a**::
 
     >>> comp.insert('a', 1)
     >>> comp.draw_graphviz()
