@@ -45,6 +45,7 @@ Installation
 ------------
 
 To install loman:
+
 .. code-block:: bash
 
     $ pip install loman
