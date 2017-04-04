@@ -1,8 +1,8 @@
-from loman import Computation, States, MapException, LoopDetectedException
+from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException
 import six
 from collections import namedtuple
 import random
-from nose.tools import raises
+from nose.tools import raises, assert_raises
 
 
 def test_basic():
@@ -725,3 +725,26 @@ def test_views():
     assert comp.v.b == 2
     assert comp.v.c == 2
     assert comp.v.d == 4
+
+
+@raises(NonExistentNodeException)
+def test_delete_nonexistent_causes_exception():
+    comp = Computation()
+    comp.delete_node('a')
+
+
+@raises(NonExistentNodeException)
+def test_insert_nonexistent_causes_exception():
+    comp = Computation()
+    comp.insert('a', 1)
+
+
+def test_insert_many_nonexistent_causes_exception():
+    comp = Computation()
+    comp.add_node('a')
+    comp.insert('a', 0)
+
+    with assert_raises(NonExistentNodeException):
+        comp.insert_many([('a', 1), ('b', 2)])
+
+    assert comp.v.a == 0

@@ -52,6 +52,10 @@ class LoopDetectedException(ComputationException):
     pass
 
 
+class NonExistentNodeException(ComputationException):
+    pass
+
+
 class _ParameterType(Enum):
     ARG = 1
     KWD = 2
@@ -145,6 +149,10 @@ class Computation(object):
     def delete_node(self, name):
         """Delete a node from a computation"""
         LOG.debug('Deleting node {}'.format(str(name)))
+
+        if name not in self.dag:
+            raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+
         if len(self.dag.successors(name)) == 0:
             preds = self.dag.predecessors(name)
             self.dag.remove_node(name)
@@ -157,6 +165,10 @@ class Computation(object):
     def insert(self, name, value):
         """Insert a value into a node of a computation"""
         LOG.debug('Inserting value into node {}'.format(str(name)))
+
+        if name not in self.dag:
+            raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+
         node = self.dag.node[name]
         node['value'] = value
         node['state'] = States.UPTODATE
@@ -167,6 +179,11 @@ class Computation(object):
     def insert_many(self, name_value_pairs):
         """Insert values into many nodes of a computation simultaneously"""
         LOG.debug('Inserting value into nodes {}'.format(", ".join(str(name) for name, value in name_value_pairs)))
+
+        for name, value in name_value_pairs:
+            if name not in self.dag:
+                raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+
         stale = set()
         computable = set()
         for name, value in name_value_pairs:
