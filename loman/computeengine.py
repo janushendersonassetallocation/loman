@@ -59,9 +59,33 @@ class _ParameterType(Enum):
 _ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
 
 
+class _ComputationAttributeView(object):
+    def __init__(self, comp, attribute):
+        self.comp = comp
+        self.attribute = attribute
+
+    def __dir__(self):
+        return self.comp.dag.nodes()
+
+    def __getattr__(self, attr):
+        try:
+            return self.comp.dag.node[attr][self.attribute]
+        except KeyError:
+            raise AttributeError()
+
+    def __getstate__(self):
+        return {'comp': self.comp, 'attribute': self.attribute}
+
+    def __setstate__(self, state):
+        self.comp = state['comp']
+        self.attribute = state['attribute']
+
+
 class Computation(object):
     def __init__(self):
         self.dag = nx.DiGraph()
+        self.v = _ComputationAttributeView(self, 'value')
+        self.s = _ComputationAttributeView(self, 'state')
 
     def add_node(self, name, func=None, **kwargs):
         """Adds or updates a node in a computation"""

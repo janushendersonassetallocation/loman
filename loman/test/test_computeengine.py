@@ -695,3 +695,33 @@ def test_avoid_infinite_loop_compute_all():
     comp.add_node('c', lambda b: b+1)
     comp.insert('a', 1)
     comp.compute_all()
+
+
+def test_views():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1)
+    comp.add_node("c", lambda a: 2 * a)
+    comp.add_node("d", lambda b, c: b + c)
+
+    assert comp.s.a == States.UNINITIALIZED
+    assert comp.s.b == States.UNINITIALIZED
+    assert comp.s.c == States.UNINITIALIZED
+    assert comp.s.d == States.UNINITIALIZED
+
+    comp.insert("a", 1)
+    assert comp.s.a == States.UPTODATE
+    assert comp.s.b == States.COMPUTABLE
+    assert comp.s.c == States.COMPUTABLE
+    assert comp.s.d == States.STALE
+    assert comp.v.a == 1
+
+    comp.compute_all()
+    assert comp.s.a == States.UPTODATE
+    assert comp.s.b == States.UPTODATE
+    assert comp.s.c == States.UPTODATE
+    assert comp.s.d == States.UPTODATE
+    assert comp.v.a == 1
+    assert comp.v.b == 2
+    assert comp.v.c == 2
+    assert comp.v.d == 4
