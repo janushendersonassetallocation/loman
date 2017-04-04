@@ -5,6 +5,7 @@ Change Log
 ---------------------
 
 * Added documentation: Introduction, Quickstart and Strategies for Use
+* Added docstrings to core Computation methods
 * Added logging
 * Added ``v`` and ``s`` fields for attribute-style access to values and states of nodes
 * BUGFIX: Detect cycles in ``compute_all``

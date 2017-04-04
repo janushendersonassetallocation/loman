@@ -92,7 +92,21 @@ class Computation(object):
         self.s = _ComputationAttributeView(self, 'state')
 
     def add_node(self, name, func=None, **kwargs):
-        """Adds or updates a node in a computation"""
+        """
+        Adds or updates a node in a computation
+
+        :param name: Name of the node to add. This may be any hashable object.
+        :param func: Function to use to calculate the node if the node is a calculation node. By default, the input nodes to the function will be implied from the names of the function    parameters. For example, a parameter called ``a`` would be taken from the node called ``a``. This can be modified with the ``kwds`` parameter.
+        :type func: Function, default None
+        :param args: Specifies a list of nodes that will be used to populate arguments of the function positionally for a calculation node. e.g. If args is ``['a', 'b', 'c']`` then the function would be called with three parameters, taken from the nodes 'a', 'b' and 'c' respectively.
+        :type args: List, default None
+        :param kwds: Specifies a mapping from parameter name to the node that should be used to populate that parameter when calling the function for a calculation node. e.g. If args is ``{'x': 'a', 'y': 'b'}`` then the function would be called with parameters named 'x' and 'y', and their values would be taken from nodes 'a' and 'b' respectively. Each entry in the dictionary can be read as "take parameter [key] from node [value]".
+        :type kwds: Dictionary, default None
+        :param value: If given, the value is inserted into the node, and the node state set to UPTODATE.
+        :type value: default None
+        :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which case, set serialize to False
+        :type serialize: boolean, default True
+        """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
@@ -147,7 +161,13 @@ class Computation(object):
                 self._try_set_computable(name)
 
     def delete_node(self, name):
-        """Delete a node from a computation"""
+        """
+        Delete a node from a computation
+
+        When nodes are explicitly deleted with ``delete_node``, but are still depended on by other nodes, then they will be set to PLACEHOLDER status. In this case, if the nodes that depend on a PLACEHOLDER node are deleted, then the PLACEHOLDER node will also be deleted.
+
+        :param name: Name of the node to delete. If the node does not exist, a ``NonExistentNodeException`` will be raised.
+        """
         LOG.debug('Deleting node {}'.format(str(name)))
 
         if name not in self.dag:
@@ -163,7 +183,16 @@ class Computation(object):
             self.dag.node[name]['state'] = States.PLACEHOLDER
 
     def insert(self, name, value):
-        """Insert a value into a node of a computation"""
+        """
+        Insert a value into a node of a computation
+
+        Following insertation, the node will have state UPTODATE, and all its descendents will be COMPUTABLE or STALE.
+
+        If an attempt is made to insert a value into a node that does not exist, a ``NonExistentNodeException`` will be raised.
+
+        :param name: Name of the node to add.
+        :param value: The value to be inserted into the node.
+        """
         LOG.debug('Inserting value into node {}'.format(str(name)))
 
         if name not in self.dag:
@@ -177,7 +206,16 @@ class Computation(object):
             self._try_set_computable(n)
 
     def insert_many(self, name_value_pairs):
-        """Insert values into many nodes of a computation simultaneously"""
+        """
+        Insert values into many nodes of a computation simultaneously
+
+        Following insertation, the nodes will have state UPTODATE, and all their descendents will be COMPUTABLE or STALE. In the case of inserting many nodes, some of which are descendents of others, this ensures that the inserted nodes have correct status, rather than being set as STALE when their ancestors are inserted.
+
+        If an attempt is made to insert a value into a node that does not exist, a ``NonExistentNodeException`` will be raised, and none of the nodes will be inserted.
+
+        :param name_value_pairs: Each tuple should be a pair (name, value), where name is the name of the node to insert the value into.
+        :type name_value_pairs: List of tuples
+        """
         LOG.debug('Inserting value into nodes {}'.format(", ".join(str(name) for name, value in name_value_pairs)))
 
         for name, value in name_value_pairs:
@@ -200,7 +238,14 @@ class Computation(object):
             self._try_set_computable(name)
 
     def insert_from(self, other, nodes=None):
-        """Insert values into a computation from another computation"""
+        """
+        Insert values into another Computation object into this Computation object
+
+        :param other: The computation object to take values from
+        :type Computation:
+        :param nodes: Only populate the nodes with the names provided in this list. By default, all nodes from the other Computation object that have corresponding nodes in this Computation object will be inserted
+        :type nodes: List, default None
+        """
         if nodes is None:
             nodes = set(self.dag.nodes())
             nodes.intersection_update(other.dag.nodes())
@@ -208,7 +253,11 @@ class Computation(object):
         self.insert_many(name_value_pairs)
 
     def set_stale(self, name):
-        """Set a node and all its dependencies as stale"""
+        """
+        Set the state of a node and all its dependencies to STALE
+
+        :param name: Name of the node to set as STALE.
+        """
         self.dag.node[name]['state'] = States.STALE
         for n in nx.dag.descendants(self.dag, name):
             self.dag.node[n]['state'] = States.STALE
@@ -305,7 +354,15 @@ class Computation(object):
         return calc_nodes
 
     def compute(self, name):
-        """Compute a node and all necessary predecessors"""
+        """
+        Compute a node and all necessary predecessors
+
+        Following the computation, if successful, the target node, and all necessary ancestors that were not already UPTODATE will have been calculated and set to UPTODATE. Any node that did not need to be calculated will not have been recalculated.
+
+        If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an object containing the exception object, as well as a traceback. This will not halt the computation, which will proceed as far as it can, until no more nodes that would be required to calculate the target are COMPUTABLE.
+
+        :param name: Name of the node to compute
+        """
         for n in self._get_calc_nodes(name):
             if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in self.dag.predecessors(n)):
                 self._compute_node(n)
@@ -317,7 +374,13 @@ class Computation(object):
                 yield n
 
     def compute_all(self):
-        """Compute all nodes of a computation that can be computed"""
+        """Compute all nodes of a computation that can be computed
+
+        Following the computation, if successful, all nodes will have state UPTODATE, except UNINITIALIZED input nodes and PLACEHOLDER nodes.
+
+        If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an object containing the exception object, as well as a traceback. This will not halt the computation, which will proceed as far as it can, until no more nodes are COMPUTABLE.
+
+        """
         computed = set()
         while True:
             computable = self._get_computable_nodes_iter()
@@ -332,20 +395,62 @@ class Computation(object):
                 break
 
     def state(self, name):
-        """Get the state of a node"""
+        """
+        Get the state of a node
+
+        This can also be accessed using the attribute-style accessor ``s`` if ``name`` is a valid Python attribute name::
+
+            >>> comp = Computation()
+            >>> comp.add_node('foo', value=1)
+            >>> comp.state('foo')
+            <States.UPTODATE: 4>
+            >>> comp.s.foo
+            <States.UPTODATE: 4>
+
+        :param name: Name of the node to get state for
+        """
         return self.dag.node[name]['state']
 
     def value(self, name):
-        """Get the current value of a node"""
+        """
+        Get the current value of a node
+
+        This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python attribute name::
+
+            >>> comp = Computation()
+            >>> comp.add_node('foo', value=1)
+            >>> comp.value('foo')
+            1
+            >>> comp.v.foo
+            1
+
+        :param name: Name of the node to get the value of
+        """
         return self.dag.node[name]['value']
 
     def __getitem__(self, name):
-        """Get the state and current value of a node"""
+        """
+        Get the state and current value of a node
+
+        :param name: Name of the node to get the state and value of
+        """
         node = self.dag.node[name]
         return NodeData(node['state'], node['value'])
 
     def get_df(self):
-        """Get a dataframe containing the states and value of all nodes of computation"""
+        """
+        Get a dataframe containing the states and value of all nodes of computation
+
+        ::
+
+            >>> comp = loman.Computation()
+            >>> comp.add_node('foo', value=1)
+            >>> comp.add_node('bar', value=2)
+            >>> comp.get_df()
+                           state  value  is_expansion
+            bar  States.UPTODATE      2           NaN
+            foo  States.UPTODATE      1           NaN
+        """
         df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
         df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
         df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
@@ -353,11 +458,26 @@ class Computation(object):
         return df
 
     def get_value_dict(self):
-        """Get a dictionary containing the values of all nodes of a computation"""
+        """
+        Get a dictionary containing the values of all nodes of a computation
+
+        ::
+
+            >>> comp = loman.Computation()
+            >>> comp.add_node('foo', value=1)
+            >>> comp.add_node('bar', value=2)
+            >>> comp.get_value_dict()
+            {'bar': 2, 'foo': 1}
+        """
         return nx.get_node_attributes(self.dag, 'value')
 
     def write_dill(self, file_):
-        """Serialize a computation to a file or file-like object"""
+        """
+        Serialize a computation to a file or file-like object
+
+        :param file_: If string, writes to a file
+        :type file_: File-like object, or string
+        """
         node_serialize = nx.get_node_attributes(self.dag, 'serialize')
         if all(serialize for name, serialize in node_serialize.items()):
             obj = self
@@ -375,7 +495,12 @@ class Computation(object):
 
     @staticmethod
     def read_dill(file_):
-        """Deserialize a computation from a file or file-like object"""
+        """
+        Deserialize a computation from a file or file-like object
+
+        :param file_: If string, writes to a file
+        :type file_: File-like object, or string
+        """
         if isinstance(file_, six.string_types):
             with open(file_, 'rb') as f:
                 return dill.load(f)
@@ -383,13 +508,21 @@ class Computation(object):
             return dill.load(file_)
 
     def copy(self):
-        """Create a copy of a computation"""
+        """
+        Create a copy of a computation
+
+        The copy is shallow. Any values in the new Computation's DAG will be the same object as this Computation's DAG. As new objects will be created by any further computations, this should not be an issue.
+
+        :rtype: Computation
+        """
         obj = Computation()
         obj.dag = nx.DiGraph(self.dag)
         return obj
 
     def add_named_tuple_expansion(self, name, namedtuple_type):
-        """Automatically add nodes to extract each element of a named tuple type"""
+        """
+        Automatically add nodes to extract each element of a named tuple type
+        """
         def make_f(field):
             def get_field_value(tuple):
                 return getattr(tuple, field)
@@ -400,7 +533,9 @@ class Computation(object):
             self.dag.node[node_name]['is_expansion'] = True
 
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
-        """Apply a graph to each element of iterable"""
+        """
+        Apply a graph to each element of iterable
+        """
         def f(xs):
             results = []
             is_error = False
@@ -418,7 +553,9 @@ class Computation(object):
         self.add_node(result_node, f, kwds={'xs': input_node})
 
     def draw_nx(self, show_values=True):
-        """Draw a computation's current state using NetworkX's plotting routines"""
+        """
+        Draw a computation's current state using NetworkX's plotting routines
+        """
         if show_values:
             labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
         else:
@@ -427,7 +564,9 @@ class Computation(object):
         nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
 
     def draw_graphviz(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
-        """Draw a computation's current state using the GraphViz utility"""
+        """
+        Draw a computation's current state using the GraphViz utility
+        """
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
         show_nodes = set()
