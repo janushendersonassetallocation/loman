@@ -8,6 +8,10 @@ import six
 import pandas as pd
 import traceback
 import graphviz
+import logging
+
+
+LOG = logging.getLogger('loman.computeengine')
 
 
 class States(Enum):
@@ -61,6 +65,7 @@ class Computation(object):
 
     def add_node(self, name, func=None, **kwargs):
         """Adds or updates a node in a computation"""
+        LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
         value = kwargs.get('value', None)
@@ -115,6 +120,7 @@ class Computation(object):
 
     def delete_node(self, name):
         """Delete a node from a computation"""
+        LOG.debug('Deleting node {}'.format(str(name)))
         if len(self.dag.successors(name)) == 0:
             preds = self.dag.predecessors(name)
             self.dag.remove_node(name)
@@ -126,6 +132,7 @@ class Computation(object):
 
     def insert(self, name, value):
         """Insert a value into a node of a computation"""
+        LOG.debug('Inserting value into node {}'.format(str(name)))
         node = self.dag.node[name]
         node['value'] = value
         node['state'] = States.UPTODATE
@@ -135,6 +142,7 @@ class Computation(object):
 
     def insert_many(self, name_value_pairs):
         """Insert values into many nodes of a computation simultaneously"""
+        LOG.debug('Inserting value into nodes {}'.format(", ".join(str(name) for name, value in name_value_pairs)))
         stale = set()
         computable = set()
         for name, value in name_value_pairs:
@@ -205,6 +213,7 @@ class Computation(object):
             yield _ParameterItem(param_type, param_name, param_value)
 
     def _compute_node(self, name):
+        LOG.debug('Computing node {}'.format(str(name)))
         node = self.dag.node[name]
         f = node['func']
         args, kwds = [], {}
