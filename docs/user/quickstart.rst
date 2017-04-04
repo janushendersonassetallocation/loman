@@ -63,6 +63,13 @@ Loman gives us several ways of inspecting nodes. We can use the ``value`` and ``
     >>> comp.state('b')
     <States.UPTODATE: 4>
 
+Or we can use ``v`` and ``s`` to access values and states with attribute-style access. This method of access works well with the auto-complete feature in IPython and Jupyter Notebook, but it is only able to access nodes with valid alphanumeric names::
+
+    >>> comp.v.b
+    2
+    >>> comp.s.b
+    <States.UPTODATE: 4>
+
 The []-operator provides both the state and value::
 
     >>> comp['b']
@@ -90,7 +97,7 @@ In our first example, we used a lambda expression to provide a function to calcu
     >>> comp.add_node('result_node', foo)
     >>> comp.insert('input_node', 1)
     >>> comp.compute_all()
-    >>> comp.value('result_node')
+    >>> comp.v.result_node
     2
 
 We can explicitly specify the mapping from parameter names to node names if we require, using the ``kwds`` parameter. And a node can depend on more than one input node. Here we have  a function of two parameters. The argument to ``kwds`` can be read as saying "Parameter **a** comes from node **x**, parameter **b** comes from node **y**"::
@@ -105,7 +112,7 @@ We can explicitly specify the mapping from parameter names to node names if we r
     >>> comp.insert('x', 20)
     >>> comp.insert('y', 22)
     >>> comp.compute_all()
-    >>> comp.value('result')
+    >>> comp.v.result
     42
 
 For input nodes, the ``add_node`` method can optionally take a value, rather than having to separately call the insert method::
@@ -114,7 +121,7 @@ For input nodes, the ``add_node`` method can optionally take a value, rather tha
     >>> comp.add_node('a', value=1)
     >>> comp.add_node('b', lambda a: a + 1)
     >>> comp.compute_all()
-    >>> comp.value('result')
+    >>> comp.v.result
     2
 
 Finally, the function supplied to **add_node** can have ``\*args`` or ``\*\*kwargs`` arguments. When this is done, the ``args`` and ``kwds`` provided to **add_node** control what will be placed in ``\*args`` or ``\*\*kwargs``::
@@ -126,9 +133,9 @@ Finally, the function supplied to **add_node** can have ``\*args`` or ``\*\*kwar
     >>> comp.add_node('args', lambda *args: args, args=['x', 'y', 'z'])
     >>> comp.add_node('kwargs', lambda **kwargs: kwargs, kwds={'a': 'x', 'b': 'y', 'c': 'z'})
     >>> comp.compute_all()
-    >>> comp.value('args')
+    >>> comp.v.args
     (1, 2, 3)
-    >>> comp.value('kwargs')
+    >>> comp.v.kwargs
     {'a': 1, 'b': 2, 'c': 3}
 
 Controlling Computation
@@ -197,7 +204,7 @@ As before, we see that the nodes we have just inserted data for are colored dark
 We saw before that we can use the ``compute_all`` method to calculate nodes. We can also specify exactly which nodes we would like calculated using the ``compute`` method. This method will calculate any upstream dependencies that are not up-to-date, but it will not calculate nodes that do not need to be calculated. For example, if we request the **result1** be calculated, **intermediate1** and **intermedate2** will be calculated first, but **intermediate3** and **result2** will not be calculated::
 
     >>> comp.compute('result1')
-    >>> comp.value('result1')
+    >>> comp.v.result1
     5
     >>> comp.draw_graphviz()
 
@@ -252,7 +259,7 @@ Often, in real-time systems, updates will come periodically for one or more of t
 And again we can ask Loman to calculate nodes in the computation, and give us results. Here we calculate all nodes::
 
     >>> comp.compute_all()
-    >>> comp.value('result1')
+    >>> comp.v.result1
     8
 
 Overriding calculation nodes
@@ -262,6 +269,7 @@ In fact, we are not restricted to inserting data into input nodes. It is perfect
 
     >>> comp.insert('intermediate2', 100)
     >>> comp.compute('result2')
+    >>> comp.v.result2
     106
     >>> comp.draw_graphviz()
 
@@ -340,9 +348,9 @@ As well as inserting data into nodes, we can update the computation they perform
 
 ::
 
-    >>> comp.value('result1')
+    >>> comp.v.result1
     18
-    >>> comp.value('result2')
+    >>> comp.v.result2
     20
 
 Adding new nodes
@@ -407,9 +415,9 @@ We can even add new nodes, and change the dependencies of existing calculations.
 
 ::
 
-    >>> comp.value('result1')
+    >>> comp.v.result1
     13.0
-    >>> comp.value('result2')
+    >>> comp.v.result2
     15.0
 
 Error-handling
@@ -440,11 +448,11 @@ If trying to calculate a node causes an exception, then Loman will mark its stat
 
 ::
 
-    >>> comp.state('c')
+    >>> comp.s.c
     <States.ERROR: 5>
-    >>> comp.value('c').exception
+    >>> comp.v.c.exception
     ZeroDivisionError('division by zero')
-    >>> print(comp.value('c').traceback)
+    >>> print(comp.v.c.traceback)
     Traceback (most recent call last):
       File "C:\ProgramData\Anaconda3\lib\site-packages\loman\computeengine.py", line 211, in _compute_node
       File "<ipython-input-79-028365426246>", line 4, in <lambda>
@@ -489,7 +497,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
 
 ::
 
-    >>> comp.state('a')
+    >>> comp.s.a
     <States.PLACEHOLDER: 0>
     >>> comp.add_node('a')
     >>> comp.draw_graphviz()
