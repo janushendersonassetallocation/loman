@@ -21,6 +21,9 @@ Loman
 
 Loman tracks the state of your computations, and the dependencies between them, allowing full and partial recalculations.
 
+Example
+-------
+
 .. code-block:: python
 
     >>> comp = Computation()
@@ -35,11 +38,18 @@ Loman tracks the state of your computations, and the dependencies between them, 
     >>> comp.draw_graphviz() # Can quickly see what calculated
 .. image:: https://raw.githubusercontent.com/janusassetallocation/loman/master/docs/_static/example000.png
 
+For further examples, take a look at the `Quickstart <http://loman.readthedocs.io/en/latest/user/quickstart.html>`_.
+
+Purpose
+-------
+
 Loman makes it easy to ingest data from multiple sources, clean and integrate that data, and then use it to produce results for exporting to databases and other systems, as well as reports or dashboards for humans. Uses of Loman include:
 
 - **Real-time systems**. Inputs to real-time systems frequently tick at different rates. Loman ensures that only what is necessary is recalculated. Furthermore, given some outputs that a slower to produce than others, Loman allows you to control which outputs are computed how frequently. Loman allows you to quickly show status of all items, and keep track of what needs to be updated.
 - **Batch systems**. When used as part of a daily process, Loman can serialize some or all nodes of a computation graph, allowing for easy inspection of original inputs, intermediate calculations and tracebacks when failures occur. Original inputs can be replaced, or intermediate calculation methods or values overwritten in-place, allowing easy recovery from failures, without re-acquiring potentially expensive inputs or re-performing time-consuming calculations unnecessarily.
 - **Research**. Loman allows you to keep track of complex dependencies as you create new calculation systems, or revisit old ones. Calculate new data, statistics and reports re-using existing raw inputs and calculated intermediates. Improve your productivity by ncreasing the frequency of iterations - make adjustments to methods in-place and re-run only what needs to be re-run.
+
+The `Introduction <http://loman.readthedocs.io/en/latest/user/intro.html>`_ section of the documentation has more details on why Loman might be useful for you.
 
 Installation
 ------------
@@ -51,10 +61,10 @@ To install loman:
     $ pip install loman
 
 
-Or download from github: https://github.com/janusassetallocation/loman
+Or you can download from github: https://github.com/janusassetallocation/loman
 
 Documentation
 -------------
 
-Documentation is at http://loman.readthedocs.io/
+Up-to-date and thorough documentation is available on ReadTheDocs at http://loman.readthedocs.io/
 
