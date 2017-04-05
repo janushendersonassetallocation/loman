@@ -522,6 +522,27 @@ class Computation(object):
     def add_named_tuple_expansion(self, name, namedtuple_type):
         """
         Automatically add nodes to extract each element of a named tuple type
+
+        It is often convenient for a calculation to return multiple values, and it is polite to do this a namedtuple rather than a regular tuple, so that later users have same name to identify elements of the tuple. It can also help make a computation clearer if a downstream computation depends on one element of such a tuple, rather than the entire tuple. This does not affect the computation per se, but it does make the intention clearer.
+
+        To avoid having to create many boiler-plate node definitions to expand namedtuples, the ``add_named_tuple_expansion`` method automatically creates new nodes for each element of a tuple. The convention is that an element called 'element', in a node called 'node' will be expanded into a new node called 'node.element', and that this will be applied for each element.
+
+        Example::
+
+            >>> from collections import namedtuple
+            >>> Coordinate = namedtuple('Coordinate', ['x', 'y'])
+            >>> comp = Computation()
+            >>> comp.add_node('c', value=Coordinate(1, 2))
+            >>> comp.add_named_tuple_expansion('c', Coordinate)
+            >>> comp.compute_all()
+            >>> comp.value('c.x')
+            1
+            >>> comp.value('c.y')
+            2
+
+        :param name: Node to cera
+        :param namedtuple_type: Expected type of the node
+        :type namedtuple_type: namedtuple class
         """
         def make_f(field):
             def get_field_value(tuple):
@@ -535,6 +556,14 @@ class Computation(object):
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
         """
         Apply a graph to each element of iterable
+
+        In turn, each element in the ``input_node`` of this graph will be inserted in turn into the subgraph's ``subgraph_input_node``, then the subgraph's ``subgraph_output_node`` calculated. The resultant list, with an element or each element in ``input_node``, will be inserted into ``result_node`` of this graph. In this way ``add_map_node`` is similar to ``map`` in functional programming.
+
+        :param result_node: The node to place a list of results in **this** graph
+        :param input_node: The node to get a list input values from **this** graph
+        :param subgraph: The graph to use to perform calculation for each element
+        :param subgraph_input_node: The node in **subgraph** to insert each element in turn
+        :param subgraph_output_node: The node in **subgraph** to read the result for each element
         """
         def f(xs):
             results = []
@@ -566,6 +595,11 @@ class Computation(object):
     def draw_graphviz(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
+
+        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '10,8'}`` can control the size of the output graph
+        :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
+        :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
+        :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
