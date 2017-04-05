@@ -27,6 +27,14 @@ API Reference
 
    api
 
+Developer Guidelines
+--------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   dev/release
+
 Indices and tables
 ==================
 
