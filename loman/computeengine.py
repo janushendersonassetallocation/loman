@@ -126,12 +126,15 @@ class Computation(object):
         :type value: default None
         :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which case, set serialize to False
         :type serialize: boolean, default True
+        :param inspect: Whether to use introspection to determine the arguments of the function, which can be slow. If this is not set, kwds and args must be set for the function to obtain parameters.
+        :type inspect: boolean, default True 
         """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
         value = kwargs.get('value', None)
         serialize = kwargs.get('serialize', True)
+        inspect = kwargs.get('inspect', True)
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         node = self.dag.node[name]
@@ -146,17 +149,20 @@ class Computation(object):
 
         if func:
             node['func'] = func
-            signature = _get_signature(func)
             if args:
                 for i, param_name in enumerate(args):
                     if not self.dag.has_node(param_name):
                         self.dag.add_node(param_name, state=States.PLACEHOLDER)
                     self.dag.add_edge(param_name, name, param=(_ParameterType.ARG, i))
-            param_names = set()
-            if not signature.has_var_args:
-                param_names.update(signature.kwd_params)
-            if signature.has_var_kwds and kwds is not None:
-                param_names.update(kwds.keys())
+            if inspect:
+                signature = _get_signature(func)
+                param_names = set()
+                if not signature.has_var_args:
+                    param_names.update(signature.kwd_params)
+                if signature.has_var_kwds and kwds is not None:
+                    param_names.update(kwds.keys())
+            else:
+                param_names = kwds.keys()
             for param_name in param_names:
                 in_node_name = kwds.get(param_name, param_name) if kwds else param_name
                 if not self.dag.has_node(in_node_name):

@@ -748,3 +748,16 @@ def test_insert_many_nonexistent_causes_exception():
         comp.insert_many([('a', 1), ('b', 2)])
 
     assert comp.v.a == 0
+
+
+def test_no_inspect():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a + 1, kwds={'a': 'a'}, inspect=False)
+    comp.add_node('c', lambda a: 2 * a, kwds={'a': 'a'}, inspect=False)
+    comp.add_node('d', lambda b, c: b + c, kwds={'b': 'b', 'c': 'c'}, inspect=False)
+    comp.insert('a', 10)
+    comp.compute_all()
+    assert comp['b'] == (States.UPTODATE, 11)
+    assert comp['c'] == (States.UPTODATE, 20)
+    assert comp['d'] == (States.UPTODATE, 31)
