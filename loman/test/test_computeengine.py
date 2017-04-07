@@ -761,3 +761,21 @@ def test_no_inspect():
     assert comp['b'] == (States.UPTODATE, 11)
     assert comp['c'] == (States.UPTODATE, 20)
     assert comp['d'] == (States.UPTODATE, 31)
+
+
+def test_compute_fib_5():
+    n = 5
+
+    comp = Computation()
+
+    def add(x, y):
+        return x + y
+
+    comp.add_node(0, value=1)
+    comp.add_node(1, value=1)
+
+    for i in range(2, n + 1):
+        comp.add_node(i, add, kwds={'x': i - 2, 'y': i - 1}, inspect=False)
+
+    comp.compute(n)
+    assert comp.state(n) == States.UPTODATE

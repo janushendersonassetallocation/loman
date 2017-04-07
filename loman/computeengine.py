@@ -343,27 +343,21 @@ class Computation(object):
             self._set_descendents(name, States.STALE)
 
     def _get_calc_nodes(self, name):
-        process_nodes = deque([name])
-        seen = set(process_nodes)
-        calc_nodes = []
-        while process_nodes:
-            n = process_nodes.popleft()
-            seen.add(n)
-            node = self.dag.node[n]
+        g = self.dag.copy()
+        for n in nx.ancestors(g, name):
+            node = g.node[n]
             state = node['state']
             if state == States.UPTODATE:
-                continue
-            preds = self.dag.predecessors(n)
-            if state == States.UNINITIALIZED and len(preds) == 0:
+                g.remove_node(n)
+            if state == States.UNINITIALIZED and len(self.dag.predecessors(n)) == 0:
                 raise Exception("Cannot compute {} because {} uninitialized".format(name, n))
             if state == States.PLACEHOLDER:
                 raise Exception("Cannot compute {} because {} is placeholder".format(name, n))
-            calc_nodes.append(n)
-            for n1 in self.dag.predecessors(n):
-                if n1 not in seen:
-                    process_nodes.append(n1)
-        calc_nodes.reverse()
-        return calc_nodes
+
+        ancestors = nx.ancestors(g, name)
+        ancestors.add(name)
+        nodes_sorted = nx.topological_sort(g, ancestors)
+        return [n for n in nodes_sorted if n in ancestors]
 
     def compute(self, name):
         """
@@ -375,8 +369,10 @@ class Computation(object):
 
         :param name: Name of the node to compute
         """
-        for n in self._get_calc_nodes(name):
-            if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in self.dag.predecessors(n)):
+        calc_nodes = self._get_calc_nodes(name)
+        for n in calc_nodes:
+            preds = self.dag.predecessors(n)
+            if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in preds):
                 self._compute_node(n)
 
     def _get_computable_nodes_iter(self):
