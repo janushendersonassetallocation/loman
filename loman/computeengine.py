@@ -84,6 +84,26 @@ class _ComputationAttributeView(object):
         self.comp = state['comp']
         self.attribute = state['attribute']
 
+_Signature = namedtuple('_Signature', ['kwd_params', 'has_var_args', 'has_var_kwds'])
+
+
+def _get_signature(func):
+    if six.PY3:
+        sig = inspect.signature(func)
+        pk = inspect._ParameterKind
+        has_var_args = any(p.kind == pk.VAR_POSITIONAL for p in sig.parameters.values())
+        has_var_kwds = any(p.kind == pk.VAR_KEYWORD for p in sig.parameters.values())
+        all_keyword_params = [param_name for param_name, param in sig.parameters.items()
+                              if param.kind in (pk.POSITIONAL_OR_KEYWORD, pk.KEYWORD_ONLY)]
+    elif six.PY2:
+        argspec = inspect.getargspec(func)
+        has_var_args = argspec.varargs is not None
+        has_var_kwds = argspec.keywords is not None
+        all_keyword_params = argspec.args
+    else:
+        raise Exception("Only Pythons 2 and 3 supported")
+    return _Signature(all_keyword_params, has_var_args, has_var_kwds)
+
 
 class Computation(object):
     def __init__(self):
@@ -126,31 +146,17 @@ class Computation(object):
 
         if func:
             node['func'] = func
-            if six.PY3:
-                sig = inspect.signature(func)
-                pk = inspect._ParameterKind
-                has_var_args = any(p.kind == pk.VAR_POSITIONAL for p in sig.parameters.values())
-                has_var_kwds = any(p.kind == pk.VAR_KEYWORD for p in sig.parameters.values())
-                all_keyword_params = [param_name for param_name, param in sig.parameters.items()
-                                      if param.kind in (pk.POSITIONAL_OR_KEYWORD, pk.KEYWORD_ONLY)]
-            elif six.PY2:
-                argspec = inspect.getargspec(func)
-                has_var_args = argspec.varargs is not None
-                has_var_kwds = argspec.keywords is not None
-                all_keyword_params = argspec.args
-            else:
-                raise Exception("Only Pythons 2 and 3 supported")
+            signature = _get_signature(func)
             if args:
                 for i, param_name in enumerate(args):
                     if not self.dag.has_node(param_name):
                         self.dag.add_node(param_name, state=States.PLACEHOLDER)
                     self.dag.add_edge(param_name, name, param=(_ParameterType.ARG, i))
             param_names = set()
-            if not has_var_args:
-                param_names.update(all_keyword_params)
-            if has_var_kwds:
-                if kwds:
-                    param_names.update(kwds.keys())
+            if not signature.has_var_args:
+                param_names.update(signature.kwd_params)
+            if signature.has_var_kwds and kwds is not None:
+                param_names.update(kwds.keys())
             for param_name in param_names:
                 in_node_name = kwds.get(param_name, param_name) if kwds else param_name
                 if not self.dag.has_node(in_node_name):
