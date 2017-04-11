@@ -779,3 +779,14 @@ def test_compute_fib_5():
 
     comp.compute(n)
     assert comp.state(n) == States.UPTODATE
+
+def test_multiple_values():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a + 1, kwds={'a': 'a'}, inspect=False)
+    comp.add_node('c', lambda a: 2 * a, kwds={'a': 'a'}, inspect=False)
+    comp.add_node('d', lambda b, c: b + c, kwds={'b': 'b', 'c': 'c'}, inspect=False)
+    comp.insert('a', 10)
+    comp.compute_all()
+    assert comp.value(['d', 'b']) == [31, 11]
+

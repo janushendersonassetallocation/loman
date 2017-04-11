@@ -453,8 +453,11 @@ class Computation(object):
             >>> comp.v.foo
             1
 
-        :param name: Name of the node to get the value of
+        :param name: Name or names of the node to get the value of
+        :type name: Key or [Keys]
         """
+        if isinstance(name, list):
+            return [self.dag.node[n]['value'] for n in name]
         return self.dag.node[name]['value']
 
     def __getitem__(self, name):
