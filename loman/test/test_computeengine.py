@@ -780,6 +780,7 @@ def test_compute_fib_5():
     comp.compute(n)
     assert comp.state(n) == States.UPTODATE
 
+
 def test_multiple_values():
     comp = Computation()
     comp.add_node('a')
@@ -790,3 +791,24 @@ def test_multiple_values():
     comp.compute_all()
     assert comp.value(['d', 'b']) == [31, 11]
 
+
+def test_get_inputs():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a + 1, kwds={'a': 'a'}, inspect=False)
+    comp.add_node('c', lambda a: 2 * a, kwds={'a': 'a'}, inspect=False)
+    comp.add_node('d', lambda b, c: b + c, kwds={'b': 'b', 'c': 'c'}, inspect=False)
+    assert set(comp.get_inputs('a')) == set()
+    assert set(comp.get_inputs('b')) == {'a'}
+    assert set(comp.get_inputs('c')) == {'a'}
+    assert set(comp.get_inputs('d')) == {'c', 'b'}
+    assert list(map(set, comp.get_inputs(['a', 'b', 'c', 'd']))) == [set(), {'a'}, {'a'}, {'b', 'c'}]
+    assert set(comp.i.a) == set()
+    assert set(comp.i.b) == {'a'}
+    assert set(comp.i.c) == {'a'}
+    assert set(comp.i.d) == {'c', 'b'}
+    assert set(comp.i['a']) == set()
+    assert set(comp.i['b']) == {'a'}
+    assert set(comp.i['c']) == {'a'}
+    assert set(comp.i['d']) == {'c', 'b'}
+    assert list(map(set, comp.i[['a', 'b', 'c', 'd']])) == [set(), {'a'}, {'a'}, {'b', 'c'}]

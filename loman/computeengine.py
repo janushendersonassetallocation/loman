@@ -121,6 +121,7 @@ class Computation(object):
         self.dag = nx.DiGraph()
         self.v = _ComputationAttributeView(self.nodes, self.value, self.value)
         self.s = _ComputationAttributeView(self.nodes, self.state, self.state)
+        self.i = _ComputationAttributeView(self.nodes, self.get_inputs, self.get_inputs)
 
     def add_node(self, name, func=None, **kwargs):
         """
@@ -502,6 +503,16 @@ class Computation(object):
             {'bar': 2, 'foo': 1}
         """
         return nx.get_node_attributes(self.dag, 'value')
+
+    def get_inputs(self, name):
+        """
+        Get a list of the inputs for a node or set of nodes
+        
+        :return: 
+        """
+        if isinstance(name, list):
+            return [self.dag.predecessors(n) for n in name]
+        return self.dag.predecessors(name)
 
     def write_dill(self, file_):
         """
