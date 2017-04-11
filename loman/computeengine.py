@@ -402,6 +402,13 @@ class Computation(object):
             if not any_computable:
                 break
 
+    def nodes(self):
+        """
+        Get a list of nodes in this computation
+        :return: List of nodes
+        """
+        return self.dag.nodes()
+
     def state(self, name):
         """
         Get the state of a node
