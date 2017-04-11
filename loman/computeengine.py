@@ -326,7 +326,7 @@ class Computation(object):
             param_type, param_name = edge['param']
             yield _ParameterItem(param_type, param_name, param_value)
 
-    def _compute_node(self, name):
+    def _compute_node(self, name, raise_exceptions=False):
         LOG.debug('Computing node {}'.format(str(name)))
         node = self.dag.node[name]
         f = node['func']
@@ -353,6 +353,8 @@ class Computation(object):
             tb = traceback.format_exc()
             node['value'] = Error(e, tb)
             self._set_descendents(name, States.STALE)
+            if raise_exceptions:
+                raise
 
     def _get_calc_nodes(self, name):
         g = self.dag.copy()
@@ -371,7 +373,7 @@ class Computation(object):
         nodes_sorted = nx.topological_sort(g, ancestors)
         return [n for n in nodes_sorted if n in ancestors]
 
-    def compute(self, name):
+    def compute(self, name, raise_exceptions=False):
         """
         Compute a node and all necessary predecessors
 
@@ -380,12 +382,14 @@ class Computation(object):
         If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an object containing the exception object, as well as a traceback. This will not halt the computation, which will proceed as far as it can, until no more nodes that would be required to calculate the target are COMPUTABLE.
 
         :param name: Name of the node to compute
+        :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
+        :type raise_exceptions: Boolean, default False
         """
         calc_nodes = self._get_calc_nodes(name)
         for n in calc_nodes:
             preds = self.dag.predecessors(n)
             if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in preds):
-                self._compute_node(n)
+                self._compute_node(n, raise_exceptions=raise_exceptions)
 
     def _get_computable_nodes_iter(self):
         for n, node in self.dag.nodes_iter(data=True):
@@ -393,13 +397,15 @@ class Computation(object):
             if node['state'] == States.COMPUTABLE:
                 yield n
 
-    def compute_all(self):
+    def compute_all(self, raise_exceptions=False):
         """Compute all nodes of a computation that can be computed
 
         Following the computation, if successful, all nodes will have state UPTODATE, except UNINITIALIZED input nodes and PLACEHOLDER nodes.
 
         If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an object containing the exception object, as well as a traceback. This will not halt the computation, which will proceed as far as it can, until no more nodes are COMPUTABLE.
 
+        :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
+        :type raise_exceptions: Boolean, default False
         """
         computed = set()
         while True:
@@ -409,7 +415,7 @@ class Computation(object):
                 if n in computed:
                     raise LoopDetectedException("compute_all is calculating {} for the second time".format(n))
                 any_computable = True
-                self._compute_node(n)
+                self._compute_node(n, raise_exceptions=raise_exceptions)
                 computed.add(n)
             if not any_computable:
                 break

@@ -217,6 +217,15 @@ def test_exception_compute_all():
     assert comp.state('c') == States.STALE
 
 
+@raises(ZeroDivisionError)
+def test_raising_exception_compute():
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', lambda a: a/0)
+    comp.add_node('c', lambda b: b)
+    comp.compute_all(raise_exceptions=True)
+
+
 def test_exception_compute():
     comp = Computation()
     comp.add_node('a', value=1)
@@ -226,6 +235,15 @@ def test_exception_compute():
     assert comp['a'] == (States.UPTODATE, 1)
     assert comp.state('b') == States.ERROR
     assert comp.state('c') == States.STALE
+
+
+@raises(ZeroDivisionError)
+def test_raising_exception_compute_all():
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', lambda a: a/0)
+    comp.add_node('c', lambda b: b)
+    comp.compute('c', raise_exceptions=True)
 
 
 def test_update_function():
