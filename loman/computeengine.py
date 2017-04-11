@@ -64,25 +64,36 @@ _ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
 
 
 class _ComputationAttributeView(object):
-    def __init__(self, comp, attribute):
-        self.comp = comp
-        self.attribute = attribute
+    def __init__(self, get_attribute_list, get_attribute, get_item=None):
+        self.get_attribute_list = get_attribute_list
+        self.get_attribute = get_attribute
+        self.get_item = get_item
+        if self.get_item is None:
+            self.get_item = get_attribute
 
     def __dir__(self):
-        return self.comp.dag.nodes()
+        return self.get_attribute_list()
 
     def __getattr__(self, attr):
         try:
-            return self.comp.dag.node[attr][self.attribute]
+            return self.get_attribute(attr)
         except KeyError:
             raise AttributeError()
 
+    def __getitem__(self, key):
+        return self.get_item(key)
+
     def __getstate__(self):
-        return {'comp': self.comp, 'attribute': self.attribute}
+        return {
+            'get_attribute_list': self.get_attribute_list,
+            'get_attribute': self.get_attribute,
+            'get_item': self.get_item
+        }
 
     def __setstate__(self, state):
-        self.comp = state['comp']
-        self.attribute = state['attribute']
+        self.get_attribute_list = state['get_attribute_list']
+        self.get_attribute = state['get_attribute']
+        self.get_item = state['get_item']
 
 _Signature = namedtuple('_Signature', ['kwd_params', 'has_var_args', 'has_var_kwds'])
 
@@ -108,8 +119,8 @@ def _get_signature(func):
 class Computation(object):
     def __init__(self):
         self.dag = nx.DiGraph()
-        self.v = _ComputationAttributeView(self, 'value')
-        self.s = _ComputationAttributeView(self, 'state')
+        self.v = _ComputationAttributeView(self.nodes, self.value, self.value)
+        self.s = _ComputationAttributeView(self.nodes, self.state, self.state)
 
     def add_node(self, name, func=None, **kwargs):
         """
