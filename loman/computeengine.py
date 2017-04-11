@@ -433,8 +433,11 @@ class Computation(object):
             >>> comp.s.foo
             <States.UPTODATE: 4>
 
-        :param name: Name of the node to get state for
+        :param name: Name or names of the node to get state for
+        :type name: Key or [Keys]
         """
+        if isinstance(name, list):
+            return [self.dag.node[n]['state'] for n in name]
         return self.dag.node[name]['state']
 
     def value(self, name):
