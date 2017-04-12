@@ -362,13 +362,15 @@ class Computation(object):
                 raise
 
     def _get_calc_nodes(self, name):
-        g = self.dag.copy()
+        g = nx.DiGraph()
+        g.add_nodes_from(self.dag.nodes_iter())
+        g.add_edges_from(self.dag.edges_iter())
         for n in nx.ancestors(g, name):
-            node = g.node[n]
+            node = self.dag.node[n]
             state = node['state']
             if state == States.UPTODATE:
                 g.remove_node(n)
-            if state == States.UNINITIALIZED and len(self.dag.predecessors(n)) == 0:
+            if state == States.UNINITIALIZED and len(g.predecessors(n)) == 0:
                 raise Exception("Cannot compute {} because {} uninitialized".format(name, n))
             if state == States.PLACEHOLDER:
                 raise Exception("Cannot compute {} because {} is placeholder".format(name, n))

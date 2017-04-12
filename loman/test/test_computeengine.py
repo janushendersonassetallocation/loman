@@ -830,3 +830,13 @@ def test_get_inputs():
     assert set(comp.i['c']) == {'a'}
     assert set(comp.i['d']) == {'c', 'b'}
     assert list(map(set, comp.i[['a', 'b', 'c', 'd']])) == [set(), {'a'}, {'a'}, {'b', 'c'}]
+
+
+def test_compute_with_unpicklable_object():
+    class Unpicklable(object):
+        def __getstate__(self):
+            raise Exception("UNPICKLABLE")
+    comp = Computation()
+    comp.add_node('a', value=Unpicklable())
+    comp.add_node('b', lambda a: None)
+    comp.compute('b')
