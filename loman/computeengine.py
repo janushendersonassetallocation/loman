@@ -533,11 +533,11 @@ class Computation(object):
         :type file_: File-like object, or string
         """
         node_serialize = nx.get_node_attributes(self.dag, 'serialize')
-        if all(serialize for name, serialize in node_serialize.items()):
+        if all(serialize for name, serialize in six.iteritems(node_serialize)):
             obj = self
         else:
             obj = self.copy()
-            for name, serialize in node_serialize.items():
+            for name, serialize in six.iteritems(node_serialize):
                 if not serialize:
                     obj._set_uninitialized(name)
 
@@ -668,7 +668,7 @@ class Computation(object):
             show_nodes.add(name2)
 
         node_groups = {}
-        for node, group in nx.get_node_attributes(self.dag, 'group').items():
+        for node, group in six.iteritems(nx.get_node_attributes(self.dag, 'group')):
             node_groups.setdefault(group, []).append(node)
 
         edge_groups = {}
@@ -680,7 +680,7 @@ class Computation(object):
 
         g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
 
-        for group, names in node_groups.items():
+        for group, names in six.iteritems(node_groups):
             if group is None:
                 continue
             c = graphviz.Digraph('cluster_' + str(group))
