@@ -572,7 +572,7 @@ class Computation(object):
         obj.dag = nx.DiGraph(self.dag)
         return obj
 
-    def add_named_tuple_expansion(self, name, namedtuple_type):
+    def add_named_tuple_expansion(self, name, namedtuple_type, group=None):
         """
         Automatically add nodes to extract each element of a named tuple type
 
@@ -603,7 +603,7 @@ class Computation(object):
             return get_field_value
         for field in namedtuple_type._fields:
             node_name = "{}.{}".format(name, field)
-            self.add_node(node_name, make_f(field), kwds={'tuple': name})
+            self.add_node(node_name, make_f(field), kwds={'tuple': name}, group=group)
             self.dag.node[node_name]['is_expansion'] = True
 
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
