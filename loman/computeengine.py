@@ -635,17 +635,6 @@ class Computation(object):
             return results
         self.add_node(result_node, f, kwds={'xs': input_node})
 
-    def draw_nx(self, show_values=True):
-        """
-        Draw a computation's current state using NetworkX's plotting routines
-        """
-        if show_values:
-            labels = {k: "{}: {}".format(k, v.get('value')) for k, v in self.dag.node.items()}
-        else:
-            labels = {k: "{}".format(k) for k, v in self.dag.node.items()}
-        node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
-        nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
-
     @staticmethod
     def _add_nodes(g, nodes, node_index_map):
         for name, n in nodes:
@@ -659,7 +648,7 @@ class Computation(object):
             short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
             g.edge(short_name1, short_name2)
 
-    def draw_graphviz(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
 
