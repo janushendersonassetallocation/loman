@@ -139,7 +139,9 @@ class Computation(object):
         :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which case, set serialize to False
         :type serialize: boolean, default True
         :param inspect: Whether to use introspection to determine the arguments of the function, which can be slow. If this is not set, kwds and args must be set for the function to obtain parameters.
-        :type inspect: boolean, default True 
+        :type inspect: boolean, default True
+        :param group: Subgraph to render node in
+        :type group: default None
         """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
@@ -147,6 +149,8 @@ class Computation(object):
         value = kwargs.get('value', None)
         serialize = kwargs.get('serialize', True)
         inspect = kwargs.get('inspect', True)
+        group = kwargs.get('group', None)
+
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         node = self.dag.node[name]
@@ -154,6 +158,7 @@ class Computation(object):
         node['state'] = States.UNINITIALIZED
         node['value'] = None
         node['serialize'] = serialize
+        node['group'] = group
 
         if value is not None:
             node['state'] = States.UPTODATE
@@ -641,6 +646,19 @@ class Computation(object):
         node_color = [state_colors[n.get('state', None)] for name, n in self.dag.node.iteritems()]
         nx.draw(self.dag, with_labels=True, arrows=True, labels=labels, node_shape='s', node_color=node_color)
 
+    @staticmethod
+    def _add_nodes(g, nodes, node_index_map):
+        for name, n in nodes:
+            short_name = node_index_map[name]
+            node_color = state_colors[n.get('state', None)]
+            g.node(short_name, str(name), style='filled', fillcolor=node_color)
+
+    @staticmethod
+    def _add_edges(g, edges, node_index_map):
+        for name1, name2 in edges:
+            short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
+            g.edge(short_name1, short_name2)
+
     def draw_graphviz(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
@@ -652,20 +670,47 @@ class Computation(object):
         """
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
+
         show_nodes = set()
-        g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
         for name1, name2, n in self.dag.edges_iter(data=True):
             if not show_expansion and (self.dag.node[name2].get('is_expansion', False)):
                 continue
             show_nodes.add(name1)
             show_nodes.add(name2)
-        for name, n in self.dag.nodes_iter(data=True):
-            if name in show_nodes:
-                short_name = node_index_map[name]
-                node_color = state_colors[n.get('state', None)]
-                g.node(short_name, str(name), style='filled', fillcolor=node_color)
-        for name1, name2, n in self.dag.edges_iter(data=True):
-            if name1 in show_nodes and name2 in show_nodes:
-                short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
-                g.edge(short_name1, short_name2)
+
+        node_groups = {}
+        for node, group in nx.get_node_attributes(self.dag, 'group').items():
+            node_groups.setdefault(group, []).append(node)
+
+        edge_groups = {}
+        for name1, name2 in self.dag.edges_iter():
+            group1 = self.dag.node[name1].get('group')
+            group2 = self.dag.node[name2].get('group')
+            group = group1 if group1 == group2 else None
+            edge_groups.setdefault(group, []).append((name1, name2))
+
+        g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
+
+        for group, names in node_groups.items():
+            if group is None:
+                continue
+            c = graphviz.Digraph('cluster_' + str(group))
+
+            nodes = ((name, self.dag.node[name]) for name in names if name in show_nodes)
+            self._add_nodes(c, nodes, node_index_map)
+
+            edges = ((name1, name2) for name1, name2 in edge_groups.get(group, []) if
+                     name1 in show_nodes and name2 in show_nodes)
+            self._add_edges(c, edges, node_index_map)
+
+            c.body.append('label = "{}"'.format(str(group)))
+            g.subgraph(c)
+
+        nodes = ((name, self.dag.node[name]) for name in node_groups.get(None, []) if name in show_nodes)
+        self._add_nodes(g, nodes, node_index_map)
+
+        edges = ((name1, name2) for name1, name2 in edge_groups.get(None, []) if
+                 name1 in show_nodes and name2 in show_nodes)
+        self._add_edges(g, edges, node_index_map)
+
         return g
