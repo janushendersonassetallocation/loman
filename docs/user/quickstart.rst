@@ -14,9 +14,9 @@ Let's start by creating a computation object and adding a couple of nodes to it:
     >>> comp.add_node('a')
     >>> comp.add_node('b', lambda a: a + 1)
 
-Loman's computations have a method ``draw_graphviz`` which lets us easily see a visualization of the computation we just created::
+Loman's computations have a method ``draw`` which lets us easily see a visualization of the computation we just created::
 
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -29,7 +29,7 @@ Loman's computations have a method ``draw_graphviz`` which lets us easily see a 
 Loman gives us a quick and easy way to visualize our computations as a graph data structure. Each node of the graph is a colored oval, representing an input value or calculated value, and each edge (line) shows where the calculation of one node depends on another. The graph above shows us that node **b** depends on node **a**. Both are colored blue as neither has a value. Let's insert a value into node **a**::
 
     >>> comp.insert('a', 1)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -75,11 +75,11 @@ The []-operator provides both the state and value::
     >>> comp['b']
     NodeData(state=<States.UPTODATE: 4>, value=2)
 
-There are also methods ``get_value_dict()`` and ``get_df()`` which get the values of all the nodes::
+There are also methods ``to_dict()`` and ``to_df()`` which get the values of all the nodes::
 
-    >>> comp.get_value_dict()
+    >>> comp.to_dict()
     {'a': 1, 'b': 2}
-    >>> comp.get_df()
+    >>> comp.to_df()
                  state  value  is_expansion
     a  States.UPTODATE      1           NaN
     b  States.UPTODATE      2           NaN
@@ -151,7 +151,7 @@ For these examples, we define a more complex Computation::
     >>> comp.add_node('intermediate3', lambda input2: 3 * input2)
     >>> comp.add_node('result1', lambda intermediate1, intermediate2: intermediate1 + intermediate2)
     >>> comp.add_node('result2', lambda intermediate2, intermediate3: intermediate2 + intermediate3)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -177,7 +177,7 @@ We insert values into **input1** and **input2**::
 
     >>> comp.insert('input1, 1)
     >>> comp.insert('input2', 2)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -206,7 +206,7 @@ We saw before that we can use the ``compute_all`` method to calculate nodes. We 
     >>> comp.compute('result1')
     >>> comp.v.result1
     5
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -234,7 +234,7 @@ Inserting new data
 Often, in real-time systems, updates will come periodically for one or more of the inputs to a computation. We can insert this updated data into a computation and Loman will corresponding mark any downstream nodes as stale or computable i.e. no longer up-to-date. Continuing from the previous example, we insert a new value into **input1**::
 
     >>> comp.insert('input1', 2)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -271,7 +271,7 @@ In fact, we are not restricted to inserting data into input nodes. It is perfect
     >>> comp.compute('result2')
     >>> comp.v.result2
     106
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -299,7 +299,7 @@ Changing calculations
 As well as inserting data into nodes, we can update the computation they perform by re-adding the node. Node states get updated appropriately automatically. For example, continuing from the previous example, we can change how **intermediate2** is calculated, and we see that nodes **intermediate2**, **result1** and **result2** are no longer marked up-to-date::
 
     >>> comp.add_node('intermediate2', lambda input1, input2: 5 * input1 + 2 * input2)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -324,7 +324,7 @@ As well as inserting data into nodes, we can update the computation they perform
 ::
 
     >>> comp.compute_all()
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -360,7 +360,7 @@ We can even add new nodes, and change the dependencies of existing calculations.
 
     >>> comp.add_node('new_node', lambda input1, input2: input1 / input2)
     >>> comp.add_node('intermediate2', lambda new_nod, input2: 5 * new_nod + 2 * input2)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -388,7 +388,7 @@ We can even add new nodes, and change the dependencies of existing calculations.
 ::
 
     >>> comp.compute_all()
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -431,7 +431,7 @@ If trying to calculate a node causes an exception, then Loman will mark its stat
     >>> comp.add_node('c', lambda a: a / 0) # This will cause an exception
     >>> comp.add_node('d', lambda b, c: b + c)
     >>> comp.compute_all()
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -463,7 +463,7 @@ We can use Loman's facilities of changing calculations or overriding values to q
 
     >>> comp.add_node('c', lambda a: a / 1)
     >>> comp.compute_all()
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -485,7 +485,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
 
     >>> comp = Computation()
     >>> comp.add_node('b', lambda a: a)
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -500,7 +500,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
     >>> comp.s.a
     <States.PLACEHOLDER: 0>
     >>> comp.add_node('a')
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -536,7 +536,7 @@ Often, a calculation will return more than one result. For example, a numerical 
     >>> comp.compute_all()
     >>> comp.get_value_dict()
     {'a': 1, 'b': Coordinate(x=2, y=3), 'b.x': 2, 'b.y': 3, 'c': 5}
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -562,7 +562,7 @@ Loman can serialize computations to disk using the dill package. This can be use
     >>> comp.add_node('a', value=1)
     >>> comp.add_node('b', lambda a: a + 1)
     >>> comp.compute_all()
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
@@ -578,7 +578,7 @@ Loman can serialize computations to disk using the dill package. This can be use
     {'a': 1, 'b': 2}
     >>> comp.write_dill('foo.dill')
     >>> comp2 = Computation.read_dill('foo.dill')
-    >>> comp2.draw_graphviz()
+    >>> comp2.draw()
 
 .. graphviz::
 
@@ -599,7 +599,7 @@ It is also possible to request that a particular node not be serialized, in whic
     >>> comp.compute_all()
     >>> comp.write_dill('foo.dill')
     >>> comp2 = Computation.read_dill('foo.dill')
-    >>> comp2.draw_graphviz()
+    >>> comp2.draw()
 
 .. graphviz::
 
@@ -622,7 +622,7 @@ In the previous example, the nodes have all been given strings as keys. This is 
     >>> for i in range(3,7):
     ...    comp.add_node(('fib', i), lambda x, y: x + y, kwds={'x': ('fib', i - 1), 'y': ('fib', i - 2)})
     ...
-    >>> comp.draw_graphviz()
+    >>> comp.draw()
 
 .. graphviz::
 
