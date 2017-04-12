@@ -481,7 +481,7 @@ class Computation(object):
         node = self.dag.node[name]
         return NodeData(node['state'], node['value'])
 
-    def get_df(self):
+    def to_df(self):
         """
         Get a dataframe containing the states and value of all nodes of computation
 
@@ -490,7 +490,7 @@ class Computation(object):
             >>> comp = loman.Computation()
             >>> comp.add_node('foo', value=1)
             >>> comp.add_node('bar', value=2)
-            >>> comp.get_df()
+            >>> comp.to_df()
                            state  value  is_expansion
             bar  States.UPTODATE      2           NaN
             foo  States.UPTODATE      1           NaN
@@ -498,10 +498,9 @@ class Computation(object):
         df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
         df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
         df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
-        df['is_expansion'] = pd.Series(nx.get_node_attributes(self.dag, 'is_expansion'))
         return df
 
-    def get_value_dict(self):
+    def to_dict(self):
         """
         Get a dictionary containing the values of all nodes of a computation
 
@@ -510,7 +509,7 @@ class Computation(object):
             >>> comp = loman.Computation()
             >>> comp.add_node('foo', value=1)
             >>> comp.add_node('bar', value=2)
-            >>> comp.get_value_dict()
+            >>> comp.to_dict()
             {'bar': 2, 'foo': 1}
         """
         return nx.get_node_attributes(self.dag, 'value')

@@ -477,13 +477,13 @@ def test_insert_from_large():
         assert comp2.value(i) == i
 
 
-def test_get_df():
+def test_to_df():
     comp = Computation()
     comp.add_node('a')
     comp.add_node('b', lambda a: a + 1)
     comp.insert('a', 1)
     comp.compute_all()
-    df = comp.get_df()
+    df = comp.to_df()
 
     assert df.loc['a', 'value'] == 1
     assert df.loc['a', 'state'] == States.UPTODATE
