@@ -166,7 +166,9 @@ class Computation(object):
 
         if func:
             node['func'] = func
+            args_count = 0
             if args:
+                args_count = len(args)
                 for i, param_name in enumerate(args):
                     if not self.dag.has_node(param_name):
                         self.dag.add_node(param_name, state=States.PLACEHOLDER)
@@ -175,7 +177,7 @@ class Computation(object):
                 signature = _get_signature(func)
                 param_names = set()
                 if not signature.has_var_args:
-                    param_names.update(signature.kwd_params)
+                    param_names.update(signature.kwd_params[args_count:])
                 if signature.has_var_kwds and kwds is not None:
                     param_names.update(kwds.keys())
             else:

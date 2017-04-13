@@ -840,3 +840,19 @@ def test_compute_with_unpicklable_object():
     comp.add_node('a', value=Unpicklable())
     comp.add_node('b', lambda a: None)
     comp.compute('b')
+
+
+def test_compute_with_args():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    def f(foo):
+        return foo + 1
+
+    comp.add_node('b', f, args=['a'])
+
+    assert set(comp.nodes()) == {'a', 'b'}
+    assert set(comp.dag.edges_iter()) == {('a', 'b')}
+
+    comp.compute_all()
+    assert comp['b'] == (States.UPTODATE, 2)
