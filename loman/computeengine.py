@@ -95,7 +95,7 @@ class _ComputationAttributeView(object):
         self.get_attribute = state['get_attribute']
         self.get_item = state['get_item']
 
-_Signature = namedtuple('_Signature', ['kwd_params', 'has_var_args', 'has_var_kwds'])
+_Signature = namedtuple('_Signature', ['kwd_params', 'default_params', 'has_var_args', 'has_var_kwds'])
 
 
 def _get_signature(func):
@@ -106,14 +106,21 @@ def _get_signature(func):
         has_var_kwds = any(p.kind == pk.VAR_KEYWORD for p in sig.parameters.values())
         all_keyword_params = [param_name for param_name, param in sig.parameters.items()
                               if param.kind in (pk.POSITIONAL_OR_KEYWORD, pk.KEYWORD_ONLY)]
+        default_params = [param_name for param_name, param in sig.parameters.items()
+                              if param.kind in (pk.POSITIONAL_OR_KEYWORD, pk.KEYWORD_ONLY) and param.default != inspect._empty]
     elif six.PY2:
         argspec = inspect.getargspec(func)
         has_var_args = argspec.varargs is not None
         has_var_kwds = argspec.keywords is not None
         all_keyword_params = argspec.args
+        if argspec.defaults is None:
+            default_params = []
+        else:
+            n_default_params = len(argspec.defaults)
+            default_params = argspec.args[-n_default_params:]
     else:
         raise Exception("Only Pythons 2 and 3 supported")
-    return _Signature(all_keyword_params, has_var_args, has_var_kwds)
+    return _Signature(all_keyword_params, default_params, has_var_args, has_var_kwds)
 
 
 class Computation(object):
@@ -180,12 +187,16 @@ class Computation(object):
                     param_names.update(signature.kwd_params[args_count:])
                 if signature.has_var_kwds and kwds is not None:
                     param_names.update(kwds.keys())
+                default_names = signature.default_params
             else:
                 param_names = kwds.keys()
             for param_name in param_names:
                 in_node_name = kwds.get(param_name, param_name) if kwds else param_name
                 if not self.dag.has_node(in_node_name):
-                    self.dag.add_node(in_node_name, state=States.PLACEHOLDER)
+                    if param_name in default_names:
+                        continue
+                    else:
+                        self.dag.add_node(in_node_name, state=States.PLACEHOLDER)
                 self.dag.add_edge(in_node_name, name, param=(_ParameterType.KWD, param_name))
             self._set_descendents(name, States.STALE)
             if node['state'] == States.UNINITIALIZED:

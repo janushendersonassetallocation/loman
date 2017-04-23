@@ -856,3 +856,22 @@ def test_compute_with_args():
 
     comp.compute_all()
     assert comp['b'] == (States.UPTODATE, 2)
+
+
+def test_default_args():
+    comp = Computation()
+    comp.add_node('x', value=1)
+    def bar(x, some_default=0):
+        return x
+    comp.add_node('foo', bar)
+    assert set(comp.i.foo) == {'x'}
+
+
+def test_default_args_2():
+    comp = Computation()
+    comp.add_node('x', value=1)
+    comp.add_node('some_default', value=1)
+    def bar(x, some_default=0):
+        return x
+    comp.add_node('foo', bar)
+    assert set(comp.i.foo) == {'x', 'some_default'}
