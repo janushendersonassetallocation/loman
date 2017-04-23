@@ -862,9 +862,11 @@ def test_default_args():
     comp = Computation()
     comp.add_node('x', value=1)
     def bar(x, some_default=0):
-        return x
+        return x + some_default
     comp.add_node('foo', bar)
     assert set(comp.i.foo) == {'x'}
+    comp.compute('foo')
+    assert comp.v.foo == 1
 
 
 def test_default_args_2():
@@ -872,6 +874,8 @@ def test_default_args_2():
     comp.add_node('x', value=1)
     comp.add_node('some_default', value=1)
     def bar(x, some_default=0):
-        return x
+        return x + some_default
     comp.add_node('foo', bar)
     assert set(comp.i.foo) == {'x', 'some_default'}
+    comp.compute('foo')
+    assert comp.v.foo == 2
