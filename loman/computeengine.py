@@ -167,10 +167,6 @@ class Computation(object):
         node['serialize'] = serialize
         node['group'] = group
 
-        if value is not None:
-            node['state'] = States.UPTODATE
-            node['value'] = value
-
         if func:
             node['func'] = func
             args_count = 0
@@ -201,9 +197,13 @@ class Computation(object):
                     else:
                         self.dag.add_node(in_node_name, state=States.PLACEHOLDER)
                 self.dag.add_edge(in_node_name, name, param=(_ParameterType.KWD, param_name))
+
+        if func or value is not None:
             self._set_descendents(name, States.STALE)
-            if node['state'] == States.UNINITIALIZED:
-                self._try_set_computable(name)
+        if value is not None:
+            self._set_uptodate(name, value)
+        if node['state'] == States.UNINITIALIZED:
+            self._try_set_computable(name)
 
     def delete_node(self, name):
         """

@@ -888,3 +888,18 @@ def test_default_args_2():
     assert set(comp.i.foo) == {'x', 'some_default'}
     comp.compute('foo')
     assert comp.v.foo == 2
+
+
+def test_add_node_with_value_sets_descendents_stale():
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', value=2)
+    comp.add_node('c', lambda a, b: a + b)
+    comp.compute_all()
+    assert comp.s.a == States.UPTODATE
+    assert comp.s.b == States.UPTODATE
+    assert comp.s.c == States.UPTODATE
+    comp.add_node('a', value=3)
+    assert comp.s.a == States.UPTODATE
+    assert comp.s.b == States.UPTODATE
+    assert comp.s.c == States.COMPUTABLE
