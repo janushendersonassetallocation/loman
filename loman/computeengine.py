@@ -34,8 +34,19 @@ state_colors = {
     States.ERROR: '#e50000'
 }
 
+# Node attributes
+_AN_VALUE = 'value'
+_AN_STATE = 'state'
+_AN_FUNC = 'func'
+_AN_GROUP = 'group'
+_AN_SERIALIZE = 'serialize'
+_AN_EXPANSION = 'is_expansion'
+
+# Edge attributes
+_AE_PARAM = 'param'
+
 Error = namedtuple('Error', ['exception', 'traceback'])
-NodeData = namedtuple('NodeData', ['state', 'value'])
+NodeData = namedtuple('NodeData', [_AN_STATE, _AN_VALUE])
 
 
 class ComputationException(Exception):
@@ -153,7 +164,7 @@ class Computation(object):
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
-        value = kwargs.get('value', None)
+        value = kwargs.get(_AN_VALUE, None)
         serialize = kwargs.get('serialize', True)
         inspect = kwargs.get('inspect', True)
         group = kwargs.get('group', None)
@@ -162,20 +173,20 @@ class Computation(object):
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         node = self.dag.node[name]
 
-        node['state'] = States.UNINITIALIZED
-        node['value'] = None
-        node['serialize'] = serialize
-        node['group'] = group
+        node[_AN_STATE] = States.UNINITIALIZED
+        node[_AN_VALUE] = None
+        node[_AN_SERIALIZE] = serialize
+        node[_AN_GROUP] = group
 
         if func:
-            node['func'] = func
+            node[_AN_FUNC] = func
             args_count = 0
             if args:
                 args_count = len(args)
                 for i, param_name in enumerate(args):
                     if not self.dag.has_node(param_name):
-                        self.dag.add_node(param_name, state=States.PLACEHOLDER)
-                    self.dag.add_edge(param_name, name, param=(_ParameterType.ARG, i))
+                        self.dag.add_node(param_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
+                    self.dag.add_edge(param_name, name, attr_dict={_AE_PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = _get_signature(func)
                 param_names = set()
@@ -195,14 +206,14 @@ class Computation(object):
                     if param_name in default_names:
                         continue
                     else:
-                        self.dag.add_node(in_node_name, state=States.PLACEHOLDER)
-                self.dag.add_edge(in_node_name, name, param=(_ParameterType.KWD, param_name))
+                        self.dag.add_node(in_node_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
+                self.dag.add_edge(in_node_name, name, attr_dict={_AE_PARAM: (_ParameterType.KWD, param_name)})
 
         if func or value is not None:
             self._set_descendents(name, States.STALE)
         if value is not None:
             self._set_uptodate(name, value)
-        if node['state'] == States.UNINITIALIZED:
+        if node[_AN_STATE] == States.UNINITIALIZED:
             self._try_set_computable(name)
 
     def delete_node(self, name):
@@ -222,10 +233,10 @@ class Computation(object):
             preds = self.dag.predecessors(name)
             self.dag.remove_node(name)
             for n in preds:
-                if self.dag.node[n]['state'] == States.PLACEHOLDER:
+                if self.dag.node[n][_AN_STATE] == States.PLACEHOLDER:
                     self.delete_node(n)
         else:
-            self.dag.node[name]['state'] = States.PLACEHOLDER
+            self.dag.node[name][_AN_STATE] = States.PLACEHOLDER
 
     def insert(self, name, value):
         """
@@ -244,8 +255,8 @@ class Computation(object):
             raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
 
         node = self.dag.node[name]
-        node['value'] = value
-        node['state'] = States.UPTODATE
+        node[_AN_VALUE] = value
+        node[_AN_STATE] = States.UPTODATE
         self._set_descendents(name, States.STALE)
         for n in self.dag.successors(name):
             self._try_set_computable(n)
@@ -270,15 +281,15 @@ class Computation(object):
         stale = set()
         computable = set()
         for name, value in name_value_pairs:
-            self.dag.node[name]['value'] = value
-            self.dag.node[name]['state'] = States.UPTODATE
+            self.dag.node[name][_AN_VALUE] = value
+            self.dag.node[name][_AN_STATE] = States.UPTODATE
             stale.update(nx.dag.descendants(self.dag, name))
             computable.update(self.dag.successors(name))
         names = set([name for name, value in name_value_pairs])
         stale.difference_update(names)
         computable.difference_update(names)
         for name in stale:
-            self.dag.node[name]['state'] = States.STALE
+            self.dag.node[name][_AN_STATE] = States.STALE
         for name in computable:
             self._try_set_computable(name)
 
@@ -303,54 +314,54 @@ class Computation(object):
 
         :param name: Name of the node to set as STALE.
         """
-        self.dag.node[name]['state'] = States.STALE
+        self.dag.node[name][_AN_STATE] = States.STALE
         for n in nx.dag.descendants(self.dag, name):
-            self.dag.node[n]['state'] = States.STALE
+            self.dag.node[n][_AN_STATE] = States.STALE
         self._try_set_computable(name)
 
     def _set_descendents(self, name, state):
         for n in nx.dag.descendants(self.dag, name):
-            self.dag.node[n]['state'] = state
+            self.dag.node[n][_AN_STATE] = state
 
     def _set_uninitialized(self, name):
         n = self.dag.node[name]
-        n['state'] = States.UNINITIALIZED
-        n.pop('value', None)
+        n[_AN_STATE] = States.UNINITIALIZED
+        n.pop(_AN_VALUE, None)
 
     def _set_uptodate(self, name, value):
         node = self.dag.node[name]
-        node['state'] = States.UPTODATE
-        node['value'] = value
+        node[_AN_STATE] = States.UPTODATE
+        node[_AN_VALUE] = value
         self._set_descendents(name, States.STALE)
         for n in self.dag.successors(name):
             self._try_set_computable(n)
 
     def _set_error(self, name, error):
         node = self.dag.node[name]
-        node['state'] = States.ERROR
-        node['value'] = error
+        node[_AN_STATE] = States.ERROR
+        node[_AN_VALUE] = error
         self._set_descendents(name, States.STALE)
 
     def _try_set_computable(self, name):
-        if 'func' in self.dag.node[name]:
+        if _AN_FUNC in self.dag.node[name]:
             for n in self.dag.predecessors(name):
                 if not self.dag.has_node(n):
                     return
-                if self.dag.node[n]['state'] != States.UPTODATE:
+                if self.dag.node[n][_AN_STATE] != States.UPTODATE:
                     return
-            self.dag.node[name]['state'] = States.COMPUTABLE
+            self.dag.node[name][_AN_STATE] = States.COMPUTABLE
 
     def _get_parameter_data(self, name):
         for in_node_name in self.dag.predecessors(name):
-            param_value = self.dag.node[in_node_name]['value']
+            param_value = self.dag.node[in_node_name][_AN_VALUE]
             edge = self.dag.edge[in_node_name][name]
-            param_type, param_name = edge['param']
+            param_type, param_name = edge[_AE_PARAM]
             yield _ParameterItem(param_type, param_name, param_value)
 
     def _compute_node(self, name, raise_exceptions=False):
         LOG.debug('Computing node {}'.format(str(name)))
         node = self.dag.node[name]
-        f = node['func']
+        f = node[_AN_FUNC]
         args, kwds = [], {}
         for param in self._get_parameter_data(name):
             if param.type == _ParameterType.ARG:
@@ -364,15 +375,15 @@ class Computation(object):
                 raise Exception("Unexpected param type: {}".format(param.type))
         try:
             value = f(*args, **kwds)
-            node['state'] = States.UPTODATE
-            node['value'] = value
+            node[_AN_STATE] = States.UPTODATE
+            node[_AN_VALUE] = value
             self._set_descendents(name, States.STALE)
             for n in self.dag.successors(name):
                 self._try_set_computable(n)
         except Exception as e:
-            node['state'] = States.ERROR
+            node[_AN_STATE] = States.ERROR
             tb = traceback.format_exc()
-            node['value'] = Error(e, tb)
+            node[_AN_VALUE] = Error(e, tb)
             self._set_descendents(name, States.STALE)
             if raise_exceptions:
                 raise
@@ -383,7 +394,7 @@ class Computation(object):
         g.add_edges_from(self.dag.edges_iter())
         for n in nx.ancestors(g, name):
             node = self.dag.node[n]
-            state = node['state']
+            state = node[_AN_STATE]
             if state == States.UPTODATE:
                 g.remove_node(n)
             if state == States.UNINITIALIZED and len(g.predecessors(n)) == 0:
@@ -411,13 +422,13 @@ class Computation(object):
         calc_nodes = self._get_calc_nodes(name)
         for n in calc_nodes:
             preds = self.dag.predecessors(n)
-            if all(self.dag.node[n1]['state'] == States.UPTODATE for n1 in preds):
+            if all(self.dag.node[n1][_AN_STATE] == States.UPTODATE for n1 in preds):
                 self._compute_node(n, raise_exceptions=raise_exceptions)
 
     def _get_computable_nodes_iter(self):
         for n, node in self.dag.nodes_iter(data=True):
 
-            if node['state'] == States.COMPUTABLE:
+            if node[_AN_STATE] == States.COMPUTABLE:
                 yield n
 
     def compute_all(self, raise_exceptions=False):
@@ -467,8 +478,8 @@ class Computation(object):
         :type name: Key or [Keys]
         """
         if isinstance(name, list):
-            return [self.dag.node[n]['state'] for n in name]
-        return self.dag.node[name]['state']
+            return [self.dag.node[n][_AN_STATE] for n in name]
+        return self.dag.node[name][_AN_STATE]
 
     def value(self, name):
         """
@@ -487,8 +498,8 @@ class Computation(object):
         :type name: Key or [Keys]
         """
         if isinstance(name, list):
-            return [self.dag.node[n]['value'] for n in name]
-        return self.dag.node[name]['value']
+            return [self.dag.node[n][_AN_VALUE] for n in name]
+        return self.dag.node[name][_AN_VALUE]
 
     def __getitem__(self, name):
         """
@@ -497,7 +508,7 @@ class Computation(object):
         :param name: Name of the node to get the state and value of
         """
         node = self.dag.node[name]
-        return NodeData(node['state'], node['value'])
+        return NodeData(node[_AN_STATE], node[_AN_VALUE])
 
     def to_df(self):
         """
@@ -514,8 +525,8 @@ class Computation(object):
             foo  States.UPTODATE      1           NaN
         """
         df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
-        df['state'] = pd.Series(nx.get_node_attributes(self.dag, 'state'))
-        df['value'] = pd.Series(nx.get_node_attributes(self.dag, 'value'))
+        df[_AN_STATE] = pd.Series(nx.get_node_attributes(self.dag, _AN_STATE))
+        df[_AN_VALUE] = pd.Series(nx.get_node_attributes(self.dag, _AN_VALUE))
         return df
 
     def to_dict(self):
@@ -530,7 +541,7 @@ class Computation(object):
             >>> comp.to_dict()
             {'bar': 2, 'foo': 1}
         """
-        return nx.get_node_attributes(self.dag, 'value')
+        return nx.get_node_attributes(self.dag, _AN_VALUE)
 
     def _get_inputs_one_node(self, name):
         args_dict = {}
@@ -538,7 +549,7 @@ class Computation(object):
         max_arg_index = -1
         for input_node in self.dag.predecessors(name):
             input_edge = self.dag.edge[input_node][name]
-            input_type, input_param = input_edge['param']
+            input_type, input_param = input_edge[_AE_PARAM]
             if input_type == _ParameterType.ARG:
                 idx = input_param
                 max_arg_index = max(max_arg_index, idx)
@@ -570,7 +581,7 @@ class Computation(object):
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        node_serialize = nx.get_node_attributes(self.dag, 'serialize')
+        node_serialize = nx.get_node_attributes(self.dag, _AN_SERIALIZE)
         if all(serialize for name, serialize in six.iteritems(node_serialize)):
             obj = self
         else:
@@ -643,7 +654,7 @@ class Computation(object):
         for field in namedtuple_type._fields:
             node_name = "{}.{}".format(name, field)
             self.add_node(node_name, make_f(field), kwds={'tuple': name}, group=group)
-            self.dag.node[node_name]['is_expansion'] = True
+            self.dag.node[node_name][_AN_EXPANSION] = True
 
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
         """
@@ -677,7 +688,7 @@ class Computation(object):
     def _add_nodes(g, nodes, node_index_map):
         for name, n in nodes:
             short_name = node_index_map[name]
-            node_color = state_colors[n.get('state', None)]
+            node_color = state_colors[n.get(_AN_STATE, None)]
             g.node(short_name, str(name), style='filled', fillcolor=node_color)
 
     @staticmethod
@@ -700,19 +711,19 @@ class Computation(object):
 
         show_nodes = set()
         for name1, name2, n in self.dag.edges_iter(data=True):
-            if not show_expansion and (self.dag.node[name2].get('is_expansion', False)):
+            if not show_expansion and (self.dag.node[name2].get(_AN_EXPANSION, False)):
                 continue
             show_nodes.add(name1)
             show_nodes.add(name2)
 
         node_groups = {}
-        for node, group in six.iteritems(nx.get_node_attributes(self.dag, 'group')):
+        for node, group in six.iteritems(nx.get_node_attributes(self.dag, _AN_GROUP)):
             node_groups.setdefault(group, []).append(node)
 
         edge_groups = {}
         for name1, name2 in self.dag.edges_iter():
-            group1 = self.dag.node[name1].get('group')
-            group2 = self.dag.node[name2].get('group')
+            group1 = self.dag.node[name1].get(_AN_GROUP)
+            group2 = self.dag.node[name2].get(_AN_GROUP)
             group = group1 if group1 == group2 else None
             edge_groups.setdefault(group, []).append((name1, name2))
 
