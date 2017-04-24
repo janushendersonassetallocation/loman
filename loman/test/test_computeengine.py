@@ -903,3 +903,44 @@ def test_add_node_with_value_sets_descendents_stale():
     assert comp.s.a == States.UPTODATE
     assert comp.s.b == States.UPTODATE
     assert comp.s.c == States.COMPUTABLE
+
+def test_tags():
+    comp = Computation()
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a + 1)
+    comp.set_tag('a', 'foo')
+    assert 'foo' in comp.t.a
+    assert 'foo' in comp.tags('a')
+    comp.clear_tag('a', 'foo')
+    assert 'foo' not in comp.t.a
+    assert 'foo' not in comp.tags('a')
+    comp.set_tags('a', ['foo'])
+    assert 'foo' in comp.t.a
+    assert 'foo' in comp.tags('a')
+    comp.clear_tags('a', ['foo'])
+    assert 'foo' not in comp.t.a
+    assert 'foo' not in comp.tags('a')
+
+    # This should not throw
+    comp.clear_tag('a', 'bar')
+    comp.clear_tags('a', ['bar'])
+
+    # This should not throw
+    comp.set_tags('a', ['foo'])
+    comp.set_tags('a', ['foo'])
+    assert 'foo'  in comp.t.a
+
+    # This should not throw
+    comp.clear_tags('a', ['foo'])
+    comp.clear_tags('a', ['foo'])
+    assert 'foo' not in comp.t.a
+
+    comp.set_tags(['a', 'b'], ['foo', 'bar'])
+    assert 'foo' in comp.t.a
+    assert 'bar' in comp.t.a
+    assert 'foo' in comp.t.b
+    assert 'bar' in comp.t.b
+
+    comp.add_node('c', lambda a: 2 * a, tags=['baz'])
+    assert 'baz' in comp.t.c

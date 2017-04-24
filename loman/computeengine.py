@@ -39,11 +39,14 @@ _AN_VALUE = 'value'
 _AN_STATE = 'state'
 _AN_FUNC = 'func'
 _AN_GROUP = 'group'
-_AN_SERIALIZE = 'serialize'
-_AN_EXPANSION = 'is_expansion'
+_AN_TAG = 'tag'
 
 # Edge attributes
 _AE_PARAM = 'param'
+
+# System tags
+_T_SERIALIZE = '__serialize__'
+_T_EXPANSION = '__expansion__'
 
 Error = namedtuple('Error', ['exception', 'traceback'])
 NodeData = namedtuple('NodeData', [_AN_STATE, _AN_VALUE])
@@ -140,6 +143,7 @@ class Computation(object):
         self.v = _ComputationAttributeView(self.nodes, self.value, self.value)
         self.s = _ComputationAttributeView(self.nodes, self.state, self.state)
         self.i = _ComputationAttributeView(self.nodes, self.get_inputs, self.get_inputs)
+        self.t = _ComputationAttributeView(self.nodes, self.tags, self.tags)
 
     def add_node(self, name, func=None, **kwargs):
         """
@@ -160,6 +164,8 @@ class Computation(object):
         :type inspect: boolean, default True
         :param group: Subgraph to render node in
         :type group: default None
+        :param tags: Set of tags to apply to node
+        :type tags: Iterable
         """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
@@ -168,6 +174,7 @@ class Computation(object):
         serialize = kwargs.get('serialize', True)
         inspect = kwargs.get('inspect', True)
         group = kwargs.get('group', None)
+        tags = kwargs.get('tags', [])
 
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
@@ -175,7 +182,7 @@ class Computation(object):
 
         node[_AN_STATE] = States.UNINITIALIZED
         node[_AN_VALUE] = None
-        node[_AN_SERIALIZE] = serialize
+        node[_AN_TAG] = set()
         node[_AN_GROUP] = group
 
         if func:
@@ -215,6 +222,61 @@ class Computation(object):
             self._set_uptodate(name, value)
         if node[_AN_STATE] == States.UNINITIALIZED:
             self._try_set_computable(name)
+        self.set_tags(name, tags)
+        if serialize:
+            self.set_tag(name, _T_SERIALIZE)
+
+    def set_tag(self, name, tag):
+        """
+        Set tags on a node or nodes. Ignored if tags are already set.
+        
+        :param name: Node or nodes to set tag for
+        :param tag: Tag to set
+        """
+        if isinstance(name, list):
+            for n in name:
+                self.dag.node[n][_AN_TAG].add(tag)
+        else:
+            self.dag.node[name][_AN_TAG].add(tag)
+
+    def set_tags(self, name, tags):
+        """
+        Set tags on a node or nodes. Ignored if tags are already set.
+        
+        :param name: Node or nodes to set tags for
+        :param tags: Tags to set
+        """
+        if isinstance(name, list):
+            for n in name:
+                self.dag.node[n][_AN_TAG].update(tags)
+        else:
+            self.dag.node[name][_AN_TAG].update(tags)
+
+    def clear_tag(self, name, tag):
+        """
+        Clear tag on a node or nodes. Ignored if tags are not set.
+
+        :param name: Node or nodes to clear tags for
+        :param tag: Tag to clear
+        """
+        if isinstance(name, list):
+            for n in name:
+                self.dag.node[n][_AN_TAG].discard(tag)
+        else:
+            self.dag.node[name][_AN_TAG].discard(tag)
+
+    def clear_tags(self, name, tags):
+        """
+        Clear tags on a node or nodes. Ignored if tags are not set.
+
+        :param name: Node or nodes to clear tags for
+        :param tags: Tags to clear
+        """
+        if isinstance(name, list):
+            for n in name:
+                self.dag.node[n][_AN_TAG].difference_update(tags)
+        else:
+            self.dag.node[name][_AN_TAG].difference_update(tags)
 
     def delete_node(self, name):
         """
@@ -501,6 +563,20 @@ class Computation(object):
             return [self.dag.node[n][_AN_VALUE] for n in name]
         return self.dag.node[name][_AN_VALUE]
 
+    def tags(self, name):
+        """
+        Get the tags associated with a node
+        
+            >>> comp = Computation()
+            >>> comp.add_node('a', tags=['foo', 'bar'])
+            >>> comp.t.a
+            {'__serialize__', 'bar', 'foo'}
+        :param name: 
+        :return: 
+        """
+        node = self.dag.node[name]
+        return node[_AN_TAG]
+
     def __getitem__(self, name):
         """
         Get the state and current value of a node
@@ -568,7 +644,8 @@ class Computation(object):
         """
         Get a list of the inputs for a node or set of nodes
         
-        :return: 
+        :param name: Name or names of nodes to get inputs for 
+        :return: If name is scalar, return a list of upstream nodes used as input. If name is a list, return a list of list of inputs.
         """
         if isinstance(name, list):
             return [self._get_inputs_one_node(n) for n in name]
@@ -581,13 +658,13 @@ class Computation(object):
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        node_serialize = nx.get_node_attributes(self.dag, _AN_SERIALIZE)
+        node_serialize = nx.get_node_attributes(self.dag, _AN_TAG)
         if all(serialize for name, serialize in six.iteritems(node_serialize)):
             obj = self
         else:
             obj = self.copy()
-            for name, serialize in six.iteritems(node_serialize):
-                if not serialize:
+            for name, tags in six.iteritems(node_serialize):
+                if _T_SERIALIZE not in tags:
                     obj._set_uninitialized(name)
 
         if isinstance(file_, six.string_types):
@@ -654,7 +731,7 @@ class Computation(object):
         for field in namedtuple_type._fields:
             node_name = "{}.{}".format(name, field)
             self.add_node(node_name, make_f(field), kwds={'tuple': name}, group=group)
-            self.dag.node[node_name][_AN_EXPANSION] = True
+            self.set_tag(node_name, _T_EXPANSION)
 
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
         """
@@ -711,7 +788,7 @@ class Computation(object):
 
         show_nodes = set()
         for name1, name2, n in self.dag.edges_iter(data=True):
-            if not show_expansion and (self.dag.node[name2].get(_AN_EXPANSION, False)):
+            if not show_expansion and _T_EXPANSION not in self.tags(name2):
                 continue
             show_nodes.add(name1)
             show_nodes.add(name2)
