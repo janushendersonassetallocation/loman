@@ -832,6 +832,15 @@ def test_get_inputs():
     assert list(map(set, comp.i[['a', 'b', 'c', 'd']])) == [set(), {'a'}, {'a'}, {'b', 'c'}]
 
 
+def test_get_inputs_order():
+    comp = Computation()
+    input_nodes = list(('inp', i) for i in range(100))
+    comp.add_node(input_node for input_node in input_nodes)
+    random.shuffle(input_nodes)
+    comp.add_node('res', lambda *args: args, args=input_nodes, inspect=False)
+    assert comp.i.res == input_nodes
+
+
 def test_compute_with_unpicklable_object():
     class Unpicklable(object):
         def __getstate__(self):

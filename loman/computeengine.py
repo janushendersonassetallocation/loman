@@ -189,7 +189,10 @@ class Computation(object):
                     param_names.update(kwds.keys())
                 default_names = signature.default_params
             else:
-                param_names = kwds.keys()
+                if kwds is None:
+                    param_names = []
+                else:
+                    param_names = kwds.keys()
             for param_name in param_names:
                 in_node_name = kwds.get(param_name, param_name) if kwds else param_name
                 if not self.dag.has_node(in_node_name):
@@ -529,6 +532,27 @@ class Computation(object):
         """
         return nx.get_node_attributes(self.dag, 'value')
 
+    def _get_inputs_one_node(self, name):
+        args_dict = {}
+        kwds = []
+        max_arg_index = -1
+        for input_node in self.dag.predecessors(name):
+            input_edge = self.dag.edge[input_node][name]
+            input_type, input_param = input_edge['param']
+            if input_type == _ParameterType.ARG:
+                idx = input_param
+                max_arg_index = max(max_arg_index, idx)
+                args_dict[idx] = input_node
+            elif input_type == _ParameterType.KWD:
+                kwds.append(input_node)
+        if max_arg_index >= 0:
+            args = [None] * (max_arg_index + 1)
+            for idx, input_node in six.iteritems(args_dict):
+                args[idx] = input_node
+            return args + kwds
+        else:
+            return kwds
+
     def get_inputs(self, name):
         """
         Get a list of the inputs for a node or set of nodes
@@ -536,8 +560,8 @@ class Computation(object):
         :return: 
         """
         if isinstance(name, list):
-            return [self.dag.predecessors(n) for n in name]
-        return self.dag.predecessors(name)
+            return [self._get_inputs_one_node(n) for n in name]
+        return self._get_inputs_one_node(name)
 
     def write_dill(self, file_):
         """
