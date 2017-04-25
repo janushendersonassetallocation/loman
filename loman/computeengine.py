@@ -78,6 +78,20 @@ class _ParameterType(Enum):
 _ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
 
 
+def _node(func, *args, **kws):
+    return func(*args, **kws)
+
+
+def node(comp, name=None, *args, **kw):
+    def inner(f):
+        if name is None:
+            comp.add_node(f.__name__, f, *args, **kw)
+        else:
+            comp.add_node(name, f, *args, **kw)
+        return decorator.decorate(f, _node)
+    return inner
+
+
 class _ComputationAttributeView(object):
     def __init__(self, get_attribute_list, get_attribute, get_item=None):
         self.get_attribute_list = get_attribute_list

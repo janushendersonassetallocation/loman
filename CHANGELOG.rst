@@ -1,7 +1,13 @@
 Change Log
 ==========
 
+`0.1.2`_ (Unreleased)
+---------------------
+
+* Add node function decorator
+
 `0.1.1`_ (2017-04-25)
+---------------------
 
 * Support for Python 3.4 and 3.5
 * Method and attribute-style accessors support lists of nodes

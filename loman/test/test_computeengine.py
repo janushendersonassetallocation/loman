@@ -1,4 +1,4 @@
-from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException
+from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node
 import six
 from collections import namedtuple
 import random
@@ -944,3 +944,29 @@ def test_tags():
 
     comp.add_node('c', lambda a: 2 * a, tags=['baz'])
     assert 'baz' in comp.t.c
+
+
+def test_decorator():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    @node(comp)
+    def b(a):
+        return a + 1
+
+    comp.compute_all()
+    assert comp['b'] == (States.UPTODATE, 2)
+
+    @node(comp, name='c', args=['b'])
+    def foo(x):
+        return x + 1
+
+    comp.compute_all()
+    assert comp['c'] == (States.UPTODATE, 3)
+
+    @node(comp, kwds={'x': 'b', 'y': 'c'})
+    def d(x, y):
+        return x + y
+
+    comp.compute_all()
+    assert comp['d'] == (States.UPTODATE, 5)

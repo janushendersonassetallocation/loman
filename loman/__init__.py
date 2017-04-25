@@ -1,3 +1,4 @@
 from loman.computeengine import (
     Computation, States,
-    MapException, LoopDetectedException, NonExistentNodeException)
+    MapException, LoopDetectedException, NonExistentNodeException,
+    node)
