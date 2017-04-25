@@ -817,7 +817,7 @@ class Computation(object):
 
         show_nodes = set()
         for name1, name2, n in self.dag.edges_iter(data=True):
-            if not show_expansion and _T_EXPANSION not in self.tags(name2):
+            if not show_expansion and _T_EXPANSION in self.tags(name2):
                 continue
             show_nodes.add(name1)
             show_nodes.add(name2)
