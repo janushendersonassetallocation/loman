@@ -1,7 +1,25 @@
 Change Log
 ==========
 
-`0.1.0`_ (unreleased)
+`0.1.1`_ (2017-04-25)
+
+* Support for Python 3.4 and 3.5
+* Method and attribute-style accessors support lists of nodes
+* Added support for node-tagging
+* Compute method can optionally throw exceptions, for easier interactive debugging
+* ``get_inputs`` method and ``i`` attribute-style access to get list of inputs to a node
+* ``add_node`` takes optional inspect parameter to avoid inspection for performance
+* ``add_node`` takes optional group to render graph layout with subgraphs
+* ``draw_graphviz`` renamed to ``draw``
+* ``draw_nx`` removed
+* ``get_df`` renamed to ``to_df``
+* ``get_value_dict`` renamed to ``to_dict``
+* BUGFIX: implementation of _get_calc_nodes used by compute fixed
+* BUGFIX: args parameters do not create spurious nodes
+* BUGFIX: default function parameters do not cause placeholder node to be created
+* BUGFIX: node states correctly updated when calling add_node with value parameter
+
+`0.1.0`_ (2017-04-05)
 ---------------------
 
 * Added documentation: Introduction, Quickstart and Strategies for Use
