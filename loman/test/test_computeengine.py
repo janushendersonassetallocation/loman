@@ -970,3 +970,16 @@ def test_decorator():
 
     comp.compute_all()
     assert comp['d'] == (States.UPTODATE, 5)
+
+
+def test_with_uptodate_predecessors_but_stale_ancestors():
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', lambda a: a + 1)
+    comp.compute_all()
+    assert comp['b'] == (States.UPTODATE, 2)
+    comp.dag.node['a']['state'] = States.UNINITIALIZED # This can happen due to serialization
+    comp.add_node('c', lambda b: b + 1)
+    comp.compute('c')
+    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['c'] == (States.UPTODATE, 3)

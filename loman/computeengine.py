@@ -488,12 +488,14 @@ class Computation(object):
             state = node[_AN_STATE]
             if state == States.UPTODATE:
                 g.remove_node(n)
-            if state == States.UNINITIALIZED and len(g.predecessors(n)) == 0:
+
+        ancestors = nx.ancestors(g, name)
+        for n in ancestors:
+            if state == States.UNINITIALIZED and len(self.dag.predecessors(n)) == 0:
                 raise Exception("Cannot compute {} because {} uninitialized".format(name, n))
             if state == States.PLACEHOLDER:
                 raise Exception("Cannot compute {} because {} is placeholder".format(name, n))
 
-        ancestors = nx.ancestors(g, name)
         ancestors.add(name)
         nodes_sorted = nx.topological_sort(g, ancestors)
         return [n for n in nodes_sorted if n in ancestors]
