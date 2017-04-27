@@ -75,6 +75,17 @@ The []-operator provides both the state and value::
     >>> comp['b']
     NodeData(state=<States.UPTODATE: 4>, value=2)
 
+The ``value`` and ``state`` methods and ``v`` and ``s`` accessors can also take lists of nodes, and will return corresponding lists of values and states::
+
+    >>> comp.value(['a', 'b'])
+    [1, 2]
+    >>> comp.state(['a', 'b'])
+    [<States.UPTODATE: 4>, <States.UPTODATE: 4>]
+    >>> comp.v[['a', 'b']]
+    [1, 2]
+    >> comp.s[['a', 'b']]
+    [<States.UPTODATE: 4>, <States.UPTODATE: 4>]
+
 There are also methods ``to_dict()`` and ``to_df()`` which get the values of all the nodes::
 
     >>> comp.to_dict()
@@ -124,7 +135,7 @@ For input nodes, the ``add_node`` method can optionally take a value, rather tha
     >>> comp.v.result
     2
 
-Finally, the function supplied to **add_node** can have ``\*args`` or ``\*\*kwargs`` arguments. When this is done, the ``args`` and ``kwds`` provided to **add_node** control what will be placed in ``\*args`` or ``\*\*kwargs``::
+Finally, the function supplied to **add_node** can have ``*args`` or ``**kwargs`` arguments. When this is done, the ``args`` and ``kwds`` provided to **add_node** control what will be placed in ``*args`` or ``**kwargs``::
 
     >>> comp = Computation()
     >>> comp.add_node('x', value=1)
@@ -521,133 +532,6 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
         n1 [label=a fillcolor="#f97306" style=filled]
             n1 -> n0
     }
-
-Automatically expanding named tuples
-------------------------------------
-
-Often, a calculation will return more than one result. For example, a numerical solver may return the best solution it found, along with a status indicating whether the solver converged. Python introduced namedtuples in version 2.6. A namedtuple is a tuple-like object where each element can be accessed by name, as well as by position. If a node will always contain a given type of namedtuple, Loman has a convenience method ``add_named_tuple_expansion`` which will create new nodes for each element of a namedtuple, using the naming convention **parent_node.tuple_element_name**. This can be useful for clarity when different downstream nodes depend on different parts of computation result::
-
-    >>> Coordinate = namedtuple('Coordinate', ['x', 'y'])
-    >>> comp = Computation()
-    >>> comp.add_node('a', value=1)
-    >>> comp.add_node('b', lambda a: Coordinate(a+1, a+2))
-    >>> comp.add_named_tuple_expansion('b', Coordinate)
-    >>> comp.add_node('c', lambda *args: sum(args), args=['b.x', 'b.y'])
-    >>> comp.compute_all()
-    >>> comp.get_value_dict()
-    {'a': 1, 'b': Coordinate(x=2, y=3), 'b.x': 2, 'b.y': 3, 'c': 5}
-    >>> comp.draw()
-
-.. graphviz::
-
-    digraph {
-        n0 [label=a fillcolor="#15b01a" style=filled]
-        n1 [label=b fillcolor="#9dff00" style=filled]
-        n2 [label="b.x" fillcolor="#0343df" style=filled]
-        n3 [label="b.y" fillcolor="#0343df" style=filled]
-        n4 [label=c fillcolor="#0343df" style=filled]
-            n0 -> n1
-            n1 -> n2
-            n1 -> n3
-            n2 -> n4
-            n3 -> n4
-    }
-
-Serializing computations
-------------------------
-
-Loman can serialize computations to disk using the dill package. This can be useful to have a system store the inputs, intermediates and results of a scheduled calculation for later inspection if required::
-
-    >>> comp = Computation()
-    >>> comp.add_node('a', value=1)
-    >>> comp.add_node('b', lambda a: a + 1)
-    >>> comp.compute_all()
-    >>> comp.draw()
-
-.. graphviz::
-
-    digraph {
-        n0 [label=a fillcolor="#15b01a" style=filled]
-        n1 [label=b fillcolor="#15b01a" style=filled]
-            n0 -> n1
-    }
-
-::
-
-    >>> comp.get_value_dict()
-    {'a': 1, 'b': 2}
-    >>> comp.write_dill('foo.dill')
-    >>> comp2 = Computation.read_dill('foo.dill')
-    >>> comp2.draw()
-
-.. graphviz::
-
-    digraph {
-        n0 [label=a fillcolor="#15b01a" style=filled]
-        n1 [label=b fillcolor="#15b01a" style=filled]
-            n0 -> n1
-    }
-
-::
-
-    >>> comp.get_value_dict()
-    {'a': 1, 'b': 2}
-
-It is also possible to request that a particular node not be serialized, in which case it will have no value, and uninitialized state when it is deserialized. This can be useful where an object is not serializable, or where data is not licensed to be distributed::
-
-    >>> comp.add_node('a', value=1, serialize=False)
-    >>> comp.compute_all()
-    >>> comp.write_dill('foo.dill')
-    >>> comp2 = Computation.read_dill('foo.dill')
-    >>> comp2.draw()
-
-.. graphviz::
-
-    digraph {
-        n0 [label=a fillcolor="#0343df" style=filled]
-        n1 [label=b fillcolor="#15b01a" style=filled]
-            n0 -> n1
-    }
-
-.. note:: The serialization format is not currently stabilized. While it is convenient to be able to inspect the results of previous calculations, this method should *not* be relied on for long-term storage.
-
-Non-string node names
----------------------
-
-In the previous example, the nodes have all been given strings as keys. This is not a requirement, and in fact any object that could be used as a key in a dictionary can be a key for a node. As function parameters can only be strings, we have to rely on the ``kwds`` argument to ``add_node`` to specify which nodes should be used as inputs for calculation nodes' functions. For a simple but frivolous example, we can represent a finite part of the Fibonacci sequence using tuples of the form ``('fib', [int])`` as keys::
-
-    >>> comp = Computation()
-    >>> comp.add_node(('fib', 1), value=1)
-    >>> comp.add_node(('fib', 2), value=1)
-    >>> for i in range(3,7):
-    ...    comp.add_node(('fib', i), lambda x, y: x + y, kwds={'x': ('fib', i - 1), 'y': ('fib', i - 2)})
-    ...
-    >>> comp.draw()
-
-.. graphviz::
-
-    digraph {
-        n0 [label="('fib', 1)" fillcolor="#15b01a" style=filled]
-        n1 [label="('fib', 2)" fillcolor="#15b01a" style=filled]
-        n2 [label="('fib', 3)" fillcolor="#9dff00" style=filled]
-        n3 [label="('fib', 4)" fillcolor="#0343df" style=filled]
-        n4 [label="('fib', 5)" fillcolor="#0343df" style=filled]
-        n5 [label="('fib', 6)" fillcolor="#0343df" style=filled]
-            n0 -> n2
-            n1 -> n2
-            n1 -> n3
-            n2 -> n3
-            n2 -> n4
-            n3 -> n4
-            n3 -> n5
-            n4 -> n5
-    }
-
-::
-
-    >>> comp.compute_all()
-    >>> comp.value(('fib', 6))
-    8
 
 A final word
 ------------
