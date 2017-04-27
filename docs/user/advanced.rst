@@ -20,7 +20,7 @@ However providing ``ConstantValue`` objects to the ``args`` or ``kwds`` paramete
 
     >>> comp = Computation()
     >>> comp.add_node('a', value=1)
-    comp.add_node('b', add, kwds={"x": "a", "y": C(1)})
+    >>> comp.add_node('b', add, kwds={"x": "a", "y": C(1)})
     >>> comp.compute_all()
     >>> comp.v.b
     2
