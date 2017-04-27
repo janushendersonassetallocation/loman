@@ -1,4 +1,4 @@
-from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node
+from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C
 import six
 from collections import namedtuple
 import random
@@ -983,3 +983,26 @@ def test_with_uptodate_predecessors_but_stale_ancestors():
     comp.compute('c')
     assert comp['b'] == (States.UPTODATE, 2)
     assert comp['c'] == (States.UPTODATE, 3)
+
+
+def test_constant_values():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    def add(x, y):
+        return x + y
+
+    comp.add_node('b', add, args=['a', C(2)])
+    comp.add_node('c', add, args=[C(3), 'a'])
+    comp.add_node('d', add, kwds={'x': C(4), 'y': 'a'})
+    comp.add_node('e', add, kwds={'y': C(5), 'x': 'a'})
+
+    comp.compute_all()
+
+    assert comp.dag.node['b']['args'] == {1: 2}
+
+    assert comp['b'] == (States.UPTODATE, 3)
+    assert comp['c'] == (States.UPTODATE, 4)
+    assert comp['d'] == (States.UPTODATE, 5)
+    assert comp['e'] == (States.UPTODATE, 6)
+

@@ -5,6 +5,7 @@ Change Log
 ---------------------
 
 * Add node function decorator
+* Add ConstantValue (with alias C) to provide constant values to function parameters without creating a placeholder node for that constant
 
 `0.1.1`_ (2017-04-25)
 ---------------------

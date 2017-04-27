@@ -41,6 +41,8 @@ _AN_STATE = 'state'
 _AN_FUNC = 'func'
 _AN_GROUP = 'group'
 _AN_TAG = 'tag'
+_AN_ARGS = 'args'
+_AN_KWDS = 'kwds'
 
 # Edge attributes
 _AE_PARAM = 'param'
@@ -90,6 +92,13 @@ def node(comp, name=None, *args, **kw):
             comp.add_node(name, f, *args, **kw)
         return decorator.decorate(f, _node)
     return inner
+
+
+class ConstantValue(object):
+    def __init__(self, value):
+        self.value = value
+
+C = ConstantValue
 
 
 class _ComputationAttributeView(object):
@@ -213,16 +222,22 @@ class Computation(object):
         node[_AN_VALUE] = None
         node[_AN_TAG] = set()
         node[_AN_GROUP] = group
+        node[_AN_ARGS] = {}
+        node[_AN_KWDS] = {}
 
         if func:
             node[_AN_FUNC] = func
             args_count = 0
             if args:
                 args_count = len(args)
-                for i, param_name in enumerate(args):
-                    if not self.dag.has_node(param_name):
-                        self.dag.add_node(param_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
-                    self.dag.add_edge(param_name, name, attr_dict={_AE_PARAM: (_ParameterType.ARG, i)})
+                for i, arg in enumerate(args):
+                    if isinstance(arg, ConstantValue):
+                        node[_AN_ARGS][i] = arg.value
+                    else:
+                        input_vertex_name = arg
+                        if not self.dag.has_node(input_vertex_name):
+                            self.dag.add_node(input_vertex_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
+                        self.dag.add_edge(input_vertex_name, name, attr_dict={_AE_PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = _get_signature(func)
                 param_names = set()
@@ -236,14 +251,19 @@ class Computation(object):
                     param_names = []
                 else:
                     param_names = kwds.keys()
+                default_names = []
             for param_name in param_names:
-                in_node_name = kwds.get(param_name, param_name) if kwds else param_name
-                if not self.dag.has_node(in_node_name):
-                    if param_name in default_names:
-                        continue
-                    else:
-                        self.dag.add_node(in_node_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
-                self.dag.add_edge(in_node_name, name, attr_dict={_AE_PARAM: (_ParameterType.KWD, param_name)})
+                value_source = kwds.get(param_name, param_name) if kwds else param_name
+                if isinstance(value_source, ConstantValue):
+                    node[_AN_KWDS][param_name] = value_source.value
+                else:
+                    in_node_name = value_source
+                    if not self.dag.has_node(in_node_name):
+                        if param_name in default_names:
+                            continue
+                        else:
+                            self.dag.add_node(in_node_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
+                    self.dag.add_edge(in_node_name, name, attr_dict={_AE_PARAM: (_ParameterType.KWD, param_name)})
 
         if func or value is not None:
             self._set_descendents(name, States.STALE)
@@ -443,6 +463,10 @@ class Computation(object):
             self.dag.node[name][_AN_STATE] = States.COMPUTABLE
 
     def _get_parameter_data(self, name):
+        for arg, value in six.iteritems(self.dag.node[name][_AN_ARGS]):
+            yield _ParameterItem(_ParameterType.ARG, arg, value)
+        for param_name, value in six.iteritems(self.dag.node[name][_AN_KWDS]):
+            yield _ParameterItem(_ParameterType.KWD, param_name, value)
         for in_node_name in self.dag.predecessors(name):
             param_value = self.dag.node[in_node_name][_AN_VALUE]
             edge = self.dag.edge[in_node_name][name]
