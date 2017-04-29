@@ -4,8 +4,9 @@ Change Log
 `0.1.2`_ (Unreleased)
 ---------------------
 
-* Add node function decorator
+* Add @node function decorator
 * Add ConstantValue (with alias C) to provide constant values to function parameters without creating a placeholder node for that constant
+* BUGFIX: Visualizing computations was broken in v0.1.1!
 
 `0.1.1`_ (2017-04-25)
 ---------------------
