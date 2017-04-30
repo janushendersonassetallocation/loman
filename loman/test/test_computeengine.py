@@ -1006,3 +1006,14 @@ def test_constant_values():
     assert comp['d'] == (States.UPTODATE, 5)
     assert comp['e'] == (States.UPTODATE, 6)
 
+
+def compute_multiple():
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', lambda a: a + 1)
+    comp.add_node('c', lambda a: 2 * a)
+    comp.add_node('d', lambda b, c: b + c)
+    comp.compute(['a', 'b'])
+    assert comp.s.b == States.UPTODATE
+    assert comp.s.c == States.UPTODATE
+    assert comp.s.d != States.UPTODATE

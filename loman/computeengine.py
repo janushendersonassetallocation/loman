@@ -498,6 +498,13 @@ class Computation(object):
         nodes_sorted = nx.topological_sort(g, ancestors)
         return [n for n in nodes_sorted if n in ancestors]
 
+    def _compute_one(self, name, raise_exceptions):
+        calc_nodes = self._get_calc_nodes(name)
+        for n in calc_nodes:
+            preds = self.dag.predecessors(n)
+            if all(self.dag.node[n1][_AN_STATE] == States.UPTODATE for n1 in preds):
+                self._compute_node(n, raise_exceptions=raise_exceptions)
+
     def compute(self, name, raise_exceptions=False):
         """
         Compute a node and all necessary predecessors
@@ -510,11 +517,7 @@ class Computation(object):
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        calc_nodes = self._get_calc_nodes(name)
-        for n in calc_nodes:
-            preds = self.dag.predecessors(n)
-            if all(self.dag.node[n1][_AN_STATE] == States.UPTODATE for n1 in preds):
-                self._compute_node(n, raise_exceptions=raise_exceptions)
+        _apply(self._compute_one, name, raise_exceptions=raise_exceptions)
 
     def _get_computable_nodes_iter(self):
         for n, node in self.dag.nodes_iter(data=True):
@@ -867,12 +870,12 @@ class Computation(object):
         return g
 
 
-def _apply(f, xs):
+def _apply(f, xs, *args, **kwds):
     if isinstance(xs, types.GeneratorType):
-        return (f(x) for x in xs)
+        return (f(x, *args, **kwds) for x in xs)
     if isinstance(xs, list):
-        return [f(x) for x in xs]
-    return f(xs)
+        return [f(x, *args, **kwds) for x in xs]
+    return f(xs, *args, **kwds)
 
 
 def _as_iterable(xs):
@@ -883,6 +886,6 @@ def _as_iterable(xs):
     return (xs,)
 
 
-def _apply_n(f, *xs):
+def _apply_n(f, *xs, **kwds):
     for p in itertools.product(*[_as_iterable(x) for x in xs]):
-        f(*p)
+        f(*p, **kwds)
