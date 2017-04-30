@@ -803,7 +803,7 @@ class Computation(object):
     def _repr_svg_(self):
         return self.to_pydot().create_svg().decode('utf-8')
 
-    def to_pydot(self, show_expansion=False):
+    def to_pydot(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
 
@@ -826,6 +826,16 @@ class Computation(object):
             edge_groups.setdefault(group, []).append((name1, name2))
 
         g = pydotplus.Dot()
+
+        if graph_attr is not None:
+            for k, v in six.iteritems(graph_attr):
+                g.set(k, v)
+
+        if node_attr is not None:
+            g.set_node_defaults(**node_attr)
+
+        if edge_attr is not None:
+            g.set_edge_defaults(**edge_attr)
 
         for group, names in six.iteritems(node_groups):
             if group is None:
@@ -873,12 +883,12 @@ class Computation(object):
         """
         Draw a computation's current state using the GraphViz utility
 
-        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '10,8'}`` can control the size of the output graph
+        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
         :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
-        d = self.to_pydot(show_expansion=show_expansion)
+        d = self.to_pydot(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr, show_expansion=show_expansion)
 
         def repr_svg(self):
             return self.create_svg().decode('utf-8')
