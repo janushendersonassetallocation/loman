@@ -10,6 +10,8 @@ import pandas as pd
 import traceback
 import graphviz
 import logging
+import types
+import itertools
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -271,9 +273,12 @@ class Computation(object):
             self._set_uptodate(name, value)
         if node[_AN_STATE] == States.UNINITIALIZED:
             self._try_set_computable(name)
-        self.set_tags(name, tags)
+        self.set_tag(name, tags)
         if serialize:
             self.set_tag(name, _T_SERIALIZE)
+
+    def _set_tag_one(self, name, tag):
+        self.dag.node[name][_AN_TAG].add(tag)
 
     def set_tag(self, name, tag):
         """
@@ -282,24 +287,10 @@ class Computation(object):
         :param name: Node or nodes to set tag for
         :param tag: Tag to set
         """
-        if isinstance(name, list):
-            for n in name:
-                self.dag.node[n][_AN_TAG].add(tag)
-        else:
-            self.dag.node[name][_AN_TAG].add(tag)
+        _apply_n(self._set_tag_one, name, tag)
 
-    def set_tags(self, name, tags):
-        """
-        Set tags on a node or nodes. Ignored if tags are already set.
-        
-        :param name: Node or nodes to set tags for
-        :param tags: Tags to set
-        """
-        if isinstance(name, list):
-            for n in name:
-                self.dag.node[n][_AN_TAG].update(tags)
-        else:
-            self.dag.node[name][_AN_TAG].update(tags)
+    def _clear_tag_one(self, name, tag):
+        self.dag.node[name][_AN_TAG].discard(tag)
 
     def clear_tag(self, name, tag):
         """
@@ -308,24 +299,7 @@ class Computation(object):
         :param name: Node or nodes to clear tags for
         :param tag: Tag to clear
         """
-        if isinstance(name, list):
-            for n in name:
-                self.dag.node[n][_AN_TAG].discard(tag)
-        else:
-            self.dag.node[name][_AN_TAG].discard(tag)
-
-    def clear_tags(self, name, tags):
-        """
-        Clear tags on a node or nodes. Ignored if tags are not set.
-
-        :param name: Node or nodes to clear tags for
-        :param tags: Tags to clear
-        """
-        if isinstance(name, list):
-            for n in name:
-                self.dag.node[n][_AN_TAG].difference_update(tags)
-        else:
-            self.dag.node[name][_AN_TAG].difference_update(tags)
+        _apply_n(self._clear_tag_one, name, tag)
 
     def delete_node(self, name):
         """
@@ -578,6 +552,9 @@ class Computation(object):
         """
         return self.dag.nodes()
 
+    def _state_one(self, name):
+        return self.dag.node[name][_AN_STATE]
+
     def state(self, name):
         """
         Get the state of a node
@@ -594,9 +571,10 @@ class Computation(object):
         :param name: Name or names of the node to get state for
         :type name: Key or [Keys]
         """
-        if isinstance(name, list):
-            return [self.dag.node[n][_AN_STATE] for n in name]
-        return self.dag.node[name][_AN_STATE]
+        return _apply(self._state_one, name)
+
+    def _value_one(self, name):
+        return self.dag.node[name][_AN_VALUE]
 
     def value(self, name):
         """
@@ -614,9 +592,11 @@ class Computation(object):
         :param name: Name or names of the node to get the value of
         :type name: Key or [Keys]
         """
-        if isinstance(name, list):
-            return [self.dag.node[n][_AN_VALUE] for n in name]
-        return self.dag.node[name][_AN_VALUE]
+        return _apply(self._value_one, name)
+
+    def _tag_one(self, name):
+        node = self.dag.node[name]
+        return node[_AN_TAG]
 
     def tags(self, name):
         """
@@ -629,8 +609,11 @@ class Computation(object):
         :param name: 
         :return: 
         """
+        return _apply(self._tag_one, name)
+
+    def _get_item_one(self, name):
         node = self.dag.node[name]
-        return node[_AN_TAG]
+        return NodeData(node[_AN_STATE], node[_AN_VALUE])
 
     def __getitem__(self, name):
         """
@@ -638,8 +621,7 @@ class Computation(object):
 
         :param name: Name of the node to get the state and value of
         """
-        node = self.dag.node[name]
-        return NodeData(node[_AN_STATE], node[_AN_VALUE])
+        return _apply(self._get_item_one, name)
 
     def to_df(self):
         """
@@ -674,7 +656,7 @@ class Computation(object):
         """
         return nx.get_node_attributes(self.dag, _AN_VALUE)
 
-    def _get_inputs_one_node(self, name):
+    def _get_inputs_one(self, name):
         args_dict = {}
         kwds = []
         max_arg_index = -1
@@ -695,6 +677,7 @@ class Computation(object):
         else:
             return kwds
 
+
     def get_inputs(self, name):
         """
         Get a list of the inputs for a node or set of nodes
@@ -702,9 +685,7 @@ class Computation(object):
         :param name: Name or names of nodes to get inputs for 
         :return: If name is scalar, return a list of upstream nodes used as input. If name is a list, return a list of list of inputs.
         """
-        if isinstance(name, list):
-            return [self._get_inputs_one_node(n) for n in name]
-        return self._get_inputs_one_node(name)
+        return _apply(self._get_inputs_one, name)
 
     def write_dill(self, file_):
         """
@@ -884,3 +865,24 @@ class Computation(object):
         self._add_edges(g, edges, node_index_map)
 
         return g
+
+
+def _apply(f, xs):
+    if isinstance(xs, types.GeneratorType):
+        return (f(x) for x in xs)
+    if isinstance(xs, list):
+        return [f(x) for x in xs]
+    return f(xs)
+
+
+def _as_iterable(xs):
+    if isinstance(xs, types.GeneratorType):
+        return xs
+    if isinstance(xs, list):
+        return xs
+    return (xs,)
+
+
+def _apply_n(f, *xs):
+    for p in itertools.product(*[_as_iterable(x) for x in xs]):
+        f(*p)

@@ -1,7 +1,13 @@
 Change Log
 ==========
 
-`0.1.2`_ (Unreleased)
+`0.1.3`_ (unreleased)
+---------------------
+
+* Methods set_tag and clear_tag support lists or generators of tags.
+* Remove set_tags and clear_tags.
+
+`0.1.2`_ (2017-04-28)
 ---------------------
 
 * Add @node function decorator

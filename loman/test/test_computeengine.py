@@ -915,28 +915,28 @@ def test_tags():
     comp.clear_tag('a', 'foo')
     assert 'foo' not in comp.t.a
     assert 'foo' not in comp.tags('a')
-    comp.set_tags('a', ['foo'])
+    comp.set_tag('a', ['foo'])
     assert 'foo' in comp.t.a
     assert 'foo' in comp.tags('a')
-    comp.clear_tags('a', ['foo'])
+    comp.clear_tag('a', ['foo'])
     assert 'foo' not in comp.t.a
     assert 'foo' not in comp.tags('a')
 
     # This should not throw
     comp.clear_tag('a', 'bar')
-    comp.clear_tags('a', ['bar'])
+    comp.clear_tag('a', ['bar'])
 
     # This should not throw
-    comp.set_tags('a', ['foo'])
-    comp.set_tags('a', ['foo'])
+    comp.set_tag('a', ['foo'])
+    comp.set_tag('a', ['foo'])
     assert 'foo'  in comp.t.a
 
     # This should not throw
-    comp.clear_tags('a', ['foo'])
-    comp.clear_tags('a', ['foo'])
+    comp.clear_tag('a', ['foo'])
+    comp.clear_tag('a', ['foo'])
     assert 'foo' not in comp.t.a
 
-    comp.set_tags(['a', 'b'], ['foo', 'bar'])
+    comp.set_tag(['a', 'b'], ['foo', 'bar'])
     assert 'foo' in comp.t.a
     assert 'bar' in comp.t.a
     assert 'foo' in comp.t.b
