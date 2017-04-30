@@ -8,10 +8,10 @@ import six
 import sys
 import pandas as pd
 import traceback
-import graphviz
 import logging
 import types
 import itertools
+import pydotplus
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -800,28 +800,10 @@ class Computation(object):
             return results
         self.add_node(result_node, f, kwds={'xs': input_node})
 
-    @staticmethod
-    def _add_nodes(g, nodes, node_index_map):
-        for name, n in nodes:
-            short_name = node_index_map[name]
-            node_color = state_colors[n.get(_AN_STATE, None)]
-            g.node(short_name, str(name), style='filled', fillcolor=node_color)
+    def _repr_svg_(self):
+        return self.to_pydot().create_svg().decode('utf-8')
 
-    @staticmethod
-    def _add_edges(g, edges, node_index_map):
-        for name1, name2 in edges:
-            short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
-            g.edge(short_name1, short_name2)
-
-    def draw(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
-        """
-        Draw a computation's current state using the GraphViz utility
-
-        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '10,8'}`` can control the size of the output graph
-        :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
-        :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
-        :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
-        """
+    def to_pydot(self, show_expansion=False):
         nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
         node_index_map = {name: short_name for short_name, name, data in nodes}
 
@@ -843,31 +825,66 @@ class Computation(object):
             group = group1 if group1 == group2 else None
             edge_groups.setdefault(group, []).append((name1, name2))
 
-        g = graphviz.Digraph(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr)
+        g = pydotplus.Dot()
 
         for group, names in six.iteritems(node_groups):
             if group is None:
                 continue
-            c = graphviz.Digraph('cluster_' + str(group))
+            c = pydotplus.Subgraph('cluster_' + str(group))
 
-            nodes = ((name, self.dag.node[name]) for name in names if name in show_nodes)
-            self._add_nodes(c, nodes, node_index_map)
+            for name in names:
+                if name not in show_nodes:
+                    continue
+                n = self.dag.node[name]
+                short_name = node_index_map[name]
+                node_color = state_colors[n.get(_AN_STATE, None)]
+                node = pydotplus.Node(short_name, **{'label': str(name), 'style': 'filled', 'fillcolor': node_color})
+                c.add_node(node)
 
-            edges = ((name1, name2) for name1, name2 in edge_groups.get(group, []) if
-                     name1 in show_nodes and name2 in show_nodes)
-            self._add_edges(c, edges, node_index_map)
+            for name1, name2 in edge_groups.get(group, []):
+                if name1 not in show_nodes or name2 not in show_nodes:
+                    continue
+                short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
+                edge = pydotplus.Edge(short_name1, short_name2)
+                c.add_edge(edge)
 
-            c.body.append('label = "{}"'.format(str(group)))
-            g.subgraph(c)
+            c.obj_dict['label'] = str(group)
+            g.add_subgraph(c)
 
-        nodes = ((name, self.dag.node[name]) for name in node_groups.get(None, []) if name in show_nodes)
-        self._add_nodes(g, nodes, node_index_map)
+        for name in node_groups.get(None, []):
+            if name not in show_nodes:
+                continue
+            n = self.dag.node[name]
+            short_name = node_index_map[name]
+            node_color = state_colors[n.get(_AN_STATE, None)]
+            node = pydotplus.Node(short_name, **{'label': str(name), 'style': 'filled', 'fillcolor': node_color})
+            g.add_node(node)
 
-        edges = ((name1, name2) for name1, name2 in edge_groups.get(None, []) if
-                 name1 in show_nodes and name2 in show_nodes)
-        self._add_edges(g, edges, node_index_map)
+        for name1, name2 in edge_groups.get(None, []):
+            if name1 not in show_nodes or name2 not in show_nodes:
+                continue
+            short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
+            edge = pydotplus.Edge(short_name1, short_name2)
+            g.add_edge(edge)
 
         return g
+
+    def draw(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+        """
+        Draw a computation's current state using the GraphViz utility
+
+        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '10,8'}`` can control the size of the output graph
+        :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
+        :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
+        :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
+        """
+        d = self.to_pydot(show_expansion=show_expansion)
+
+        def repr_svg(self):
+            return self.create_svg().decode('utf-8')
+
+        d._repr_svg_ = types.MethodType(repr_svg, d)
+        return d
 
 
 def _apply(f, xs, *args, **kwds):
