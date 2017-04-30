@@ -28,14 +28,14 @@ class States(Enum):
     ERROR = 5
 
 
-state_colors = {
-    None: '#ffffff', # xkcd white
-    States.PLACEHOLDER: '#f97306', # xkcd orange
-    States.UNINITIALIZED: '#0343df', # xkcd blue
-    States.STALE: '#ffff14', # xkcd yellow
-    States.COMPUTABLE: '#9dff00', # xkcd bright yellow green
-    States.UPTODATE: '#15b01a', # xkcd green
-    States.ERROR: '#e50000'
+_state_colors = {
+    None: '#ffffff',                    # xkcd white
+    States.PLACEHOLDER: '#f97306',      # xkcd orange
+    States.UNINITIALIZED: '#0343df',    # xkcd blue
+    States.STALE: '#ffff14',            # xkcd yellow
+    States.COMPUTABLE: '#9dff00',       # xkcd bright yellow green
+    States.UPTODATE: '#15b01a',         # xkcd green
+    States.ERROR: '#e50000'             # xkcd red
 }
 
 # Node attributes
@@ -848,7 +848,7 @@ class Computation(object):
                     continue
                 n = self.dag.node[name]
                 short_name = node_index_map[name]
-                node_color = state_colors[n.get(_AN_STATE, None)]
+                node_color = _state_colors[n.get(_AN_STATE, None)]
                 node = pydotplus.Node(short_name, **{'label': str(name), 'style': 'filled', 'fillcolor': node_color})
                 c.add_node(node)
 
@@ -867,7 +867,7 @@ class Computation(object):
                 continue
             n = self.dag.node[name]
             short_name = node_index_map[name]
-            node_color = state_colors[n.get(_AN_STATE, None)]
+            node_color = _state_colors[n.get(_AN_STATE, None)]
             node = pydotplus.Node(short_name, **{'label': str(name), 'style': 'filled', 'fillcolor': node_color})
             g.add_node(node)
 
