@@ -13,6 +13,7 @@ import types
 import itertools
 import functools
 import pydotplus
+from datetime import datetime
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -46,6 +47,7 @@ _AN_GROUP = 'group'
 _AN_TAG = 'tag'
 _AN_ARGS = 'args'
 _AN_KWDS = 'kwds'
+_AN_TIMING = 'timing'
 
 # Edge attributes
 _AE_PARAM = 'param'
@@ -56,6 +58,7 @@ _T_EXPANSION = '__expansion__'
 
 Error = namedtuple('Error', ['exception', 'traceback'])
 NodeData = namedtuple('NodeData', [_AN_STATE, _AN_VALUE])
+TimingData = namedtuple('TimingData', ['start', 'end', 'duration'])
 
 
 class ComputationException(Exception):
@@ -185,6 +188,7 @@ class Computation(object):
         self.s = _ComputationAttributeView(self.nodes, self.state, self.state)
         self.i = _ComputationAttributeView(self.nodes, self.get_inputs, self.get_inputs)
         self.t = _ComputationAttributeView(self.nodes, self.tags, self.tags)
+        self.tim = _ComputationAttributeView(self.nodes, self.get_timing, self.get_timing)
 
     def add_node(self, name, func=None, **kwargs):
         """
@@ -464,9 +468,13 @@ class Computation(object):
             else:
                 raise Exception("Unexpected param type: {}".format(param.type))
         try:
+            start_dt = datetime.utcnow()
             value = f(*args, **kwds)
+            end_dt = datetime.utcnow()
+            delta = (end_dt - start_dt).total_seconds()
             node[_AN_STATE] = States.UPTODATE
             node[_AN_VALUE] = value
+            node[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
             self._set_descendents(name, States.STALE)
             for n in self.dag.successors(name):
                 self._try_set_computable(n)
@@ -610,7 +618,7 @@ class Computation(object):
             >>> comp.add_node('a', tags=['foo', 'bar'])
             >>> comp.t.a
             {'__serialize__', 'bar', 'foo'}
-        :param name: 
+        :param name: Name or names of the node to get the tags of
         :return: 
         """
         return _apply(self._tag_one, name)
@@ -626,6 +634,19 @@ class Computation(object):
         :param name: Name of the node to get the state and value of
         """
         return _apply(self._get_item_one, name)
+
+    def _get_timing_one(self, name):
+        node = self.dag.node[name]
+        return node.get(_AN_TIMING, None)
+
+    def get_timing(self, name):
+        """
+        Get the timing information for a node
+        
+        :param name: Name or names of the node to get the timing information of
+        :return: 
+        """
+        return _apply(self._get_timing_one, name)
 
     def to_df(self):
         """

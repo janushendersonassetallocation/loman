@@ -6,6 +6,7 @@ Change Log
 
 * Methods set_tag and clear_tag support lists or generators of tags.
 * Remove set_tags and clear_tags.
+* Add node computation timing data, accessible through tim attribute-style access or get_timing method.
 
 `0.1.2`_ (2017-04-28)
 ---------------------
