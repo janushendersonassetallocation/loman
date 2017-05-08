@@ -14,6 +14,8 @@ import itertools
 import functools
 import pydotplus
 from datetime import datetime
+import os
+import tempfile
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -917,6 +919,12 @@ class Computation(object):
 
         d._repr_svg_ = types.MethodType(repr_svg, d)
         return d
+
+    def view(self):
+        d = self.to_pydot()
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            f.write(d.create_pdf())
+            os.startfile(f.name)
 
 
 def _apply(f, xs, *args, **kwds):
