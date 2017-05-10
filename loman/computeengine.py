@@ -667,6 +667,8 @@ class Computation(object):
         df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
         df[_AN_STATE] = pd.Series(nx.get_node_attributes(self.dag, _AN_STATE))
         df[_AN_VALUE] = pd.Series(nx.get_node_attributes(self.dag, _AN_VALUE))
+        df_timing = pd.DataFrame.from_dict(nx.get_node_attributes(self.dag, 'timing'), orient='index')
+        df = pd.merge(df, df_timing, left_index=True, right_index=True, how='left')
         return df
 
     def to_dict(self):
