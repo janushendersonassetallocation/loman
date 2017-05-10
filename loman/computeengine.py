@@ -7,6 +7,7 @@ import dill
 import six
 import sys
 import pandas as pd
+import matplotlib as mpl
 import traceback
 import logging
 import types
@@ -829,7 +830,7 @@ class Computation(object):
     def _repr_svg_(self):
         return self.to_pydot().create_svg().decode('utf-8')
 
-    def to_pydot(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def to_pydot(self, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         struct_dag = self.dag.copy()
         if not show_expansion:
             hide_nodes = set(struct_dag.nodes_iter())
@@ -839,11 +840,11 @@ class Computation(object):
                 hide_nodes.discard(name1)
                 hide_nodes.discard(name2)
             _contract_node(struct_dag, hide_nodes)
-        viz_dag = _create_viz_dag(struct_dag)
+        viz_dag = _create_viz_dag(struct_dag, colors=colors, cmap=cmap)
         viz_dot = _to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
         return viz_dot
 
-    def draw(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw(self, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
 
@@ -852,7 +853,8 @@ class Computation(object):
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
-        d = self.to_pydot(graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr, show_expansion=show_expansion)
+        d = self.to_pydot(colors=colors, cmap=cmap, graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
+                          show_expansion=show_expansion)
 
         def repr_svg(self):
             return self.create_svg().decode('utf-8')
@@ -860,8 +862,8 @@ class Computation(object):
         d._repr_svg_ = types.MethodType(repr_svg, d)
         return d
 
-    def view(self):
-        d = self.to_pydot()
+    def view(self, colors='state', cmap=None):
+        d = self.to_pydot(colors=colors, cmap=cmap)
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             f.write(d.create_pdf())
             os.startfile(f.name)
@@ -897,7 +899,20 @@ def _contract_node(g, ns):
     _apply_n(functools.partial(_contract_node_one, g), ns)
 
 
-def _create_viz_dag(comp_dag):
+def _create_viz_dag(comp_dag, colors='state', cmap=None):
+    colors = colors.lower()
+    if colors == 'state':
+        if cmap is None:
+            cmap = _state_colors
+    elif colors == 'timing':
+        if cmap is None:
+            cmap = mpl.colors.LinearSegmentedColormap.from_list('blend', ['#15b01a', '#ffff14', '#e50000'])
+        timings = nx.get_node_attributes(comp_dag, _AN_TIMING)
+        max_duration = max(timing.duration for timing in six.itervalues(timings) if hasattr(timing, 'duration'))
+        min_duration = min(timing.duration for timing in six.itervalues(timings) if hasattr(timing, 'duration'))
+    else:
+        raise ValueError('{} is not a valid loman colors parameter for visualization'.format(colors))
+
     viz_dag = nx.DiGraph()
     node_index_map = {}
     for i, (name, data) in enumerate(comp_dag.nodes_iter(data=True)):
@@ -905,9 +920,21 @@ def _create_viz_dag(comp_dag):
         attr_dict = {
             'label': name,
             'style': 'filled',
-            'fillcolor': _state_colors[data.get(_AN_STATE, None)],
             '_group': data.get(_AN_GROUP)
         }
+
+        if colors == 'state':
+            attr_dict['fillcolor'] = cmap[data.get(_AN_STATE, None)]
+        elif colors == 'timing':
+            timing_data = data.get(_AN_TIMING)
+            if timing_data is None:
+                col = '#FFFFFF'
+            else:
+                duration = timing_data.duration
+                norm_duration = (duration - min_duration) / (max_duration - min_duration)
+                col = mpl.colors.rgb2hex(cmap(norm_duration))
+            attr_dict['fillcolor'] = col
+
         viz_dag.add_node(short_name, attr_dict)
         node_index_map[name] = short_name
     for name1, name2 in comp_dag.edges_iter():
