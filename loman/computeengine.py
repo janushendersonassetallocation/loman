@@ -828,80 +828,18 @@ class Computation(object):
         return self.to_pydot().create_svg().decode('utf-8')
 
     def to_pydot(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
-        nodes = [("n{}".format(i), name, data) for i, (name, data) in enumerate(self.dag.nodes(data=True))]
-        node_index_map = {name: short_name for short_name, name, data in nodes}
-
-        show_nodes = set()
-        for name1, name2, n in self.dag.edges_iter(data=True):
-            if not show_expansion and _T_EXPANSION in self.tags(name2):
-                continue
-            show_nodes.add(name1)
-            show_nodes.add(name2)
-
-        node_groups = {}
-        for node, group in six.iteritems(nx.get_node_attributes(self.dag, _AN_GROUP)):
-            node_groups.setdefault(group, []).append(node)
-
-        edge_groups = {}
-        for name1, name2 in self.dag.edges_iter():
-            group1 = self.dag.node[name1].get(_AN_GROUP)
-            group2 = self.dag.node[name2].get(_AN_GROUP)
-            group = group1 if group1 == group2 else None
-            edge_groups.setdefault(group, []).append((name1, name2))
-
-        g = pydotplus.Dot()
-
-        if graph_attr is not None:
-            for k, v in six.iteritems(graph_attr):
-                g.set(k, v)
-
-        if node_attr is not None:
-            g.set_node_defaults(**node_attr)
-
-        if edge_attr is not None:
-            g.set_edge_defaults(**edge_attr)
-
-        for group, names in six.iteritems(node_groups):
-            if group is None:
-                continue
-            c = pydotplus.Subgraph('cluster_' + str(group))
-
-            for name in names:
-                if name not in show_nodes:
+        struct_dag = self.dag.copy()
+        if not show_expansion:
+            hide_nodes = set(struct_dag.nodes_iter())
+            for name1, name2 in struct_dag.edges_iter():
+                if not show_expansion and _T_EXPANSION in self.tags(name2):
                     continue
-                n = self.dag.node[name]
-                short_name = node_index_map[name]
-                node_color = _state_colors[n.get(_AN_STATE, None)]
-                node = pydotplus.Node(short_name, **{'label': str(name), 'style': 'filled', 'fillcolor': node_color})
-                c.add_node(node)
-
-            for name1, name2 in edge_groups.get(group, []):
-                if name1 not in show_nodes or name2 not in show_nodes:
-                    continue
-                short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
-                edge = pydotplus.Edge(short_name1, short_name2)
-                c.add_edge(edge)
-
-            c.obj_dict['label'] = str(group)
-            g.add_subgraph(c)
-
-        for name in node_groups.get(None, []):
-            if name not in show_nodes:
-                continue
-            n = self.dag.node[name]
-            short_name = node_index_map[name]
-            node_color = _state_colors[n.get(_AN_STATE, None)]
-            node = pydotplus.Node(short_name, **{'label': str(name), 'style': 'filled', 'fillcolor': node_color})
-            g.add_node(node)
-
-        for name1, name2 in edge_groups.get(None, []):
-            if name1 not in show_nodes or name2 not in show_nodes:
-                continue
-            short_name1, short_name2 = node_index_map[name1], node_index_map[name2]
-            edge = pydotplus.Edge(short_name1, short_name2)
-            g.add_edge(edge)
-
-        return g
+                hide_nodes.discard(name1)
+                hide_nodes.discard(name2)
+            _contract_node(struct_dag, hide_nodes)
+        viz_dag = _create_viz_dag(struct_dag)
+        viz_dot = _to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
+        return viz_dot
 
     def draw(self, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
@@ -936,9 +874,7 @@ def _apply(f, xs, *args, **kwds):
 
 
 def _as_iterable(xs):
-    if isinstance(xs, types.GeneratorType):
-        return xs
-    if isinstance(xs, list):
+    if isinstance(xs, (types.GeneratorType, list, set)):
         return xs
     return (xs,)
 
@@ -957,3 +893,86 @@ def _contract_node_one(g, n):
 
 def _contract_node(g, ns):
     _apply_n(functools.partial(_contract_node_one, g), ns)
+
+
+def _create_viz_dag(comp_dag):
+    viz_dag = nx.DiGraph()
+    node_index_map = {}
+    for i, (name, data) in enumerate(comp_dag.nodes_iter(data=True)):
+        short_name = "n{}".format(i)
+        attr_dict = {
+            'label': name,
+            'style': 'filled',
+            'fillcolor': _state_colors[data.get(_AN_STATE, None)],
+            '_group': data.get(_AN_GROUP)
+        }
+        viz_dag.add_node(short_name, attr_dict)
+        node_index_map[name] = short_name
+    for name1, name2 in comp_dag.edges_iter():
+        short_name_1 = node_index_map[name1]
+        short_name_2 = node_index_map[name2]
+
+        group1 = comp_dag.node[name1].get(_AN_GROUP)
+        group2 = comp_dag.node[name2].get(_AN_GROUP)
+        group = group1 if group1 == group2 else None
+
+        attr_dict = {'_group': group}
+
+        viz_dag.add_edge(short_name_1, short_name_2, attr_dict)
+    return viz_dag
+
+
+def _to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
+    node_groups = {}
+    for name, data in viz_dag.nodes_iter(data=True):
+        group = data.get('_group')
+        node_groups.setdefault(group, []).append(name)
+
+    edge_groups = {}
+    for name1, name2, data in viz_dag.edges_iter(data=True):
+        group = data.get('_group')
+        edge_groups.setdefault(group, []).append((name1, name2))
+
+    viz_dot = pydotplus.Dot()
+
+    if graph_attr is not None:
+        for k, v in six.iteritems(graph_attr):
+            viz_dot.set(k, v)
+
+    if node_attr is not None:
+        viz_dot.set_node_defaults(**node_attr)
+
+    if edge_attr is not None:
+        viz_dot.set_edge_defaults(**edge_attr)
+
+    for group, names in six.iteritems(node_groups):
+        if group is None:
+            continue
+        c = pydotplus.Subgraph('cluster_' + str(group))
+
+        for name in names:
+            node = pydotplus.Node(name)
+            for k, v in six.iteritems(viz_dag.node[name]):
+                if not k.startswith("_"):
+                    node.set(k, v)
+            c.add_node(node)
+
+        for name1, name2 in edge_groups.get(group, []):
+            edge = pydotplus.Edge(name1, name2)
+            c.add_edge(edge)
+
+        c.obj_dict['label'] = str(group)
+        viz_dot.add_subgraph(c)
+
+    for name in node_groups.get(None, []):
+        node = pydotplus.Node(name)
+        for k, v in six.iteritems(viz_dag.node[name]):
+            if not k.startswith("_"):
+                node.set(k, v)
+        viz_dot.add_node(node)
+
+    for name1, name2 in edge_groups.get(None, []):
+        edge = pydotplus.Edge(name1, name2)
+        viz_dot.add_edge(edge)
+
+    return viz_dot
