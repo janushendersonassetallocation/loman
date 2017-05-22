@@ -831,7 +831,7 @@ class Computation(object):
         return self.to_pydot().create_svg().decode('utf-8')
 
     def to_pydot(self, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
-        struct_dag = self.dag.copy()
+        struct_dag = nx.DiGraph(self.dag)
         if not show_expansion:
             hide_nodes = set(struct_dag.nodes_iter())
             for name1, name2 in struct_dag.edges_iter():
