@@ -17,7 +17,7 @@ import pydotplus
 from datetime import datetime
 import os
 import tempfile
-from util import AttributeView
+from util import AttributeView, apply_n, apply1
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -263,7 +263,7 @@ class Computation(object):
         :param name: Node or nodes to set tag for
         :param tag: Tag to set
         """
-        _apply_n(self._set_tag_one, name, tag)
+        apply_n(self._set_tag_one, name, tag)
 
     def _clear_tag_one(self, name, tag):
         self.dag.node[name][_AN_TAG].discard(tag)
@@ -275,7 +275,7 @@ class Computation(object):
         :param name: Node or nodes to clear tags for
         :param tag: Tag to clear
         """
-        _apply_n(self._clear_tag_one, name, tag)
+        apply_n(self._clear_tag_one, name, tag)
 
     def delete_node(self, name):
         """
@@ -497,7 +497,7 @@ class Computation(object):
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        _apply(self._compute_one, name, raise_exceptions=raise_exceptions)
+        apply1(self._compute_one, name, raise_exceptions=raise_exceptions)
 
     def _get_computable_nodes_iter(self):
         for n, node in self.dag.nodes_iter(data=True):
@@ -554,7 +554,7 @@ class Computation(object):
         :param name: Name or names of the node to get state for
         :type name: Key or [Keys]
         """
-        return _apply(self._state_one, name)
+        return apply1(self._state_one, name)
 
     def _value_one(self, name):
         return self.dag.node[name][_AN_VALUE]
@@ -575,7 +575,7 @@ class Computation(object):
         :param name: Name or names of the node to get the value of
         :type name: Key or [Keys]
         """
-        return _apply(self._value_one, name)
+        return apply1(self._value_one, name)
 
     def _tag_one(self, name):
         node = self.dag.node[name]
@@ -592,7 +592,7 @@ class Computation(object):
         :param name: Name or names of the node to get the tags of
         :return: 
         """
-        return _apply(self._tag_one, name)
+        return apply1(self._tag_one, name)
 
     def _get_item_one(self, name):
         node = self.dag.node[name]
@@ -604,7 +604,7 @@ class Computation(object):
 
         :param name: Name of the node to get the state and value of
         """
-        return _apply(self._get_item_one, name)
+        return apply1(self._get_item_one, name)
 
     def _get_timing_one(self, name):
         node = self.dag.node[name]
@@ -617,7 +617,7 @@ class Computation(object):
         :param name: Name or names of the node to get the timing information of
         :return: 
         """
-        return _apply(self._get_timing_one, name)
+        return apply1(self._get_timing_one, name)
 
     def to_df(self):
         """
@@ -683,7 +683,7 @@ class Computation(object):
         :param name: Name or names of nodes to get inputs for 
         :return: If name is scalar, return a list of upstream nodes used as input. If name is a list, return a list of list of inputs.
         """
-        return _apply(self._get_inputs_one, name)
+        return apply1(self._get_inputs_one, name)
 
     def write_dill(self, file_):
         """
@@ -837,25 +837,6 @@ class Computation(object):
             os.startfile(f.name)
 
 
-def _apply(f, xs, *args, **kwds):
-    if isinstance(xs, types.GeneratorType):
-        return (f(x, *args, **kwds) for x in xs)
-    if isinstance(xs, list):
-        return [f(x, *args, **kwds) for x in xs]
-    return f(xs, *args, **kwds)
-
-
-def _as_iterable(xs):
-    if isinstance(xs, (types.GeneratorType, list, set)):
-        return xs
-    return (xs,)
-
-
-def _apply_n(f, *xs, **kwds):
-    for p in itertools.product(*[_as_iterable(x) for x in xs]):
-        f(*p, **kwds)
-
-
 def _contract_node_one(g, n):
     for p in g.predecessors(n):
         for s in g.successors(n):
@@ -864,7 +845,7 @@ def _contract_node_one(g, n):
 
 
 def _contract_node(g, ns):
-    _apply_n(functools.partial(_contract_node_one, g), ns)
+    apply_n(functools.partial(_contract_node_one, g), ns)
 
 
 def _create_viz_dag(comp_dag, colors='state', cmap=None):
