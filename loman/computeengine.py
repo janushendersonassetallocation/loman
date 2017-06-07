@@ -17,7 +17,7 @@ import pydotplus
 from datetime import datetime
 import os
 import tempfile
-from util import AttributeView, apply_n, apply1
+from .util import AttributeView, apply_n, apply1
 
 
 LOG = logging.getLogger('loman.computeengine')

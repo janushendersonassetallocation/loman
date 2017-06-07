@@ -3,4 +3,4 @@ from loman.computeengine import (
     MapException, LoopDetectedException, NonExistentNodeException,
     node, C)
 
-import util
+import loman.util as util
