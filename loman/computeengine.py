@@ -17,6 +17,7 @@ import pydotplus
 from datetime import datetime
 import os
 import tempfile
+from util import AttributeView
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -109,39 +110,6 @@ class ConstantValue(object):
 
 C = ConstantValue
 
-
-class _ComputationAttributeView(object):
-    def __init__(self, get_attribute_list, get_attribute, get_item=None):
-        self.get_attribute_list = get_attribute_list
-        self.get_attribute = get_attribute
-        self.get_item = get_item
-        if self.get_item is None:
-            self.get_item = get_attribute
-
-    def __dir__(self):
-        return self.get_attribute_list()
-
-    def __getattr__(self, attr):
-        try:
-            return self.get_attribute(attr)
-        except KeyError:
-            raise AttributeError()
-
-    def __getitem__(self, key):
-        return self.get_item(key)
-
-    def __getstate__(self):
-        return {
-            'get_attribute_list': self.get_attribute_list,
-            'get_attribute': self.get_attribute,
-            'get_item': self.get_item
-        }
-
-    def __setstate__(self, state):
-        self.get_attribute_list = state['get_attribute_list']
-        self.get_attribute = state['get_attribute']
-        self.get_item = state['get_item']
-
 _Signature = namedtuple('_Signature', ['kwd_params', 'default_params', 'has_var_args', 'has_var_kwds'])
 
 if six.PY3:
@@ -187,11 +155,11 @@ else:
 class Computation(object):
     def __init__(self):
         self.dag = nx.DiGraph()
-        self.v = _ComputationAttributeView(self.nodes, self.value, self.value)
-        self.s = _ComputationAttributeView(self.nodes, self.state, self.state)
-        self.i = _ComputationAttributeView(self.nodes, self.get_inputs, self.get_inputs)
-        self.t = _ComputationAttributeView(self.nodes, self.tags, self.tags)
-        self.tim = _ComputationAttributeView(self.nodes, self.get_timing, self.get_timing)
+        self.v = AttributeView(self.nodes, self.value, self.value)
+        self.s = AttributeView(self.nodes, self.state, self.state)
+        self.i = AttributeView(self.nodes, self.get_inputs, self.get_inputs)
+        self.t = AttributeView(self.nodes, self.tags, self.tags)
+        self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
 
     def add_node(self, name, func=None, **kwargs):
         """
