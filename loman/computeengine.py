@@ -1,6 +1,6 @@
 import networkx as nx
 from enum import Enum
-from collections import OrderedDict, deque, namedtuple
+from collections import OrderedDict, deque, namedtuple, defaultdict
 import inspect
 import decorator
 import dill
@@ -17,7 +17,7 @@ import pydotplus
 from datetime import datetime
 import os
 import tempfile
-from .util import AttributeView, apply_n, apply1
+from .util import AttributeView, apply_n, apply1, as_iterable
 
 
 LOG = logging.getLogger('loman.computeengine')
@@ -160,6 +160,7 @@ class Computation(object):
         self.i = AttributeView(self.nodes, self.get_inputs, self.get_inputs)
         self.t = AttributeView(self.nodes, self.tags, self.tags)
         self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
+        self.tag_map = defaultdict(set)
 
     def add_node(self, name, func=None, **kwargs):
         """
@@ -255,6 +256,7 @@ class Computation(object):
 
     def _set_tag_one(self, name, tag):
         self.dag.node[name][_AN_TAG].add(tag)
+        self.tag_map[tag].add(name)
 
     def set_tag(self, name, tag):
         """
@@ -267,6 +269,7 @@ class Computation(object):
 
     def _clear_tag_one(self, name, tag):
         self.dag.node[name][_AN_TAG].discard(tag)
+        self.tag_map[tag].discard(name)
 
     def clear_tag(self, name, tag):
         """
@@ -593,6 +596,20 @@ class Computation(object):
         :return: 
         """
         return apply1(self._tag_one, name)
+
+    def nodes_by_tag(self, tag):
+        """
+        Get the names of nodes with a particular tag or tags
+        
+        :param tag: Tag or tags for which to retrieve nodes 
+        :return: Names of the nodes with those tags 
+        """
+        nodes = set()
+        for tag1 in as_iterable(tag):
+            nodes1 = self.tag_map.get(tag1)
+            if nodes1 is not None:
+                nodes.update(nodes1)
+        return nodes
 
     def _get_item_one(self, name):
         node = self.dag.node[name]
