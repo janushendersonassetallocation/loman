@@ -25,6 +25,7 @@ def test_basic():
     assert comp.state('c') == States.UNINITIALIZED
     assert comp.state('b') == States.UNINITIALIZED
     assert comp.state('d') == States.UNINITIALIZED
+    assert comp._state_map[States.UNINITIALIZED] == set(['a', 'b', 'c', 'd'])
 
     comp.insert("a", 1)
     assert comp.state('a') == States.UPTODATE

@@ -520,12 +520,6 @@ class Computation(object):
         """
         apply1(self._compute_one, name, raise_exceptions=raise_exceptions)
 
-    def _get_computable_nodes_iter(self):
-        for n, node in self.dag.nodes_iter(data=True):
-
-            if node[_AN_STATE] == States.COMPUTABLE:
-                yield n
-
     def compute_all(self, raise_exceptions=False):
         """Compute all nodes of a computation that can be computed
 
@@ -538,16 +532,21 @@ class Computation(object):
         """
         computed = set()
         while True:
-            computable = self._get_computable_nodes_iter()
-            any_computable = False
-            for n in computable:
-                if n in computed:
-                    raise LoopDetectedException("compute_all is calculating {} for the second time".format(n))
-                any_computable = True
-                self._compute_node(n, raise_exceptions=raise_exceptions)
-                computed.add(n)
-            if not any_computable:
+            try:
+                # This is the fastest way to get an element from a set
+                # https://stackoverflow.com/questions/59825/how-to-retrieve-an-element-from-a-set-without-removing-it
+                is_empty = True
+                for name in self._state_map[States.COMPUTABLE]:
+                    is_empty = False
+                    break
+                if is_empty:
+                    break
+            except KeyError:
                 break
+            if name in computed:
+                raise LoopDetectedException("compute_all is calculating {} for the second time".format(name))
+            self._compute_node(name, raise_exceptions=raise_exceptions)
+            computed.add(name)
 
     def nodes(self):
         """
