@@ -198,14 +198,12 @@ class Computation(object):
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
         node = self.dag.node[name]
 
-        node[_AN_STATE] = States.UNINITIALIZED
-        node[_AN_VALUE] = None
+        self._set_state_and_value(name, States.UNINITIALIZED, None, require_old_state=False)
+
         node[_AN_TAG] = set()
         node[_AN_GROUP] = group
         node[_AN_ARGS] = {}
         node[_AN_KWDS] = {}
-
-        self._state_map[States.UNINITIALIZED].add(name)
 
         if func:
             node[_AN_FUNC] = func
@@ -381,10 +379,14 @@ class Computation(object):
         node[_AN_STATE] = state
         self._state_map[state].add(name)
 
-    def _set_state_and_value(self, name, state, value):
+    def _set_state_and_value(self, name, state, value, require_old_state=True):
         node = self.dag.node[name]
-        old_state = node[_AN_STATE]
-        self._state_map[old_state].remove(name)
+        try:
+            old_state = node[_AN_STATE]
+            self._state_map[old_state].remove(name)
+        except KeyError:
+            if require_old_state:
+                raise
         node[_AN_STATE] = state
         node[_AN_VALUE] = value
         self._state_map[state].add(name)
