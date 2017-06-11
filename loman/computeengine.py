@@ -160,7 +160,8 @@ class Computation(object):
         self.i = AttributeView(self.nodes, self.get_inputs, self.get_inputs)
         self.t = AttributeView(self.nodes, self.tags, self.tags)
         self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
-        self.tag_map = defaultdict(set)
+        self._tag_map = defaultdict(set)
+        self._state_map = {state: set() for state in States}
 
     def add_node(self, name, func=None, **kwargs):
         """
@@ -203,6 +204,8 @@ class Computation(object):
         node[_AN_GROUP] = group
         node[_AN_ARGS] = {}
         node[_AN_KWDS] = {}
+
+        self._state_map[States.UNINITIALIZED].add(name)
 
         if func:
             node[_AN_FUNC] = func
@@ -256,7 +259,7 @@ class Computation(object):
 
     def _set_tag_one(self, name, tag):
         self.dag.node[name][_AN_TAG].add(tag)
-        self.tag_map[tag].add(name)
+        self._tag_map[tag].add(name)
 
     def set_tag(self, name, tag):
         """
@@ -269,7 +272,7 @@ class Computation(object):
 
     def _clear_tag_one(self, name, tag):
         self.dag.node[name][_AN_TAG].discard(tag)
-        self.tag_map[tag].discard(name)
+        self._tag_map[tag].discard(name)
 
     def clear_tag(self, name, tag):
         """
@@ -295,12 +298,14 @@ class Computation(object):
 
         if len(self.dag.successors(name)) == 0:
             preds = self.dag.predecessors(name)
+            state = self.dag.node[name][_AN_STATE]
             self.dag.remove_node(name)
+            self._state_map[state].remove(name)
             for n in preds:
                 if self.dag.node[n][_AN_STATE] == States.PLACEHOLDER:
                     self.delete_node(n)
         else:
-            self.dag.node[name][_AN_STATE] = States.PLACEHOLDER
+            self._set_state(name, States.PLACEHOLDER)
 
     def insert(self, name, value):
         """
@@ -318,9 +323,7 @@ class Computation(object):
         if name not in self.dag:
             raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
 
-        node = self.dag.node[name]
-        node[_AN_VALUE] = value
-        node[_AN_STATE] = States.UPTODATE
+        self._set_state_and_value(name, States.UPTODATE, value)
         self._set_descendents(name, States.STALE)
         for n in self.dag.successors(name):
             self._try_set_computable(n)
@@ -345,15 +348,14 @@ class Computation(object):
         stale = set()
         computable = set()
         for name, value in name_value_pairs:
-            self.dag.node[name][_AN_VALUE] = value
-            self.dag.node[name][_AN_STATE] = States.UPTODATE
+            self._set_state_and_value(name, States.UPTODATE, value)
             stale.update(nx.dag.descendants(self.dag, name))
             computable.update(self.dag.successors(name))
         names = set([name for name, value in name_value_pairs])
         stale.difference_update(names)
         computable.difference_update(names)
         for name in stale:
-            self.dag.node[name][_AN_STATE] = States.STALE
+            self._set_state(name, States.STALE)
         for name in computable:
             self._try_set_computable(name)
 
@@ -372,38 +374,56 @@ class Computation(object):
         name_value_pairs = [(name, other.value(name)) for name in nodes]
         self.insert_many(name_value_pairs)
 
+    def _set_state(self, name, state):
+        node = self.dag.node[name]
+        old_state = node[_AN_STATE]
+        self._state_map[old_state].remove(name)
+        node[_AN_STATE] = state
+        self._state_map[state].add(name)
+
+    def _set_state_and_value(self, name, state, value):
+        node = self.dag.node[name]
+        old_state = node[_AN_STATE]
+        self._state_map[old_state].remove(name)
+        node[_AN_STATE] = state
+        node[_AN_VALUE] = value
+        self._state_map[state].add(name)
+
+    def _set_states(self, names, state):
+        for name in names:
+            node = self.dag.node[name]
+            old_state = node[_AN_STATE]
+            self._state_map[old_state].remove(name)
+            node[_AN_STATE] = state
+        self._state_map[state].update(names)
+
     def set_stale(self, name):
         """
         Set the state of a node and all its dependencies to STALE
 
         :param name: Name of the node to set as STALE.
         """
-        self.dag.node[name][_AN_STATE] = States.STALE
-        for n in nx.dag.descendants(self.dag, name):
-            self.dag.node[n][_AN_STATE] = States.STALE
+        names = [name]
+        names.extend(nx.dag.descendants(self.dag, name))
+        self._set_states(names, States.STALE)
         self._try_set_computable(name)
 
     def _set_descendents(self, name, state):
-        for n in nx.dag.descendants(self.dag, name):
-            self.dag.node[n][_AN_STATE] = state
+        descendents = nx.dag.descendants(self.dag, name)
+        self._set_states(descendents, state)
 
     def _set_uninitialized(self, name):
-        n = self.dag.node[name]
-        n[_AN_STATE] = States.UNINITIALIZED
-        n.pop(_AN_VALUE, None)
+        self._set_states([name], States.UNINITIALIZED)
+        self.dag.node[name].pop(_AN_VALUE, None)
 
     def _set_uptodate(self, name, value):
-        node = self.dag.node[name]
-        node[_AN_STATE] = States.UPTODATE
-        node[_AN_VALUE] = value
+        self._set_state_and_value(name, States.UPTODATE, value)
         self._set_descendents(name, States.STALE)
         for n in self.dag.successors(name):
             self._try_set_computable(n)
 
     def _set_error(self, name, error):
-        node = self.dag.node[name]
-        node[_AN_STATE] = States.ERROR
-        node[_AN_VALUE] = error
+        self._set_state_and_value(name, States.ERROR, error)
         self._set_descendents(name, States.STALE)
 
     def _try_set_computable(self, name):
@@ -413,7 +433,7 @@ class Computation(object):
                     return
                 if self.dag.node[n][_AN_STATE] != States.UPTODATE:
                     return
-            self.dag.node[name][_AN_STATE] = States.COMPUTABLE
+            self._set_state(name, States.COMPUTABLE)
 
     def _get_parameter_data(self, name):
         for arg, value in six.iteritems(self.dag.node[name][_AN_ARGS]):
@@ -446,16 +466,14 @@ class Computation(object):
             value = f(*args, **kwds)
             end_dt = datetime.utcnow()
             delta = (end_dt - start_dt).total_seconds()
-            node[_AN_STATE] = States.UPTODATE
-            node[_AN_VALUE] = value
+            self._set_state_and_value(name, States.UPTODATE, value)
             node[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
             self._set_descendents(name, States.STALE)
             for n in self.dag.successors(name):
                 self._try_set_computable(n)
         except Exception as e:
-            node[_AN_STATE] = States.ERROR
             tb = traceback.format_exc()
-            node[_AN_VALUE] = Error(e, tb)
+            self._set_state_and_value(name, States.ERROR, Error(e, tb))
             self._set_descendents(name, States.STALE)
             if raise_exceptions:
                 raise
@@ -606,7 +624,7 @@ class Computation(object):
         """
         nodes = set()
         for tag1 in as_iterable(tag):
-            nodes1 = self.tag_map.get(tag1)
+            nodes1 = self._tag_map.get(tag1)
             if nodes1 is not None:
                 nodes.update(nodes1)
         return nodes
@@ -692,7 +710,6 @@ class Computation(object):
         else:
             return kwds
 
-
     def get_inputs(self, name):
         """
         Get a list of the inputs for a node or set of nodes
@@ -748,6 +765,8 @@ class Computation(object):
         """
         obj = Computation()
         obj.dag = nx.DiGraph(self.dag)
+        obj._tag_map = {tag: nodes.copy() for tag, nodes in six.iteritems(self._tag_map)}
+        obj._state_map = {state: nodes.copy() for state, nodes in six.iteritems(self._state_map)}
         return obj
 
     def add_named_tuple_expansion(self, name, namedtuple_type, group=None):
