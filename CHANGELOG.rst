@@ -1,12 +1,19 @@
 Change Log
 ==========
 
-`0.1.3`_ (unreleased)
+`0.1.4`_ (unreleased)
 ---------------------
 
-* Methods set_tag and clear_tag support lists or generators of tags.
+`0.1.3`_ (2017-07-02)
+---------------------
+
+* Methods set_tag and clear_tag support lists or generators of tags. Method nodes_by_tag can retrieve a list of nodes with a specific tag.
 * Remove set_tags and clear_tags.
 * Add node computation timing data, accessible through tim attribute-style access or get_timing method.
+* compute method can accept a list of nodes to compute.
+* Loman now uses pydotplus for visualization. Internally, visualization has two steps: converting a Computation to a networkx visualization DAG, and then converting that to a pydotplus Dot object.
+* Added view method - creates and opens a temporary pdf visualization.
+* draw and view methods can show timing information with colors='timing' option
 
 `0.1.2`_ (2017-04-28)
 ---------------------
