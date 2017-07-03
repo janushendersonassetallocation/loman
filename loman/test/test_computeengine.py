@@ -1044,3 +1044,41 @@ def test_state_map_with_adding_existing_node():
     comp.compute('a')
     assert comp._state_map[States.COMPUTABLE] == set()
     assert comp._state_map[States.UPTODATE] == {'a'}
+
+
+def test_pinning():
+    def add_one(x):
+        return x + 1
+
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', add_one, args=['a'])
+    comp.add_node('c', add_one, args=['b'])
+    comp.add_node('d', add_one, args=['c'])
+    comp.compute_all()
+
+    assert comp.v[['a', 'b', 'c', 'd']] == [1, 2, 3, 4]
+
+    comp.pin('c')
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.PINNED, States.UPTODATE]
+
+    comp.insert('a', 11)
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.COMPUTABLE, States.PINNED, States.UPTODATE]
+    comp.compute_all()
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.PINNED, States.UPTODATE]
+    assert comp.v[['a', 'b', 'c', 'd']] == [11, 12, 3, 4]
+
+    comp.pin('c', 20)
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.PINNED, States.COMPUTABLE]
+    assert comp.v.c == 20
+    comp.compute_all()
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.PINNED, States.UPTODATE]
+    assert comp.v[['a', 'b', 'c', 'd']] == [11, 12, 20, 21]
+
+    comp.unpin('c')
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.COMPUTABLE, States.STALE]
+
+    comp.compute_all()
+    assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.UPTODATE, States.UPTODATE]
+    assert comp.v[['a', 'b', 'c', 'd']] == [11, 12, 13, 14]
+

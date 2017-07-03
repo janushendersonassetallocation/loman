@@ -31,6 +31,7 @@ class States(Enum):
     COMPUTABLE = 3
     UPTODATE = 4
     ERROR = 5
+    PINNED = 6
 
 
 _state_colors = {
@@ -40,7 +41,8 @@ _state_colors = {
     States.STALE: '#ffff14',            # xkcd yellow
     States.COMPUTABLE: '#9dff00',       # xkcd bright yellow green
     States.UPTODATE: '#15b01a',         # xkcd green
-    States.ERROR: '#e50000'             # xkcd red
+    States.ERROR: '#e50000',            # xkcd red
+    States.PINNED: '#bf77f6'            # xkcd light purple
 }
 
 # Node attributes
@@ -410,8 +412,47 @@ class Computation(object):
         self._set_states(names, States.STALE)
         self._try_set_computable(name)
 
+    def pin(self, name, value=None):
+        """
+        Set the state of a node to PINNED
+        
+        :param name: Name of the node to set as PINNED.
+        :param value: Value to pin to the node, if provided.
+        :type value: default None
+        """
+        if value is not None:
+            self.insert(name, value)
+        self._set_states(name, States.PINNED)
+
+    def unpin(self, name):
+        """
+        Unpin a node (state of node and all descendents will be set to STALE)
+
+        :param name: Name of the node to set as PINNED.
+        """
+        self.set_stale(name)
+
+    def _get_descendents(self, name, stop_states=None):
+        if self.dag.node[name][_AN_STATE] in stop_states:
+            return set()
+        if stop_states is None:
+            stop_states = []
+        visited = set()
+        to_visit = {name}
+        while to_visit:
+            n = to_visit.pop()
+            visited.add(n)
+            for n1 in self.dag.successors_iter(n):
+                if n1 in visited:
+                    continue
+                if self.dag.node[n1][_AN_STATE] in stop_states:
+                    continue
+                to_visit.add(n1)
+        visited.remove(name)
+        return visited
+
     def _set_descendents(self, name, state):
-        descendents = nx.dag.descendants(self.dag, name)
+        descendents = self._get_descendents(name, set([States.PINNED]))
         self._set_states(descendents, state)
 
     def _set_uninitialized(self, name):
@@ -429,6 +470,8 @@ class Computation(object):
         self._set_descendents(name, States.STALE)
 
     def _try_set_computable(self, name):
+        if self.dag.node[name][_AN_STATE] == States.PINNED:
+            return
         if _AN_FUNC in self.dag.node[name]:
             for n in self.dag.predecessors(name):
                 if not self.dag.has_node(n):
@@ -487,7 +530,7 @@ class Computation(object):
         for n in nx.ancestors(g, name):
             node = self.dag.node[n]
             state = node[_AN_STATE]
-            if state == States.UPTODATE:
+            if state == States.UPTODATE or state == States.PINNED:
                 g.remove_node(n)
 
         ancestors = nx.ancestors(g, name)
