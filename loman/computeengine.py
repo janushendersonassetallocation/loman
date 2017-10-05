@@ -916,6 +916,18 @@ class Computation(object):
             f.write(d.create_pdf())
             os.startfile(f.name)
 
+    def print_errors(self):
+        """
+        Print tracebacks for every node with state "ERROR" in a Computation 
+        """
+        for n in self.nodes():
+            if self.s[n] == States.ERROR:
+                six.print_("{}".format(n))
+                six.print_("=" * len(n))
+                six.print_()
+                six.print_(self.v[n].traceback)
+                six.print_()
+
 
 def _contract_node_one(g, n):
     for p in g.predecessors(n):
