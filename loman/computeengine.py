@@ -257,6 +257,15 @@ class Computation(object):
         if serialize:
             self.set_tag(name, _T_SERIALIZE)
 
+    def _refresh_maps(self):
+        self._tag_map.clear()
+        for state in States:
+            self._state_map[state].clear()
+        for name in self.nodes():
+            self._state_map[self.state(name)].add(name)
+            for tag in self.tags(name):
+                self._tag_map[tag].add(name)
+
     def _set_tag_one(self, name, tag):
         self.dag.node[name][_AN_TAG].add(tag)
         self._tag_map[tag].add(name)
