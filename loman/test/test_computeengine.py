@@ -1082,3 +1082,9 @@ def test_pinning():
     assert comp.s[['a', 'b', 'c', 'd']] == [States.UPTODATE, States.UPTODATE, States.UPTODATE, States.UPTODATE]
     assert comp.v[['a', 'b', 'c', 'd']] == [11, 12, 13, 14]
 
+
+def test_add_node_with_none_value():
+    comp = Computation()
+    comp.add_node('a', value=None)
+    assert comp.s.a == States.UPTODATE
+    assert comp.v.a is None

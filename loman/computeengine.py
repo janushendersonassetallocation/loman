@@ -190,6 +190,7 @@ class Computation(object):
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
+        has_value = _AN_VALUE in kwargs
         value = kwargs.get(_AN_VALUE, None)
         serialize = kwargs.get('serialize', True)
         inspect = kwargs.get('inspect', True)
@@ -249,7 +250,7 @@ class Computation(object):
 
         if func or value is not None:
             self._set_descendents(name, States.STALE)
-        if value is not None:
+        if has_value:
             self._set_uptodate(name, value)
         if node[_AN_STATE] == States.UNINITIALIZED:
             self._try_set_computable(name)
