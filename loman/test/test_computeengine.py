@@ -1088,3 +1088,14 @@ def test_add_node_with_none_value():
     comp.add_node('a', value=None)
     assert comp.s.a == States.UPTODATE
     assert comp.v.a is None
+
+
+def test_add_node_with_value_replacing_calculation_node():
+    comp = Computation()
+    comp.add_node('a', value=1)
+    comp.add_node('b', lambda a: a+1)
+    comp.compute_all()
+    comp.add_node('b', value=10)
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE
+    assert comp.v.b == 10

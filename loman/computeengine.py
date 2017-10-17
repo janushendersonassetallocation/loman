@@ -207,6 +207,7 @@ class Computation(object):
         node[_AN_GROUP] = group
         node[_AN_ARGS] = {}
         node[_AN_KWDS] = {}
+        node[_AN_FUNC] = None
 
         if func:
             node[_AN_FUNC] = func
@@ -482,7 +483,7 @@ class Computation(object):
     def _try_set_computable(self, name):
         if self.dag.node[name][_AN_STATE] == States.PINNED:
             return
-        if _AN_FUNC in self.dag.node[name]:
+        if self.dag.node[name].get(_AN_FUNC) is not None:
             for n in self.dag.predecessors(name):
                 if not self.dag.has_node(n):
                     return
