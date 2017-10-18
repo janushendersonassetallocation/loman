@@ -472,8 +472,29 @@ class Computation(object):
 
     def _compute_node(self, name, raise_exceptions=False):
         LOG.debug('Computing node {}'.format(str(name)))
-        node = self.dag.node[name]
-        f = node[_AN_FUNC]
+        node0 = self.dag.node[name]
+        f, args, kwds = self._get_func_args_kwds(name)
+        try:
+            start_dt = datetime.utcnow()
+            fut = self.default_executor.submit(f, *args, **kwds)
+            value = fut.result()
+            end_dt = datetime.utcnow()
+            delta = (end_dt - start_dt).total_seconds()
+            self._set_state_and_value(name, States.UPTODATE, value)
+            node0[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
+            self._set_descendents(name, States.STALE)
+            for n in self.dag.successors(name):
+                self._try_set_computable(n)
+        except Exception as e:
+            tb = traceback.format_exc()
+            self._set_state_and_value(name, States.ERROR, Error(e, tb))
+            self._set_descendents(name, States.STALE)
+            if raise_exceptions:
+                raise
+
+    def _get_func_args_kwds(self, name):
+        node0 = self.dag.node[name]
+        f = node0[_AN_FUNC]
         args, kwds = [], {}
         for param in self._get_parameter_data(name):
             if param.type == _ParameterType.ARG:
@@ -485,23 +506,7 @@ class Computation(object):
                 kwds[param.name] = param.value
             else:
                 raise Exception("Unexpected param type: {}".format(param.type))
-        try:
-            start_dt = datetime.utcnow()
-            fut = self.default_executor.submit(f, *args, **kwds)
-            value = fut.result()
-            end_dt = datetime.utcnow()
-            delta = (end_dt - start_dt).total_seconds()
-            self._set_state_and_value(name, States.UPTODATE, value)
-            node[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
-            self._set_descendents(name, States.STALE)
-            for n in self.dag.successors(name):
-                self._try_set_computable(n)
-        except Exception as e:
-            tb = traceback.format_exc()
-            self._set_state_and_value(name, States.ERROR, Error(e, tb))
-            self._set_descendents(name, States.STALE)
-            if raise_exceptions:
-                raise
+        return f, args, kwds
 
     def _get_calc_nodes(self, name):
         g = nx.DiGraph()
