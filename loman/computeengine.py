@@ -4,6 +4,7 @@ import os
 import tempfile
 import traceback
 from collections import namedtuple, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from enum import Enum
 
@@ -113,7 +114,16 @@ C = ConstantValue
 
 
 class Computation(object):
-    def __init__(self):
+    def __init__(self, default_executor=None):
+        """
+        
+        :param default_executor: An executor 
+        :type default_executor: concurrent.futures.Executor, default ThreadPoolExecutor(max_workers=1) 
+        """
+        if default_executor is None:
+            self.default_executor = ThreadPoolExecutor(1)
+        else:
+            self.default_executor = default_executor
         self.dag = nx.DiGraph()
         self.v = AttributeView(self.nodes, self.value, self.value)
         self.s = AttributeView(self.nodes, self.state, self.state)
@@ -477,7 +487,8 @@ class Computation(object):
                 raise Exception("Unexpected param type: {}".format(param.type))
         try:
             start_dt = datetime.utcnow()
-            value = f(*args, **kwds)
+            fut = self.default_executor.submit(f, *args, **kwds)
+            value = fut.result()
             end_dt = datetime.utcnow()
             delta = (end_dt - start_dt).total_seconds()
             self._set_state_and_value(name, States.UPTODATE, value)
