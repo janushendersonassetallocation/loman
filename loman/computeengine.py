@@ -565,10 +565,6 @@ class Computation(object):
         nodes_sorted = nx.topological_sort(g, ancestors)
         return [n for n in nodes_sorted if n in ancestors]
 
-    def _compute_one(self, name, raise_exceptions):
-        calc_nodes = self._get_calc_nodes(name)
-        self._compute_nodes(calc_nodes, raise_exceptions=raise_exceptions)
-
     def compute(self, name, raise_exceptions=False):
         """
         Compute a node and all necessary predecessors
@@ -581,7 +577,15 @@ class Computation(object):
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        apply1(self._compute_one, name, raise_exceptions=raise_exceptions)
+
+        if isinstance(name, (types.GeneratorType, list)):
+            calc_nodes = set()
+            for name0 in name:
+                for n in self._get_calc_nodes(name0):
+                    calc_nodes.add(n)
+        else:
+            calc_nodes = self._get_calc_nodes(name)
+        self._compute_nodes(calc_nodes, raise_exceptions=raise_exceptions)
 
     def compute_all(self, raise_exceptions=False):
         """Compute all nodes of a computation that can be computed
