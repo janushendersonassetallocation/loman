@@ -470,27 +470,39 @@ class Computation(object):
             param_type, param_name = edge[_AE_PARAM]
             yield _ParameterItem(param_type, param_name, param_value)
 
+    def _eval_node(self, f, args, kwds, raise_exceptions):
+        exc, tb = None, None
+        start_dt = datetime.utcnow()
+        try:
+            value = f(*args, **kwds)
+        except Exception as e:
+            value = None
+            exc = e
+            tb = traceback.format_exc()
+            if raise_exceptions:
+                raise
+        end_dt = datetime.utcnow()
+        return value, exc, tb, start_dt, end_dt
+
     def _compute_node(self, name, raise_exceptions=False):
         LOG.debug('Computing node {}'.format(str(name)))
         node0 = self.dag.node[name]
         f, args, kwds = self._get_func_args_kwds(name)
         try:
-            start_dt = datetime.utcnow()
-            fut = self.default_executor.submit(f, *args, **kwds)
-            value = fut.result()
-            end_dt = datetime.utcnow()
+            fut = self.default_executor.submit(self._eval_node, f, args, kwds, raise_exceptions)
+            value, exc, tb, start_dt, end_dt = fut.result()
             delta = (end_dt - start_dt).total_seconds()
-            self._set_state_and_value(name, States.UPTODATE, value)
-            node0[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
-            self._set_descendents(name, States.STALE)
-            for n in self.dag.successors(name):
-                self._try_set_computable(n)
+            if value is not None:
+                self._set_state_and_value(name, States.UPTODATE, value)
+                node0[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
+                self._set_descendents(name, States.STALE)
+                for n in self.dag.successors(name):
+                    self._try_set_computable(n)
+            elif exc is not None:
+                self._set_state_and_value(name, States.ERROR, Error(exc, tb))
+                self._set_descendents(name, States.STALE)
         except Exception as e:
-            tb = traceback.format_exc()
-            self._set_state_and_value(name, States.ERROR, Error(e, tb))
-            self._set_descendents(name, States.STALE)
-            if raise_exceptions:
-                raise
+            raise
 
     def _get_func_args_kwds(self, name):
         node0 = self.dag.node[name]
