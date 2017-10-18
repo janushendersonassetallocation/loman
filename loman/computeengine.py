@@ -503,13 +503,6 @@ class Computation(object):
     def _compute_nodes(self, names, raise_exceptions=False):
         LOG.debug('Computing nodes {}'.format(list(map(str, names))))
 
-        # TODO: Don't find cycles - just fail computation when they are detected
-        try:
-            nx.find_cycle(self.dag, names)
-            raise LoopDetectedException()
-        except nx.NetworkXNoCycle:
-            pass
-
         futs = {}
 
         def run(name):
@@ -518,7 +511,6 @@ class Computation(object):
             fut = self.default_executor.submit(self._eval_node, f, args, kwds, raise_exceptions)
             futs[fut] = name
 
-        stale_set = set()
         computed = set()
 
         for name in names:
@@ -526,8 +518,6 @@ class Computation(object):
             state = node0[_AN_STATE]
             if state == States.COMPUTABLE:
                 run(name)
-            elif state == States.STALE or state == States.UNINITIALIZED:
-                stale_set.add(name)
 
         while len(futs) > 0:
             done, not_done = wait(futs.keys(), return_when=FIRST_COMPLETED)
@@ -547,9 +537,8 @@ class Computation(object):
                         self._try_set_computable(n)
                         node0 = self.dag.node[n]
                         state = node0[_AN_STATE]
-                        if state == States.COMPUTABLE and n in stale_set:
+                        if state == States.COMPUTABLE and n in names:
                             run(n)
-                            stale_set.remove(n)
                 else:
                     self._set_state_and_value(name, States.ERROR, Error(exc, tb))
                     self._set_descendents(name, States.STALE)
@@ -604,8 +593,7 @@ class Computation(object):
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        nodes = self._state_map[States.STALE] | self._state_map[States.COMPUTABLE] | self._state_map[States.UNINITIALIZED]
-        self._compute_nodes(nodes, raise_exceptions=raise_exceptions)
+        self._compute_nodes(self.nodes(), raise_exceptions=raise_exceptions)
 
     def nodes(self):
         """
