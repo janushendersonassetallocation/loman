@@ -295,7 +295,7 @@ class Computation(object):
         else:
             self._set_state(name, States.PLACEHOLDER)
 
-    def insert(self, name, value):
+    def insert(self, name, value, force=False):
         """
         Insert a value into a node of a computation
 
@@ -305,11 +305,15 @@ class Computation(object):
 
         :param name: Name of the node to add.
         :param value: The value to be inserted into the node.
+        :param force: Whether to force recalculation of descendents if node value and state would not be changed
         """
         LOG.debug('Inserting value into node {}'.format(str(name)))
 
         if name not in self.dag:
             raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+
+        if (not force) and self.__getitem__(name) == (States.UPTODATE, value):
+            return
 
         self._set_state_and_value(name, States.UPTODATE, value)
         self._set_descendents(name, States.STALE)
