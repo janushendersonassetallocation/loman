@@ -4,6 +4,7 @@ import os
 import tempfile
 import traceback
 from collections import namedtuple, defaultdict
+from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 from datetime import datetime
 from enum import Enum
 
@@ -53,6 +54,7 @@ _AN_TAG = 'tag'
 _AN_ARGS = 'args'
 _AN_KWDS = 'kwds'
 _AN_TIMING = 'timing'
+_AN_EXECUTOR = 'executor'
 
 # Edge attributes
 _AE_PARAM = 'param'
@@ -113,7 +115,20 @@ C = ConstantValue
 
 
 class Computation(object):
-    def __init__(self):
+    def __init__(self, default_executor=None, executor_map=None):
+        """
+        
+        :param default_executor: An executor 
+        :type default_executor: concurrent.futures.Executor, default ThreadPoolExecutor(max_workers=1) 
+        """
+        if default_executor is None:
+            self.default_executor = ThreadPoolExecutor(1)
+        else:
+            self.default_executor = default_executor
+        if executor_map is None:
+            self.executor_map = {}
+        else:
+            self.executor_map = executor_map
         self.dag = nx.DiGraph()
         self.v = AttributeView(self.nodes, self.value, self.value)
         self.s = AttributeView(self.nodes, self.state, self.state)
@@ -144,6 +159,8 @@ class Computation(object):
         :type group: default None
         :param tags: Set of tags to apply to node
         :type tags: Iterable
+        :param executor: Name of executor to run node on
+        :type executor: string
         """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
@@ -154,6 +171,7 @@ class Computation(object):
         inspect = kwargs.get('inspect', True)
         group = kwargs.get('group', None)
         tags = kwargs.get('tags', [])
+        executor = kwargs.get('executor', None)
 
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
@@ -166,6 +184,7 @@ class Computation(object):
         node[_AN_ARGS] = {}
         node[_AN_KWDS] = {}
         node[_AN_FUNC] = None
+        node[_AN_EXECUTOR] = executor
 
         if func:
             node[_AN_FUNC] = func
@@ -460,10 +479,10 @@ class Computation(object):
             param_type, param_name = edge[_AE_PARAM]
             yield _ParameterItem(param_type, param_name, param_value)
 
-    def _compute_node(self, name, raise_exceptions=False):
-        LOG.debug('Computing node {}'.format(str(name)))
-        node = self.dag.node[name]
-        f = node[_AN_FUNC]
+    def _get_func_args_kwds(self, name):
+        node0 = self.dag.node[name]
+        f = node0[_AN_FUNC]
+        executor_name = node0.get(_AN_EXECUTOR)
         args, kwds = [], {}
         for param in self._get_parameter_data(name):
             if param.type == _ParameterType.ARG:
@@ -475,22 +494,70 @@ class Computation(object):
                 kwds[param.name] = param.value
             else:
                 raise Exception("Unexpected param type: {}".format(param.type))
+        return f, executor_name, args, kwds
+
+    def _eval_node(self, name, f, args, kwds, raise_exceptions):
+        exc, tb = None, None
+        start_dt = datetime.utcnow()
         try:
-            start_dt = datetime.utcnow()
+            logging.debug("Running " + str(name))
             value = f(*args, **kwds)
-            end_dt = datetime.utcnow()
-            delta = (end_dt - start_dt).total_seconds()
-            self._set_state_and_value(name, States.UPTODATE, value)
-            node[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
-            self._set_descendents(name, States.STALE)
-            for n in self.dag.successors(name):
-                self._try_set_computable(n)
+            logging.debug("Completed " + str(name))
         except Exception as e:
+            value = None
+            exc = e
             tb = traceback.format_exc()
-            self._set_state_and_value(name, States.ERROR, Error(e, tb))
-            self._set_descendents(name, States.STALE)
             if raise_exceptions:
                 raise
+        end_dt = datetime.utcnow()
+        return value, exc, tb, start_dt, end_dt
+
+    def _compute_nodes(self, names, raise_exceptions=False):
+        LOG.debug('Computing nodes {}'.format(list(map(str, names))))
+
+        futs = {}
+
+        def run(name):
+            f, executor_name, args, kwds = self._get_func_args_kwds(name)
+            if executor_name is None:
+                executor = self.default_executor
+            else:
+                executor = self.executor_map[executor_name]
+            fut = executor.submit(self._eval_node, name, f, args, kwds, raise_exceptions)
+            futs[fut] = name
+
+        computed = set()
+
+        for name in names:
+            node0 = self.dag.node[name]
+            state = node0[_AN_STATE]
+            if state == States.COMPUTABLE:
+                run(name)
+
+        while len(futs) > 0:
+            done, not_done = wait(futs.keys(), return_when=FIRST_COMPLETED)
+            for fut in done:
+                name = futs.pop(fut)
+                node0 = self.dag.node[name]
+                value, exc, tb, start_dt, end_dt = fut.result()
+                delta = (end_dt - start_dt).total_seconds()
+                if exc is None:
+                    self._set_state_and_value(name, States.UPTODATE, value)
+                    node0[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
+                    self._set_descendents(name, States.STALE)
+                    for n in self.dag.successors(name):
+                        logging.debug(str(name) + ' ' + str(n) + ' ' + str(computed))
+                        if n in computed:
+                            raise LoopDetectedException("Calculating {} for the second time".format(name))
+                        self._try_set_computable(n)
+                        node0 = self.dag.node[n]
+                        state = node0[_AN_STATE]
+                        if state == States.COMPUTABLE and n in names:
+                            run(n)
+                else:
+                    self._set_state_and_value(name, States.ERROR, Error(exc, tb))
+                    self._set_descendents(name, States.STALE)
+                computed.add(name)
 
     def _get_calc_nodes(self, name):
         g = nx.DiGraph()
@@ -513,13 +580,6 @@ class Computation(object):
         nodes_sorted = nx.topological_sort(g, ancestors)
         return [n for n in nodes_sorted if n in ancestors]
 
-    def _compute_one(self, name, raise_exceptions):
-        calc_nodes = self._get_calc_nodes(name)
-        for n in calc_nodes:
-            preds = self.dag.predecessors(n)
-            if all(self.dag.node[n1][_AN_STATE] == States.UPTODATE for n1 in preds):
-                self._compute_node(n, raise_exceptions=raise_exceptions)
-
     def compute(self, name, raise_exceptions=False):
         """
         Compute a node and all necessary predecessors
@@ -532,7 +592,15 @@ class Computation(object):
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        apply1(self._compute_one, name, raise_exceptions=raise_exceptions)
+
+        if isinstance(name, (types.GeneratorType, list)):
+            calc_nodes = set()
+            for name0 in name:
+                for n in self._get_calc_nodes(name0):
+                    calc_nodes.add(n)
+        else:
+            calc_nodes = self._get_calc_nodes(name)
+        self._compute_nodes(calc_nodes, raise_exceptions=raise_exceptions)
 
     def compute_all(self, raise_exceptions=False):
         """Compute all nodes of a computation that can be computed
@@ -544,23 +612,7 @@ class Computation(object):
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        computed = set()
-        while True:
-            try:
-                # This is the fastest way to get an element from a set
-                # https://stackoverflow.com/questions/59825/how-to-retrieve-an-element-from-a-set-without-removing-it
-                is_empty = True
-                for name in self._state_map[States.COMPUTABLE]:
-                    is_empty = False
-                    break
-                if is_empty:
-                    break
-            except KeyError:
-                break
-            if name in computed:
-                raise LoopDetectedException("compute_all is calculating {} for the second time".format(name))
-            self._compute_node(name, raise_exceptions=raise_exceptions)
-            computed.add(name)
+        self._compute_nodes(self.nodes(), raise_exceptions=raise_exceptions)
 
     def nodes(self):
         """
