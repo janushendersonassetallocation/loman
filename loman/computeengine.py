@@ -486,11 +486,13 @@ class Computation(object):
                 raise Exception("Unexpected param type: {}".format(param.type))
         return f, args, kwds
 
-    def _eval_node(self, f, args, kwds, raise_exceptions):
+    def _eval_node(self, name, f, args, kwds, raise_exceptions):
         exc, tb = None, None
         start_dt = datetime.utcnow()
         try:
+            logging.debug("Running " + str(name))
             value = f(*args, **kwds)
+            logging.debug("Completed " + str(name))
         except Exception as e:
             value = None
             exc = e
@@ -506,9 +508,8 @@ class Computation(object):
         futs = {}
 
         def run(name):
-            logging.debug("Running " + str(name))
             f, args, kwds = self._get_func_args_kwds(name)
-            fut = self.default_executor.submit(self._eval_node, f, args, kwds, raise_exceptions)
+            fut = self.default_executor.submit(self._eval_node, name, f, args, kwds, raise_exceptions)
             futs[fut] = name
 
         computed = set()
