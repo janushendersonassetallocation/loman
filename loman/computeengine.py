@@ -54,6 +54,7 @@ _AN_TAG = 'tag'
 _AN_ARGS = 'args'
 _AN_KWDS = 'kwds'
 _AN_TIMING = 'timing'
+_AN_EXECUTOR = 'executor'
 
 # Edge attributes
 _AE_PARAM = 'param'
@@ -114,7 +115,7 @@ C = ConstantValue
 
 
 class Computation(object):
-    def __init__(self, default_executor=None):
+    def __init__(self, default_executor=None, executor_map=None):
         """
         
         :param default_executor: An executor 
@@ -124,6 +125,10 @@ class Computation(object):
             self.default_executor = ThreadPoolExecutor(1)
         else:
             self.default_executor = default_executor
+        if executor_map is None:
+            self.executor_map = {}
+        else:
+            self.executor_map = executor_map
         self.dag = nx.DiGraph()
         self.v = AttributeView(self.nodes, self.value, self.value)
         self.s = AttributeView(self.nodes, self.state, self.state)
@@ -473,6 +478,7 @@ class Computation(object):
     def _get_func_args_kwds(self, name):
         node0 = self.dag.node[name]
         f = node0[_AN_FUNC]
+        executor_name = node0.get(_AN_EXECUTOR)
         args, kwds = [], {}
         for param in self._get_parameter_data(name):
             if param.type == _ParameterType.ARG:
@@ -484,7 +490,7 @@ class Computation(object):
                 kwds[param.name] = param.value
             else:
                 raise Exception("Unexpected param type: {}".format(param.type))
-        return f, args, kwds
+        return f, executor_name, args, kwds
 
     def _eval_node(self, name, f, args, kwds, raise_exceptions):
         exc, tb = None, None
@@ -508,8 +514,12 @@ class Computation(object):
         futs = {}
 
         def run(name):
-            f, args, kwds = self._get_func_args_kwds(name)
-            fut = self.default_executor.submit(self._eval_node, name, f, args, kwds, raise_exceptions)
+            f, executor_name, args, kwds = self._get_func_args_kwds(name)
+            if executor_name is None:
+                executor = self.default_executor
+            else:
+                executor = self.executor_map[executor_name]
+            fut = executor.submit(self._eval_node, name, f, args, kwds, raise_exceptions)
             futs[fut] = name
 
         computed = set()
