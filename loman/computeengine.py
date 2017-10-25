@@ -159,6 +159,8 @@ class Computation(object):
         :type group: default None
         :param tags: Set of tags to apply to node
         :type tags: Iterable
+        :param executor: Name of executor to run node on
+        :type executor: string
         """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
@@ -169,6 +171,7 @@ class Computation(object):
         inspect = kwargs.get('inspect', True)
         group = kwargs.get('group', None)
         tags = kwargs.get('tags', [])
+        executor = kwargs.get('executor', None)
 
         self.dag.add_node(name)
         self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
@@ -181,6 +184,7 @@ class Computation(object):
         node[_AN_ARGS] = {}
         node[_AN_KWDS] = {}
         node[_AN_FUNC] = None
+        node[_AN_EXECUTOR] = executor
 
         if func:
             node[_AN_FUNC] = func

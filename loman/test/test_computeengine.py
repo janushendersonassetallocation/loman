@@ -1120,3 +1120,21 @@ def test_thread_pool_executor():
     end_dt = datetime.utcnow()
     delta = (end_dt - start_dt).total_seconds()
     assert delta < (n-1) * sleep_time
+
+
+def test_node_specific_thread_pool_executor():
+    sleep_time = 0.2
+    n = 10
+    def wait(c):
+        sleep(sleep_time)
+        return c
+
+    executor_map = {'foo': ThreadPoolExecutor(n)}
+    comp = Computation(executor_map=executor_map)
+    start_dt = datetime.utcnow()
+    for c in range(n):
+        comp.add_node(c, wait, kwds={'c': C(c)}, executor='foo')
+    comp.compute_all()
+    end_dt = datetime.utcnow()
+    delta = (end_dt - start_dt).total_seconds()
+    assert delta < (n-1) * sleep_time
