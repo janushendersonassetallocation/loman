@@ -1,3 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from time import sleep
+
 from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C
 import six
 from collections import namedtuple
@@ -1099,3 +1103,20 @@ def test_add_node_with_value_replacing_calculation_node():
     comp.compute_all()
     assert comp.s.b == States.UPTODATE
     assert comp.v.b == 10
+
+
+def test_thread_pool_executor():
+    sleep_time = 0.2
+    n = 10
+    def wait(c):
+        sleep(sleep_time)
+        return c
+
+    comp = Computation(ThreadPoolExecutor(n))
+    start_dt = datetime.utcnow()
+    for c in range(n):
+        comp.add_node(c, wait, kwds={'c': C(c)})
+    comp.compute_all()
+    end_dt = datetime.utcnow()
+    delta = (end_dt - start_dt).total_seconds()
+    assert delta < (n-1) * sleep_time
