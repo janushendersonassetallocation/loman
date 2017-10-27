@@ -312,8 +312,13 @@ class Computation(object):
         if name not in self.dag:
             raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
 
-        if (not force) and self.__getitem__(name) == (States.UPTODATE, value):
-            return
+        if not force:
+            try:
+                current_state, current_value = self.__getitem__(name)
+                if current_state == States.UPTODATE and current_value == value:
+                    return
+            except:
+                pass
 
         self._set_state_and_value(name, States.UPTODATE, value)
         self._set_descendents(name, States.STALE)
