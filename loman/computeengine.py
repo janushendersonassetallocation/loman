@@ -174,7 +174,8 @@ class Computation(object):
         executor = kwargs.get('executor', None)
 
         self.dag.add_node(name)
-        self.dag.remove_edges_from((p, name) for p in self.dag.predecessors(name))
+        pred_edges = [(p, name) for p in self.dag.predecessors(name)]
+        self.dag.remove_edges_from(pred_edges)
         node = self.dag.node[name]
 
         self._set_state_and_value(name, States.UNINITIALIZED, None, require_old_state=False)
@@ -197,8 +198,8 @@ class Computation(object):
                     else:
                         input_vertex_name = arg
                         if not self.dag.has_node(input_vertex_name):
-                            self.dag.add_node(input_vertex_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
-                        self.dag.add_edge(input_vertex_name, name, attr_dict={_AE_PARAM: (_ParameterType.ARG, i)})
+                            self.dag.add_node(input_vertex_name, **{_AN_STATE: States.PLACEHOLDER})
+                        self.dag.add_edge(input_vertex_name, name, **{_AE_PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = get_signature(func)
                 param_names = set()
@@ -223,8 +224,8 @@ class Computation(object):
                         if param_name in default_names:
                             continue
                         else:
-                            self.dag.add_node(in_node_name, attr_dict={_AN_STATE: States.PLACEHOLDER})
-                    self.dag.add_edge(in_node_name, name, attr_dict={_AE_PARAM: (_ParameterType.KWD, param_name)})
+                            self.dag.add_node(in_node_name, **{_AN_STATE: States.PLACEHOLDER})
+                    self.dag.add_edge(in_node_name, name, **{_AE_PARAM: (_ParameterType.KWD, param_name)})
 
         if func or value is not None:
             self._set_descendents(name, States.STALE)
@@ -284,7 +285,7 @@ class Computation(object):
         if name not in self.dag:
             raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
 
-        if len(self.dag.successors(name)) == 0:
+        if len(self.dag.succ[name]) == 0:
             preds = self.dag.predecessors(name)
             state = self.dag.node[name][_AN_STATE]
             self.dag.remove_node(name)
@@ -439,7 +440,7 @@ class Computation(object):
         while to_visit:
             n = to_visit.pop()
             visited.add(n)
-            for n1 in self.dag.successors_iter(n):
+            for n1 in self.dag.successors(n):
                 if n1 in visited:
                     continue
                 if self.dag.node[n1][_AN_STATE] in stop_states:
@@ -484,7 +485,7 @@ class Computation(object):
             yield _ParameterItem(_ParameterType.KWD, param_name, value)
         for in_node_name in self.dag.predecessors(name):
             param_value = self.dag.node[in_node_name][_AN_VALUE]
-            edge = self.dag.edge[in_node_name][name]
+            edge = self.dag[in_node_name][name]
             param_type, param_name = edge[_AE_PARAM]
             yield _ParameterItem(param_type, param_name, param_value)
 
@@ -570,8 +571,8 @@ class Computation(object):
 
     def _get_calc_nodes(self, name):
         g = nx.DiGraph()
-        g.add_nodes_from(self.dag.nodes_iter())
-        g.add_edges_from(self.dag.edges_iter())
+        g.add_nodes_from(self.dag.nodes())
+        g.add_edges_from(self.dag.edges())
         for n in nx.ancestors(g, name):
             node = self.dag.node[n]
             state = node[_AN_STATE]
@@ -580,13 +581,13 @@ class Computation(object):
 
         ancestors = nx.ancestors(g, name)
         for n in ancestors:
-            if state == States.UNINITIALIZED and len(self.dag.predecessors(n)) == 0:
+            if state == States.UNINITIALIZED and len(self.dag.pred[n]) == 0:
                 raise Exception("Cannot compute {} because {} uninitialized".format(name, n))
             if state == States.PLACEHOLDER:
                 raise Exception("Cannot compute {} because {} is placeholder".format(name, n))
 
         ancestors.add(name)
-        nodes_sorted = nx.topological_sort(g, ancestors)
+        nodes_sorted = nx.topological_sort(g)
         return [n for n in nodes_sorted if n in ancestors]
 
     def compute(self, name, raise_exceptions=False):
@@ -742,7 +743,7 @@ class Computation(object):
             bar  States.UPTODATE      2           NaN
             foo  States.UPTODATE      1           NaN
         """
-        df = pd.DataFrame(index=nx.topological_sort_recursive(self.dag))
+        df = pd.DataFrame(index=nx.topological_sort(self.dag))
         df[_AN_STATE] = pd.Series(nx.get_node_attributes(self.dag, _AN_STATE))
         df[_AN_VALUE] = pd.Series(nx.get_node_attributes(self.dag, _AN_VALUE))
         df_timing = pd.DataFrame.from_dict(nx.get_node_attributes(self.dag, 'timing'), orient='index')
@@ -768,7 +769,7 @@ class Computation(object):
         kwds = []
         max_arg_index = -1
         for input_node in self.dag.predecessors(name):
-            input_edge = self.dag.edge[input_node][name]
+            input_edge = self.dag[input_node][name]
             input_type, input_param = input_edge[_AE_PARAM]
             if input_type == _ParameterType.ARG:
                 idx = input_param
@@ -911,8 +912,8 @@ class Computation(object):
     def to_pydot(self, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         struct_dag = nx.DiGraph(self.dag)
         if not show_expansion:
-            hide_nodes = set(struct_dag.nodes_iter())
-            for name1, name2 in struct_dag.edges_iter():
+            hide_nodes = set(struct_dag.nodes())
+            for name1, name2 in struct_dag.edges():
                 if not show_expansion and _T_EXPANSION in self.tags(name2):
                     continue
                 hide_nodes.discard(name1)
@@ -986,7 +987,7 @@ def _create_viz_dag(comp_dag, colors='state', cmap=None):
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
-    for i, (name, data) in enumerate(comp_dag.nodes_iter(data=True)):
+    for i, (name, data) in enumerate(comp_dag.nodes(data=True)):
         short_name = "n{}".format(i)
         attr_dict = {
             'label': name,
@@ -1006,9 +1007,9 @@ def _create_viz_dag(comp_dag, colors='state', cmap=None):
                 col = mpl.colors.rgb2hex(cmap(norm_duration))
             attr_dict['fillcolor'] = col
 
-        viz_dag.add_node(short_name, attr_dict)
+        viz_dag.add_node(short_name, **attr_dict)
         node_index_map[name] = short_name
-    for name1, name2 in comp_dag.edges_iter():
+    for name1, name2 in comp_dag.edges():
         short_name_1 = node_index_map[name1]
         short_name_2 = node_index_map[name2]
 
@@ -1018,18 +1019,18 @@ def _create_viz_dag(comp_dag, colors='state', cmap=None):
 
         attr_dict = {'_group': group}
 
-        viz_dag.add_edge(short_name_1, short_name_2, attr_dict)
+        viz_dag.add_edge(short_name_1, short_name_2, **attr_dict)
     return viz_dag
 
 
 def _to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
     node_groups = {}
-    for name, data in viz_dag.nodes_iter(data=True):
+    for name, data in viz_dag.nodes(data=True):
         group = data.get('_group')
         node_groups.setdefault(group, []).append(name)
 
     edge_groups = {}
-    for name1, name2, data in viz_dag.edges_iter(data=True):
+    for name1, name2, data in viz_dag.edges(data=True):
         group = data.get('_group')
         edge_groups.setdefault(group, []).append((name1, name2))
 

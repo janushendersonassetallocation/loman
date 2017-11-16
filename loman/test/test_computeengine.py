@@ -622,7 +622,7 @@ def test_delete_predecessor():
     assert comp.state('a') == States.PLACEHOLDER
     assert comp['b'] == (States.UPTODATE, 2)
     comp.delete_node('b')
-    assert comp.dag.nodes() == []
+    assert list(comp.dag.nodes()) == []
 
 
 def test_delete_successor():
@@ -635,9 +635,9 @@ def test_delete_successor():
     assert comp['b'] == (States.UPTODATE, 2)
     comp.delete_node('b')
     assert comp['a'] == (States.UPTODATE, 1)
-    assert comp.dag.nodes() == ['a']
+    assert list(comp.dag.nodes()) == ['a']
     comp.delete_node('a')
-    assert comp.dag.nodes() == []
+    assert list(comp.dag.nodes()) == []
 
 
 def test_no_serialize_flag():
@@ -866,7 +866,7 @@ def test_compute_with_args():
     comp.add_node('b', f, args=['a'])
 
     assert set(comp.nodes()) == {'a', 'b'}
-    assert set(comp.dag.edges_iter()) == {('a', 'b')}
+    assert set(comp.dag.edges()) == {('a', 'b')}
 
     comp.compute_all()
     assert comp['b'] == (States.UPTODATE, 2)
