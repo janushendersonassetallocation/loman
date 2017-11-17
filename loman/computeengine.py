@@ -629,7 +629,7 @@ class Computation(object):
         Get a list of nodes in this computation
         :return: List of nodes
         """
-        return self.dag.nodes()
+        return list(self.dag.nodes())
 
     def _state_one(self, name):
         return self.dag.node[name][_AN_STATE]
