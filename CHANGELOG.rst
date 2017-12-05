@@ -1,8 +1,14 @@
 Change Log
 ==========
 
-`0.1.4`_ (unreleased)
+`0.2.0`_ (2017-12-05)
 ---------------------
+
+* Added support for multithreading when calculating nodes
+* Update to use networkx 2.0
+* Added ``print_errors`` method
+* Added ``force`` parameter to ``insert`` method to allow no recalculation if value is not updated
+* BUGFIX: Fix behavior when calculation node overwritten with value node
 
 `0.1.3`_ (2017-07-02)
 ---------------------
