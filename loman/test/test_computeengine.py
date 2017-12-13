@@ -1112,7 +1112,7 @@ def test_thread_pool_executor():
         sleep(sleep_time)
         return c
 
-    comp = Computation(ThreadPoolExecutor(n))
+    comp = Computation(default_executor=ThreadPoolExecutor(n))
     start_dt = datetime.utcnow()
     for c in range(n):
         comp.add_node(c, wait, kwds={'c': C(c)})

@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 from datetime import datetime
 from enum import Enum
 
+import inspect
 import decorator
 import dill
 import matplotlib as mpl
@@ -111,13 +112,44 @@ class ConstantValue(object):
     def __init__(self, value):
         self.value = value
 
+
 C = ConstantValue
 
 
+class InputNode(object):
+    def __init__(self, args, kwds):
+        self.args = args
+        self.kwds = kwds
+
+
+def input_node(*args, **kwds):
+    return InputNode(args, kwds)
+
+
+class CalcNode(object):
+    def __init__(self, f, args, kwds):
+        self.f = f
+        self.args = args
+        self.kwds = kwds
+
+
+def calc_node(f, *args, **kwds):
+    return CalcNode(f, args, kwds)
+
+
+class ComputationFactory(object):
+    def __init__(self, definition_class):
+        self.definition_class = definition_class
+    def __call__(self, *args, **kwargs):
+        return Computation(self.definition_class, *args, **kwargs)
+
+
 class Computation(object):
-    def __init__(self, default_executor=None, executor_map=None):
+    def __init__(self, definition_class=None, default_executor=None, executor_map=None):
         """
-        
+
+        :param definition_class: A class with methods defining the nodes of the Computation
+        :type definition_class: type
         :param default_executor: An executor 
         :type default_executor: concurrent.futures.Executor, default ThreadPoolExecutor(max_workers=1) 
         """
@@ -137,6 +169,8 @@ class Computation(object):
         self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
+        if definition_class is not None:
+            self.add_nodes_from_class(definition_class)
 
     def add_node(self, name, func=None, **kwargs):
         """
@@ -236,6 +270,12 @@ class Computation(object):
         self.set_tag(name, tags)
         if serialize:
             self.set_tag(name, _T_SERIALIZE)
+
+    def add_nodes_from_class(self, cls):
+        for name, node in inspect.getmembers(cls, lambda o: isinstance(o, InputNode)):
+            self.add_node(name, *node.args, **node.kwds)
+        for name, node in inspect.getmembers(cls, lambda o: isinstance(o, CalcNode)):
+            self.add_node(name, node.f, *node.args, **node.kwds)
 
     def _refresh_maps(self):
         self._tag_map.clear()
