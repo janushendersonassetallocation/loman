@@ -1,6 +1,11 @@
 Change Log
 ==========
 
+`0.2.1`_ (2017-12-29)
+---------------------
+
+* Added class-style definitions of computations
+
 `0.2.0`_ (2017-12-05)
 ---------------------
 
