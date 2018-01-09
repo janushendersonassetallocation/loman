@@ -1,4 +1,3 @@
-import functools
 import logging
 import os
 import tempfile
@@ -18,6 +17,7 @@ import pydotplus
 import six
 import types
 
+from .graph_utils import contract_node
 from .compat import get_signature
 from .util import AttributeView, apply_n, apply1, as_iterable
 
@@ -958,7 +958,7 @@ class Computation(object):
                     continue
                 hide_nodes.discard(name1)
                 hide_nodes.discard(name2)
-            _contract_node(struct_dag, hide_nodes)
+            contract_node(struct_dag, hide_nodes)
         viz_dag = _create_viz_dag(struct_dag, colors=colors, cmap=cmap)
         viz_dot = _to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
         return viz_dot
@@ -998,17 +998,6 @@ class Computation(object):
                 six.print_()
                 six.print_(self.v[n].traceback)
                 six.print_()
-
-
-def _contract_node_one(g, n):
-    for p in g.predecessors(n):
-        for s in g.successors(n):
-            g.add_edge(p, s)
-    g.remove_node(n)
-
-
-def _contract_node(g, ns):
-    apply_n(functools.partial(_contract_node_one, g), ns)
 
 
 def _create_viz_dag(comp_dag, colors='state', cmap=None):
