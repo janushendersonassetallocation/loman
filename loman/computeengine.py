@@ -17,23 +17,12 @@ import pydotplus
 import six
 import types
 
+from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
 from .graph_utils import contract_node
 from .compat import get_signature
 from .util import AttributeView, apply_n, apply1, as_iterable
 
 LOG = logging.getLogger('loman.computeengine')
-
-
-class States(Enum):
-    """Possible states for a computation node"""
-    PLACEHOLDER = 0
-    UNINITIALIZED = 1
-    STALE = 2
-    COMPUTABLE = 3
-    UPTODATE = 4
-    ERROR = 5
-    PINNED = 6
-
 
 _state_colors = {
     None: '#ffffff',                    # xkcd white
@@ -46,26 +35,8 @@ _state_colors = {
     States.PINNED: '#bf77f6'            # xkcd light purple
 }
 
-# Node attributes
-_AN_VALUE = 'value'
-_AN_STATE = 'state'
-_AN_FUNC = 'func'
-_AN_GROUP = 'group'
-_AN_TAG = 'tag'
-_AN_ARGS = 'args'
-_AN_KWDS = 'kwds'
-_AN_TIMING = 'timing'
-_AN_EXECUTOR = 'executor'
-
-# Edge attributes
-_AE_PARAM = 'param'
-
-# System tags
-_T_SERIALIZE = '__serialize__'
-_T_EXPANSION = '__expansion__'
-
 Error = namedtuple('Error', ['exception', 'traceback'])
-NodeData = namedtuple('NodeData', [_AN_STATE, _AN_VALUE])
+NodeData = namedtuple('NodeData', ['state', 'value'])
 TimingData = namedtuple('TimingData', ['start', 'end', 'duration'])
 
 
@@ -90,6 +61,7 @@ class NonExistentNodeException(ComputationException):
 class _ParameterType(Enum):
     ARG = 1
     KWD = 2
+
 
 _ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
 
@@ -199,8 +171,8 @@ class Computation(object):
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
-        has_value = _AN_VALUE in kwargs
-        value = kwargs.get(_AN_VALUE, None)
+        has_value = 'value' in kwargs
+        value = kwargs.get('value', None)
         serialize = kwargs.get('serialize', True)
         inspect = kwargs.get('inspect', True)
         group = kwargs.get('group', None)
@@ -214,26 +186,26 @@ class Computation(object):
 
         self._set_state_and_value(name, States.UNINITIALIZED, None, require_old_state=False)
 
-        node[_AN_TAG] = set()
-        node[_AN_GROUP] = group
-        node[_AN_ARGS] = {}
-        node[_AN_KWDS] = {}
-        node[_AN_FUNC] = None
-        node[_AN_EXECUTOR] = executor
+        node[NodeAttributes.TAG] = set()
+        node[NodeAttributes.GROUP] = group
+        node[NodeAttributes.ARGS] = {}
+        node[NodeAttributes.KWDS] = {}
+        node[NodeAttributes.FUNC] = None
+        node[NodeAttributes.EXECUTOR] = executor
 
         if func:
-            node[_AN_FUNC] = func
+            node[NodeAttributes.FUNC] = func
             args_count = 0
             if args:
                 args_count = len(args)
                 for i, arg in enumerate(args):
                     if isinstance(arg, ConstantValue):
-                        node[_AN_ARGS][i] = arg.value
+                        node[NodeAttributes.ARGS][i] = arg.value
                     else:
                         input_vertex_name = arg
                         if not self.dag.has_node(input_vertex_name):
-                            self.dag.add_node(input_vertex_name, **{_AN_STATE: States.PLACEHOLDER})
-                        self.dag.add_edge(input_vertex_name, name, **{_AE_PARAM: (_ParameterType.ARG, i)})
+                            self.dag.add_node(input_vertex_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
+                        self.dag.add_edge(input_vertex_name, name, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = get_signature(func)
                 param_names = set()
@@ -251,25 +223,25 @@ class Computation(object):
             for param_name in param_names:
                 value_source = kwds.get(param_name, param_name) if kwds else param_name
                 if isinstance(value_source, ConstantValue):
-                    node[_AN_KWDS][param_name] = value_source.value
+                    node[NodeAttributes.KWDS][param_name] = value_source.value
                 else:
                     in_node_name = value_source
                     if not self.dag.has_node(in_node_name):
                         if param_name in default_names:
                             continue
                         else:
-                            self.dag.add_node(in_node_name, **{_AN_STATE: States.PLACEHOLDER})
-                    self.dag.add_edge(in_node_name, name, **{_AE_PARAM: (_ParameterType.KWD, param_name)})
+                            self.dag.add_node(in_node_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
+                    self.dag.add_edge(in_node_name, name, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
 
         if func or value is not None:
             self._set_descendents(name, States.STALE)
         if has_value:
             self._set_uptodate(name, value)
-        if node[_AN_STATE] == States.UNINITIALIZED:
+        if node[NodeAttributes.STATE] == States.UNINITIALIZED:
             self._try_set_computable(name)
         self.set_tag(name, tags)
         if serialize:
-            self.set_tag(name, _T_SERIALIZE)
+            self.set_tag(name, SystemTags.SERIALIZE)
 
     def add_nodes_from_class(self, cls):
         for name, node in inspect.getmembers(cls, lambda o: isinstance(o, InputNode)):
@@ -287,7 +259,7 @@ class Computation(object):
                 self._tag_map[tag].add(name)
 
     def _set_tag_one(self, name, tag):
-        self.dag.node[name][_AN_TAG].add(tag)
+        self.dag.node[name][NodeAttributes.TAG].add(tag)
         self._tag_map[tag].add(name)
 
     def set_tag(self, name, tag):
@@ -300,7 +272,7 @@ class Computation(object):
         apply_n(self._set_tag_one, name, tag)
 
     def _clear_tag_one(self, name, tag):
-        self.dag.node[name][_AN_TAG].discard(tag)
+        self.dag.node[name][NodeAttributes.TAG].discard(tag)
         self._tag_map[tag].discard(name)
 
     def clear_tag(self, name, tag):
@@ -327,11 +299,11 @@ class Computation(object):
 
         if len(self.dag.succ[name]) == 0:
             preds = self.dag.predecessors(name)
-            state = self.dag.node[name][_AN_STATE]
+            state = self.dag.node[name][NodeAttributes.STATE]
             self.dag.remove_node(name)
             self._state_map[state].remove(name)
             for n in preds:
-                if self.dag.node[n][_AN_STATE] == States.PLACEHOLDER:
+                if self.dag.node[n][NodeAttributes.STATE] == States.PLACEHOLDER:
                     self.delete_node(n)
         else:
             self._set_state(name, States.PLACEHOLDER)
@@ -414,29 +386,29 @@ class Computation(object):
 
     def _set_state(self, name, state):
         node = self.dag.node[name]
-        old_state = node[_AN_STATE]
+        old_state = node[NodeAttributes.STATE]
         self._state_map[old_state].remove(name)
-        node[_AN_STATE] = state
+        node[NodeAttributes.STATE] = state
         self._state_map[state].add(name)
 
     def _set_state_and_value(self, name, state, value, require_old_state=True):
         node = self.dag.node[name]
         try:
-            old_state = node[_AN_STATE]
+            old_state = node[NodeAttributes.STATE]
             self._state_map[old_state].remove(name)
         except KeyError:
             if require_old_state:
                 raise
-        node[_AN_STATE] = state
-        node[_AN_VALUE] = value
+        node[NodeAttributes.STATE] = state
+        node[NodeAttributes.VALUE] = value
         self._state_map[state].add(name)
 
     def _set_states(self, names, state):
         for name in names:
             node = self.dag.node[name]
-            old_state = node[_AN_STATE]
+            old_state = node[NodeAttributes.STATE]
             self._state_map[old_state].remove(name)
-            node[_AN_STATE] = state
+            node[NodeAttributes.STATE] = state
         self._state_map[state].update(names)
 
     def set_stale(self, name):
@@ -471,7 +443,7 @@ class Computation(object):
         self.set_stale(name)
 
     def _get_descendents(self, name, stop_states=None):
-        if self.dag.node[name][_AN_STATE] in stop_states:
+        if self.dag.node[name][NodeAttributes.STATE] in stop_states:
             return set()
         if stop_states is None:
             stop_states = []
@@ -483,7 +455,7 @@ class Computation(object):
             for n1 in self.dag.successors(n):
                 if n1 in visited:
                     continue
-                if self.dag.node[n1][_AN_STATE] in stop_states:
+                if self.dag.node[n1][NodeAttributes.STATE] in stop_states:
                     continue
                 to_visit.add(n1)
         visited.remove(name)
@@ -495,7 +467,7 @@ class Computation(object):
 
     def _set_uninitialized(self, name):
         self._set_states([name], States.UNINITIALIZED)
-        self.dag.node[name].pop(_AN_VALUE, None)
+        self.dag.node[name].pop(NodeAttributes.VALUE, None)
 
     def _set_uptodate(self, name, value):
         self._set_state_and_value(name, States.UPTODATE, value)
@@ -508,31 +480,31 @@ class Computation(object):
         self._set_descendents(name, States.STALE)
 
     def _try_set_computable(self, name):
-        if self.dag.node[name][_AN_STATE] == States.PINNED:
+        if self.dag.node[name][NodeAttributes.STATE] == States.PINNED:
             return
-        if self.dag.node[name].get(_AN_FUNC) is not None:
+        if self.dag.node[name].get(NodeAttributes.FUNC) is not None:
             for n in self.dag.predecessors(name):
                 if not self.dag.has_node(n):
                     return
-                if self.dag.node[n][_AN_STATE] != States.UPTODATE:
+                if self.dag.node[n][NodeAttributes.STATE] != States.UPTODATE:
                     return
             self._set_state(name, States.COMPUTABLE)
 
     def _get_parameter_data(self, name):
-        for arg, value in six.iteritems(self.dag.node[name][_AN_ARGS]):
+        for arg, value in six.iteritems(self.dag.node[name][NodeAttributes.ARGS]):
             yield _ParameterItem(_ParameterType.ARG, arg, value)
-        for param_name, value in six.iteritems(self.dag.node[name][_AN_KWDS]):
+        for param_name, value in six.iteritems(self.dag.node[name][NodeAttributes.KWDS]):
             yield _ParameterItem(_ParameterType.KWD, param_name, value)
         for in_node_name in self.dag.predecessors(name):
-            param_value = self.dag.node[in_node_name][_AN_VALUE]
+            param_value = self.dag.node[in_node_name][NodeAttributes.VALUE]
             edge = self.dag[in_node_name][name]
-            param_type, param_name = edge[_AE_PARAM]
+            param_type, param_name = edge[EdgeAttributes.PARAM]
             yield _ParameterItem(param_type, param_name, param_value)
 
     def _get_func_args_kwds(self, name):
         node0 = self.dag.node[name]
-        f = node0[_AN_FUNC]
-        executor_name = node0.get(_AN_EXECUTOR)
+        f = node0[NodeAttributes.FUNC]
+        executor_name = node0.get(NodeAttributes.EXECUTOR)
         args, kwds = [], {}
         for param in self._get_parameter_data(name):
             if param.type == _ParameterType.ARG:
@@ -580,7 +552,7 @@ class Computation(object):
 
         for name in names:
             node0 = self.dag.node[name]
-            state = node0[_AN_STATE]
+            state = node0[NodeAttributes.STATE]
             if state == States.COMPUTABLE:
                 run(name)
 
@@ -593,7 +565,7 @@ class Computation(object):
                 delta = (end_dt - start_dt).total_seconds()
                 if exc is None:
                     self._set_state_and_value(name, States.UPTODATE, value)
-                    node0[_AN_TIMING] = TimingData(start_dt, end_dt, delta)
+                    node0[NodeAttributes.TIMING] = TimingData(start_dt, end_dt, delta)
                     self._set_descendents(name, States.STALE)
                     for n in self.dag.successors(name):
                         logging.debug(str(name) + ' ' + str(n) + ' ' + str(computed))
@@ -601,7 +573,7 @@ class Computation(object):
                             raise LoopDetectedException("Calculating {} for the second time".format(name))
                         self._try_set_computable(n)
                         node0 = self.dag.node[n]
-                        state = node0[_AN_STATE]
+                        state = node0[NodeAttributes.STATE]
                         if state == States.COMPUTABLE and n in names:
                             run(n)
                 else:
@@ -615,7 +587,7 @@ class Computation(object):
         g.add_edges_from(self.dag.edges())
         for n in nx.ancestors(g, name):
             node = self.dag.node[n]
-            state = node[_AN_STATE]
+            state = node[NodeAttributes.STATE]
             if state == States.UPTODATE or state == States.PINNED:
                 g.remove_node(n)
 
@@ -672,7 +644,7 @@ class Computation(object):
         return list(self.dag.nodes())
 
     def _state_one(self, name):
-        return self.dag.node[name][_AN_STATE]
+        return self.dag.node[name][NodeAttributes.STATE]
 
     def state(self, name):
         """
@@ -693,7 +665,7 @@ class Computation(object):
         return apply1(self._state_one, name)
 
     def _value_one(self, name):
-        return self.dag.node[name][_AN_VALUE]
+        return self.dag.node[name][NodeAttributes.VALUE]
 
     def value(self, name):
         """
@@ -715,7 +687,7 @@ class Computation(object):
 
     def _tag_one(self, name):
         node = self.dag.node[name]
-        return node[_AN_TAG]
+        return node[NodeAttributes.TAG]
 
     def tags(self, name):
         """
@@ -746,7 +718,7 @@ class Computation(object):
 
     def _get_item_one(self, name):
         node = self.dag.node[name]
-        return NodeData(node[_AN_STATE], node[_AN_VALUE])
+        return NodeData(node[NodeAttributes.STATE], node[NodeAttributes.VALUE])
 
     def __getitem__(self, name):
         """
@@ -758,7 +730,7 @@ class Computation(object):
 
     def _get_timing_one(self, name):
         node = self.dag.node[name]
-        return node.get(_AN_TIMING, None)
+        return node.get(NodeAttributes.TIMING, None)
 
     def get_timing(self, name):
         """
@@ -784,8 +756,8 @@ class Computation(object):
             foo  States.UPTODATE      1           NaN
         """
         df = pd.DataFrame(index=nx.topological_sort(self.dag))
-        df[_AN_STATE] = pd.Series(nx.get_node_attributes(self.dag, _AN_STATE))
-        df[_AN_VALUE] = pd.Series(nx.get_node_attributes(self.dag, _AN_VALUE))
+        df[NodeAttributes.STATE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.STATE))
+        df[NodeAttributes.VALUE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.VALUE))
         df_timing = pd.DataFrame.from_dict(nx.get_node_attributes(self.dag, 'timing'), orient='index')
         df = pd.merge(df, df_timing, left_index=True, right_index=True, how='left')
         return df
@@ -802,7 +774,7 @@ class Computation(object):
             >>> comp.to_dict()
             {'bar': 2, 'foo': 1}
         """
-        return nx.get_node_attributes(self.dag, _AN_VALUE)
+        return nx.get_node_attributes(self.dag, NodeAttributes.VALUE)
 
     def _get_inputs_one(self, name):
         args_dict = {}
@@ -810,7 +782,7 @@ class Computation(object):
         max_arg_index = -1
         for input_node in self.dag.predecessors(name):
             input_edge = self.dag[input_node][name]
-            input_type, input_param = input_edge[_AE_PARAM]
+            input_type, input_param = input_edge[EdgeAttributes.PARAM]
             if input_type == _ParameterType.ARG:
                 idx = input_param
                 max_arg_index = max(max_arg_index, idx)
@@ -841,13 +813,13 @@ class Computation(object):
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        node_serialize = nx.get_node_attributes(self.dag, _AN_TAG)
+        node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
         if all(serialize for name, serialize in six.iteritems(node_serialize)):
             obj = self
         else:
             obj = self.copy()
             for name, tags in six.iteritems(node_serialize):
-                if _T_SERIALIZE not in tags:
+                if SystemTags.SERIALIZE not in tags:
                     obj._set_uninitialized(name)
 
         if isinstance(file_, six.string_types):
@@ -916,7 +888,7 @@ class Computation(object):
         for field in namedtuple_type._fields:
             node_name = "{}.{}".format(name, field)
             self.add_node(node_name, make_f(field), kwds={'tuple': name}, group=group)
-            self.set_tag(node_name, _T_EXPANSION)
+            self.set_tag(node_name, SystemTags.EXPANSION)
 
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
         """
@@ -954,7 +926,7 @@ class Computation(object):
         if not show_expansion:
             hide_nodes = set(struct_dag.nodes())
             for name1, name2 in struct_dag.edges():
-                if not show_expansion and _T_EXPANSION in self.tags(name2):
+                if not show_expansion and SystemTags.EXPANSION in self.tags(name2):
                     continue
                 hide_nodes.discard(name1)
                 hide_nodes.discard(name2)
@@ -1008,7 +980,7 @@ def _create_viz_dag(comp_dag, colors='state', cmap=None):
     elif colors == 'timing':
         if cmap is None:
             cmap = mpl.colors.LinearSegmentedColormap.from_list('blend', ['#15b01a', '#ffff14', '#e50000'])
-        timings = nx.get_node_attributes(comp_dag, _AN_TIMING)
+        timings = nx.get_node_attributes(comp_dag, NodeAttributes.TIMING)
         max_duration = max(timing.duration for timing in six.itervalues(timings) if hasattr(timing, 'duration'))
         min_duration = min(timing.duration for timing in six.itervalues(timings) if hasattr(timing, 'duration'))
     else:
@@ -1021,13 +993,13 @@ def _create_viz_dag(comp_dag, colors='state', cmap=None):
         attr_dict = {
             'label': name,
             'style': 'filled',
-            '_group': data.get(_AN_GROUP)
+            '_group': data.get(NodeAttributes.GROUP)
         }
 
         if colors == 'state':
-            attr_dict['fillcolor'] = cmap[data.get(_AN_STATE, None)]
+            attr_dict['fillcolor'] = cmap[data.get(NodeAttributes.STATE, None)]
         elif colors == 'timing':
-            timing_data = data.get(_AN_TIMING)
+            timing_data = data.get(NodeAttributes.TIMING)
             if timing_data is None:
                 col = '#FFFFFF'
             else:
@@ -1042,8 +1014,8 @@ def _create_viz_dag(comp_dag, colors='state', cmap=None):
         short_name_1 = node_index_map[name1]
         short_name_2 = node_index_map[name2]
 
-        group1 = comp_dag.node[name1].get(_AN_GROUP)
-        group2 = comp_dag.node[name2].get(_AN_GROUP)
+        group1 = comp_dag.node[name1].get(NodeAttributes.GROUP)
+        group2 = comp_dag.node[name2].get(NodeAttributes.GROUP)
         group = group1 if group1 == group2 else None
 
         attr_dict = {'_group': group}
