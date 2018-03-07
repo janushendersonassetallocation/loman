@@ -815,37 +815,6 @@ def test_multiple_values():
     assert comp.value(['d', 'b']) == [31, 11]
 
 
-def test_get_inputs():
-    comp = Computation()
-    comp.add_node('a')
-    comp.add_node('b', lambda a: a + 1, kwds={'a': 'a'}, inspect=False)
-    comp.add_node('c', lambda a: 2 * a, kwds={'a': 'a'}, inspect=False)
-    comp.add_node('d', lambda b, c: b + c, kwds={'b': 'b', 'c': 'c'}, inspect=False)
-    assert set(comp.get_inputs('a')) == set()
-    assert set(comp.get_inputs('b')) == {'a'}
-    assert set(comp.get_inputs('c')) == {'a'}
-    assert set(comp.get_inputs('d')) == {'c', 'b'}
-    assert list(map(set, comp.get_inputs(['a', 'b', 'c', 'd']))) == [set(), {'a'}, {'a'}, {'b', 'c'}]
-    assert set(comp.i.a) == set()
-    assert set(comp.i.b) == {'a'}
-    assert set(comp.i.c) == {'a'}
-    assert set(comp.i.d) == {'c', 'b'}
-    assert set(comp.i['a']) == set()
-    assert set(comp.i['b']) == {'a'}
-    assert set(comp.i['c']) == {'a'}
-    assert set(comp.i['d']) == {'c', 'b'}
-    assert list(map(set, comp.i[['a', 'b', 'c', 'd']])) == [set(), {'a'}, {'a'}, {'b', 'c'}]
-
-
-def test_get_inputs_order():
-    comp = Computation()
-    input_nodes = list(('inp', i) for i in range(100))
-    comp.add_node(input_node for input_node in input_nodes)
-    random.shuffle(input_nodes)
-    comp.add_node('res', lambda *args: args, args=input_nodes, inspect=False)
-    assert comp.i.res == input_nodes
-
-
 def test_compute_with_unpicklable_object():
     class Unpicklable(object):
         def __getstate__(self):

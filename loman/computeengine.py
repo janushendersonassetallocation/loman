@@ -794,6 +794,28 @@ class Computation(object):
         """
         return apply1(self._get_inputs_one, name)
 
+    def get_ancestors(self, names, include_self=True):
+        ancestors = set()
+        for n in as_iterable(names):
+            if include_self:
+                ancestors.add(n)
+            for ancestor in nx.ancestors(self.dag, n):
+                ancestors.add(ancestor)
+        return ancestors
+
+    def get_original_inputs(self, names=None):
+        """
+        Get a list of the original non-computed inputs for a node or set of nodes
+
+        :param names: Name or names of nodes to get inputs for
+        :return: Return a list of original non-computed inputs that are ancestors of the input nodes
+        """
+        if names is None:
+            nodes = self.nodes()
+        else:
+            nodes = self.get_ancestors(names)
+        return [n for n in nodes if self.dag.node[n].get(NodeAttributes.FUNC) is None]
+
     def write_dill(self, file_):
         """
         Serialize a computation to a file or file-like object

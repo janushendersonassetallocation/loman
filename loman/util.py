@@ -35,7 +35,7 @@ class AttributeView(object):
         try:
             return self.get_attribute(attr)
         except KeyError:
-            raise AttributeError()
+            raise AttributeError(attr)
 
     def __getitem__(self, key):
         return self.get_item(key)
