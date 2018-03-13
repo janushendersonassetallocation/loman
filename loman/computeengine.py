@@ -830,7 +830,7 @@ class Computation(object):
             for n in input_nodes:
                 self.add_node(n)
         nodes = self.get_ancestors(output_nodes)
-        self.dag = self.dag.subgraph(nodes).copy()
+        self.dag.remove_nodes_from([n for n in self.dag if n not in nodes])
 
     def write_dill(self, file_):
         """
