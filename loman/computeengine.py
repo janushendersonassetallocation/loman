@@ -816,6 +816,20 @@ class Computation(object):
             nodes = self.get_ancestors(names)
         return [n for n in nodes if self.dag.node[n].get(NodeAttributes.FUNC) is None]
 
+    def restrict(self, output_nodes, input_nodes=None):
+        """
+        Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input nodes
+
+        :param output_nodes:
+        :param input_nodes:
+        :return: None - modifies existing computation in place
+        """
+        if input_nodes is not None:
+            for n in input_nodes:
+                self.add_node(n)
+        nodes = self.get_ancestors(output_nodes)
+        self.dag = self.dag.subgraph(nodes).copy()
+
     def write_dill(self, file_):
         """
         Serialize a computation to a file or file-like object
