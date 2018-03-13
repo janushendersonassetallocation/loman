@@ -820,6 +820,8 @@ class Computation(object):
         """
         Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input nodes
 
+        If the set of input_nodes that is specified is not sufficient for the set of output_nodes then additional nodes that are ancestors of the output_nodes will be included, but the input nodes specified will be input nodes of the modified Computation.
+
         :param output_nodes:
         :param input_nodes:
         :return: None - modifies existing computation in place
