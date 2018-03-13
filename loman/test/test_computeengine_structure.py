@@ -44,3 +44,21 @@ def test_get_original_inputs():
 
     comp.add_node('a', lambda: 1)
     assert set(comp.get_original_inputs()) == set()
+
+
+def test_restrict_1():
+    comp = BasicFourNodeComputation()
+    comp.restrict('c')
+    assert set(comp.nodes()) == {'a', 'c'}
+
+
+def test_restrict_2():
+    comp = BasicFourNodeComputation()
+    comp.restrict(['b', 'c'])
+    assert set(comp.nodes()) == {'a', 'b', 'c'}
+
+
+def test_restrict_3():
+    comp = BasicFourNodeComputation()
+    comp.restrict('d', ['b', 'c'])
+    assert set(comp.nodes()) == {'b', 'c', 'd'}
