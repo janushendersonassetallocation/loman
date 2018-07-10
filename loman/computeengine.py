@@ -828,7 +828,9 @@ class Computation(object):
         """
         if input_nodes is not None:
             for n in input_nodes:
+                state, value = self._get_item_one(n)
                 self.add_node(n)
+                self._set_state_and_value(n, state, value)
         nodes = self.get_ancestors(output_nodes)
         self.dag.remove_nodes_from([n for n in self.dag if n not in nodes])
 
