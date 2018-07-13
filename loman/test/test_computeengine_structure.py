@@ -1,6 +1,6 @@
 import random
 
-from loman import Computation
+from loman import Computation, States
 from loman.test.standard_test_computations import BasicFourNodeComputation
 
 
@@ -62,3 +62,34 @@ def test_restrict_3():
     comp = BasicFourNodeComputation()
     comp.restrict('d', ['b', 'c'])
     assert set(comp.nodes()) == {'b', 'c', 'd'}
+
+
+def test_rename_nodes():
+    comp = BasicFourNodeComputation()
+    comp.insert('a', 10)
+    comp.compute('b')
+
+    comp.rename_node('a', 'alpha')
+    comp.rename_node('b', 'beta')
+    comp.rename_node('c', 'gamma')
+    comp.rename_node('d', 'delta')
+    assert comp.s[['alpha', 'beta', 'gamma', 'delta']] == \
+           [States.UPTODATE, States.UPTODATE, States.COMPUTABLE, States.STALE]
+
+    comp.compute('delta')
+    assert comp.s[['alpha', 'beta', 'gamma', 'delta']] == \
+           [States.UPTODATE, States.UPTODATE, States.UPTODATE, States.UPTODATE]
+
+
+def test_rename_nodes_with_dict():
+    comp = BasicFourNodeComputation()
+    comp.insert('a', 10)
+    comp.compute('b')
+
+    comp.rename_node({'a': 'alpha', 'b': 'beta', 'c': 'gamma', 'd': 'delta'})
+    assert comp.s[['alpha', 'beta', 'gamma', 'delta']] == \
+           [States.UPTODATE, States.UPTODATE, States.COMPUTABLE, States.STALE]
+
+    comp.compute('delta')
+    assert comp.s[['alpha', 'beta', 'gamma', 'delta']] == \
+           [States.UPTODATE, States.UPTODATE, States.UPTODATE, States.UPTODATE]

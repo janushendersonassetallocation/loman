@@ -45,6 +45,9 @@ class LoopDetectedException(ComputationException):
 class NonExistentNodeException(ComputationException):
     pass
 
+class NodeAlreadyExistsException(ComputationException):
+    pass
+
 
 class _ParameterType(Enum):
     ARG = 1
@@ -295,6 +298,32 @@ class Computation(object):
                     self.delete_node(n)
         else:
             self._set_state(name, States.PLACEHOLDER)
+
+    def rename_node(self, old_name, new_name=None):
+        """
+        Rename a node in a computation
+        :param old_name: Node to rename, or a dictionary of nodes to rename, with existing names as keys, and new names as values
+        :param new_name: New name for node
+        """
+
+        if hasattr(old_name, '__getitem__') and not isinstance(old_name, six.string_types):
+            for k, v in six.iteritems(old_name):
+                LOG.debug('Renaming node {} to {}'.format(str(k), str(v)))
+            if new_name is not None:
+                raise ValueError("new_name must not be set if rename_node is passed a dictionary")
+            else:
+                mapping = old_name
+        else:
+            LOG.debug('Renaming node {} to {}'.format(str(old_name), str(new_name)))
+            if old_name not in self.dag:
+                raise NonExistentNodeException('Node {} does not exist'.format(str(old_name)))
+            if new_name in self.dag:
+                raise NodeAlreadyExistsException('Node {} does not exist'.format(str(old_name)))
+            mapping = {old_name: new_name}
+
+        nx.relabel_nodes(self.dag, mapping, copy=False)
+
+        self._refresh_maps()
 
     def insert(self, name, value, force=False):
         """
