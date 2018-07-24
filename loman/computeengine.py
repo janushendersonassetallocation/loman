@@ -222,6 +222,7 @@ class Computation(object):
                             continue
                         else:
                             self.dag.add_node(in_node_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
+                            self._state_map[States.PLACEHOLDER].add(in_node_name)
                     self.dag.add_edge(in_node_name, name, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
 
         if func or value is not None:

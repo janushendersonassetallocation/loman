@@ -1107,3 +1107,9 @@ def test_node_specific_thread_pool_executor():
     end_dt = datetime.utcnow()
     delta = (end_dt - start_dt).total_seconds()
     assert delta < (n-1) * sleep_time
+
+
+def test_delete_node_with_placeholder_parent():
+    comp = Computation()
+    comp.add_node('b', lambda a: a)
+    comp.delete_node('b')
