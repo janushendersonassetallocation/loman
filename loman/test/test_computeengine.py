@@ -60,6 +60,26 @@ def test_basic():
     assert set(comp._get_calc_nodes("d")) == set(['c', 'd'])
 
 
+@raises(LoopDetectedException)
+def test_dag_cycle():
+    def f(b, c):
+        return b + c
+
+    def g(d, c):
+        return d + c
+
+    comp = Computation()
+    comp.add_node('b')
+    comp.add_node('c')
+    comp.add_node('a', f)
+    comp.insert('b', 1)
+    comp.insert('c', 2)
+    comp.compute('a')
+    assert comp.value('a') == 3
+    # create a self edge
+    comp.add_node('d', g)
+
+
 def test_parameter_mapping():
     comp = Computation()
     comp.add_node('a')

@@ -45,6 +45,7 @@ class LoopDetectedException(ComputationException):
 class NonExistentNodeException(ComputationException):
     pass
 
+
 class NodeAlreadyExistsException(ComputationException):
     pass
 
@@ -158,6 +159,7 @@ class Computation(object):
         :type tags: Iterable
         :param executor: Name of executor to run node on
         :type executor: string
+        :raises LoopDetectedException
         """
         LOG.debug('Adding node {}'.format(str(name)))
         args = kwargs.get('args', None)
@@ -224,7 +226,12 @@ class Computation(object):
                             self.dag.add_node(in_node_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
                             self._state_map[States.PLACEHOLDER].add(in_node_name)
                     self.dag.add_edge(in_node_name, name, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
-
+        try:
+            nx.find_cycle(self.dag)
+            LOG.debug('cycle detected')
+            raise LoopDetectedException('Adding node "{}" created a loop in the DAG.'.format(name))
+        except nx.NetworkXNoCycle:
+            pass
         if func or value is not None:
             self._set_descendents(name, States.STALE)
         if has_value:
