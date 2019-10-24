@@ -1126,3 +1126,13 @@ def test_repoint():
     comp.repoint('a','5a')
     comp.compute_all()
     assert c.v.b == 5*1+1
+
+def test_repoint_missing_node():
+    comp = loman.Computation()
+    comp.add_node('a')
+    comp.add_node('b',lambda a: a+1)
+    comp.insert('a',1)
+    
+    comp.repoint('a', 'new_a')
+    assert comp.s.new_a == States.UNINITIALIZED
+    
