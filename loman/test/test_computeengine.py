@@ -123,10 +123,10 @@ def test_serialization():
     f.seek(0)
     foo = Computation.read_dill(f)
 
-    assert set(comp.dag.nodes()) == set(foo.dag.nodes())
+    assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
-        assert comp.dag.node[n].get('state', None) == foo.dag.node[n].get('state', None)
-        assert comp.dag.node[n].get('value', None) == foo.dag.node[n].get('value', None)
+        assert comp.dag.nodes[n].get('state', None) == foo.dag.nodes[n].get('state', None)
+        assert comp.dag.nodes[n].get('value', None) == foo.dag.nodes[n].get('value', None)
 
 
 def test_namedtuple_expansion():
@@ -962,7 +962,7 @@ def test_with_uptodate_predecessors_but_stale_ancestors():
     comp.add_node('b', lambda a: a + 1)
     comp.compute_all()
     assert comp['b'] == (States.UPTODATE, 2)
-    comp.dag.node['a']['state'] = States.UNINITIALIZED # This can happen due to serialization
+    comp.dag.nodes['a']['state'] = States.UNINITIALIZED # This can happen due to serialization
     comp.add_node('c', lambda b: b + 1)
     comp.compute('c')
     assert comp['b'] == (States.UPTODATE, 2)
@@ -983,7 +983,7 @@ def test_constant_values():
 
     comp.compute_all()
 
-    assert comp.dag.node['b']['args'] == {1: 2}
+    assert comp.dag.nodes['b']['args'] == {1: 2}
 
     assert comp['b'] == (States.UPTODATE, 3)
     assert comp['c'] == (States.UPTODATE, 4)

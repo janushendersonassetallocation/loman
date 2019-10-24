@@ -59,8 +59,8 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
         short_name_1 = node_index_map[name1]
         short_name_2 = node_index_map[name2]
 
-        group1 = comp_dag.node[name1].get(NodeAttributes.GROUP)
-        group2 = comp_dag.node[name2].get(NodeAttributes.GROUP)
+        group1 = comp_dag.nodes[name1].get(NodeAttributes.GROUP)
+        group2 = comp_dag.nodes[name2].get(NodeAttributes.GROUP)
         group = group1 if group1 == group2 else None
 
         attr_dict = {'_group': group}
@@ -113,7 +113,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
 
     for name in node_groups.get(None, []):
         node = pydotplus.Node(name)
-        for k, v in six.iteritems(viz_dag.node[name]):
+        for k, v in six.iteritems(viz_dag.nodes[name]):
             if not k.startswith("_"):
                 node.set(k, v)
         viz_dot.add_node(node)
