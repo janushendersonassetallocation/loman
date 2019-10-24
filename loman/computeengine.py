@@ -327,6 +327,39 @@ class Computation(object):
 
         self._refresh_maps()
 
+    def repoint(self, old_name, new_name):
+        """
+        Changes all nodes that use old_name as an input to use new_name instead.
+
+        Note that if old_name is an input to new_name, then that will not be changed, to try to avoid introducing
+        circular dependencies, but other circular dependencies will not be checked.
+
+        If new_name does not exist, then it will be created as a PLACEHOLDER node.
+
+        :param old_name:
+        :param new_name:
+        :return:
+        """
+        if old_name == new_name:
+            return
+
+        changed_names = list(self.dag.successors(old_name))
+
+        if len(changed_names) > 0 and not self.dag.has_node(new_name):
+            self.dag.add_node(new_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
+            self._state_map[States.PLACEHOLDER].add(new_name)
+
+        for name in changed_names:
+            if name == new_name:
+                continue
+            edge_data = self.dag.get_edge_data(old_name, name)
+            self.dag.add_edge(new_name, name, **edge_data)
+            self.dag.remove_edge(old_name, name)
+
+
+        for name in changed_names:
+            self.set_stale(name)
+
     def insert(self, name, value, force=False):
         """
         Insert a value into a node of a computation

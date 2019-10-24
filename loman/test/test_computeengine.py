@@ -1114,25 +1114,27 @@ def test_delete_node_with_placeholder_parent():
     comp.add_node('b', lambda a: a)
     comp.delete_node('b')
     
+
 def test_repoint():
-    comp = loman.Computation()
+    comp = Computation()
     comp.add_node('a')
-    comp.add_node('b',lambda a: a+1)
-    comp.insert('a',1)
+    comp.add_node('b', lambda a: a+1)
+    comp.insert('a', 1)
     comp.compute_all()
-    assert c.v.b == 2
+    assert comp.v.b == 2
     
-    comp.add_node('5a',lambda a: 5*a)
-    comp.repoint('a','5a')
+    comp.add_node('5a', lambda a: 5*a)
+    comp.repoint('a', '5a')
     comp.compute_all()
-    assert c.v.b == 5*1+1
+    assert comp.v.b == 5*1+1
+
 
 def test_repoint_missing_node():
-    comp = loman.Computation()
+    comp = Computation()
     comp.add_node('a')
-    comp.add_node('b',lambda a: a+1)
-    comp.insert('a',1)
+    comp.add_node('b', lambda a: a+1)
+    comp.insert('a', 1)
     
     comp.repoint('a', 'new_a')
-    assert comp.s.new_a == States.UNINITIALIZED
-    
+    assert comp.s.new_a == States.PLACEHOLDER
+
