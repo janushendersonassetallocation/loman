@@ -93,3 +93,24 @@ def test_rename_nodes_with_dict():
     comp.compute('delta')
     assert comp.s[['alpha', 'beta', 'gamma', 'delta']] == \
            [States.UPTODATE, States.UPTODATE, States.UPTODATE, States.UPTODATE]
+
+
+def test_state_map_updated_with_placeholder():
+    comp = Computation()
+    comp.add_node('b', lambda a: a+1)
+    assert comp.s.a == States.PLACEHOLDER
+    assert 'a' in comp._state_map[States.PLACEHOLDER]
+
+
+def test_state_map_updated_with_placeholder_kwds():
+    comp = Computation()
+    comp.add_node('b', lambda x: x+1, kwds={'x': 'a'})
+    assert comp.s.a == States.PLACEHOLDER
+    assert 'a' in comp._state_map[States.PLACEHOLDER]
+
+
+def test_state_map_updated_with_placeholder_args():
+    comp = Computation()
+    comp.add_node('b', lambda x: x+1, args=['a'])
+    assert comp.s.a == States.PLACEHOLDER
+    assert 'a' in comp._state_map[States.PLACEHOLDER]

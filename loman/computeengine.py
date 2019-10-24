@@ -196,6 +196,7 @@ class Computation(object):
                         input_vertex_name = arg
                         if not self.dag.has_node(input_vertex_name):
                             self.dag.add_node(input_vertex_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
+                            self._state_map[States.PLACEHOLDER].add(input_vertex_name)
                         self.dag.add_edge(input_vertex_name, name, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = get_signature(func)
