@@ -13,7 +13,7 @@ Loman
 .. image:: https://img.shields.io/pypi/l/loman.svg
     :target: https://opensource.org/licenses/BSD-3-Clause
 
-.. image:: https://travis-ci.org/janusassetallocation/loman.svg?branch=master
+.. image:: https://travis-ci.org/janushendersonassetallocation/loman.svg?branch=master
     :target: https://travis-ci.org/janushendersonassetallocation/loman
 
 .. image:: https://readthedocs.org/projects/loman/badge/?version=latest
