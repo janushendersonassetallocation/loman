@@ -275,9 +275,10 @@ In the previous example, the nodes have all been given strings as keys. This is 
     8
     
 Repointing Nodes
--------------
+----------------
 
 It is possible to repoint existing nodes to a new node. This can be useful when it is desired to make a small change in one node, without having to recreate all descendant nodes. As an example: 
+
     >>> from loman import *
     >>> comp = Computation()
     >>> comp.add_node('a', value = 2)
