@@ -1,6 +1,16 @@
 Change Log
 ==========
 
+`0.3.0`_ (2019-10-24)
+
+* Added ``get_original_inputs`` to see source inputs of entire computation or a given set of nodes
+* Added ``get_outputs``, ``o`` attribute-style access to get list of nodes fed by a particular node
+* Added ``get_final_outputs`` to get end nodes of a computation or a given set of nodes
+* Added ``restrict`` method to remove nodes unnecessary to calculate a given set of outputs
+* Added ``rename_node`` method to rename a node, while ensuring that nodes which use it as an input continue to do so
+* Added ``repoint`` method allowing all nodes which use a given node as an input to use an alternative node instead
+* Documented ``get_inputs`` and ``i`` attribute-style accessor
+
 `0.2.1`_ (2017-12-29)
 ---------------------
 

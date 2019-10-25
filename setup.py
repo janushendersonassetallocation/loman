@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='loman',
-    version='0.2.1',
+    version='0.3.0',
     packages=['loman'],
     url='https://github.com/janusassetallocation/loman',
     license='BSD',
