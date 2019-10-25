@@ -46,6 +46,36 @@ def test_get_original_inputs():
     assert set(comp.get_original_inputs()) == set()
 
 
+def test_get_outputs():
+    comp = BasicFourNodeComputation()
+    assert set(comp.get_outputs('a')) == {'c', 'b'}
+    assert set(comp.get_outputs('b')) == {'d'}
+    assert set(comp.get_outputs('c')) == {'d'}
+    assert set(comp.get_outputs('d')) == set()
+    assert list(map(set, comp.get_outputs(['a', 'b', 'c', 'd']))) == [{'b', 'c'}, {'d'}, {'d'}, set()]
+
+
+def test_attribute_o():
+    comp = BasicFourNodeComputation()
+    assert set(comp.o.a) == {'c', 'b'}
+    assert set(comp.o.b) == {'d'}
+    assert set(comp.o.c) == {'d'}
+    assert set(comp.o.d) == set()
+    assert set(comp.o['a']) == {'c', 'b'}
+    assert set(comp.o['b']) == {'d'}
+    assert set(comp.o['c']) == {'d'}
+    assert set(comp.o['d']) == set()
+    assert list(map(set, comp.o[['a', 'b', 'c', 'd']])) == [{'b', 'c'}, {'d'}, {'d'}, set()]
+
+
+def test_get_final_outputs():
+    comp = BasicFourNodeComputation()
+    assert set(comp.get_final_outputs()) == {'d'}
+    assert set(comp.get_final_outputs('a')) == {'d'}
+    assert set(comp.get_final_outputs('b')) == {'d'}
+    assert set(comp.get_final_outputs(['b', 'c'])) == {'d'}
+
+
 def test_restrict_1():
     comp = BasicFourNodeComputation()
     comp.restrict('c')

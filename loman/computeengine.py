@@ -128,6 +128,7 @@ class Computation(object):
         self.v = AttributeView(self.nodes, self.value, self.value)
         self.s = AttributeView(self.nodes, self.state, self.state)
         self.i = AttributeView(self.nodes, self.get_inputs, self.get_inputs)
+        self.o = AttributeView(self.nodes, self.get_outputs, self.get_outputs)
         self.t = AttributeView(self.nodes, self.tags, self.tags)
         self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
         self._tag_map = defaultdict(set)
@@ -878,6 +879,35 @@ class Computation(object):
         else:
             nodes = self.get_ancestors(names)
         return [n for n in nodes if self.dag.nodes[n].get(NodeAttributes.FUNC) is None]
+
+    def _get_outputs_one(self, name):
+        return list(self.dag.successors(name))
+
+    def get_outputs(self, name):
+        """
+        Get a list of the outputs for a node or set of nodes
+
+        :param name: Name or names of nodes to get outputs for
+        :return: If name is scalar, return a list of downstream nodes used as output. If name is a list, return a list of list of outputs.
+
+        """
+        return apply1(self._get_outputs_one, name)
+
+    def get_descendents(self, names, include_self=True):
+        ancestors = set()
+        for n in as_iterable(names):
+            if include_self:
+                ancestors.add(n)
+            for ancestor in nx.descendants(self.dag, n):
+                ancestors.add(ancestor)
+        return ancestors
+
+    def get_final_outputs(self, names=None):
+        if names is None:
+            nodes = self.nodes()
+        else:
+            nodes = self.get_descendents(names)
+        return [n for n in nodes if len(nx.descendants(self.dag, n))==0]
 
     def restrict(self, output_nodes, input_nodes=None):
         """
