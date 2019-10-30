@@ -50,8 +50,6 @@ elif six.PY2:
         else:
             n_default_params = len(argspec.defaults)
             default_params = argspec.args[-n_default_params:]
-        output= _Signature(all_keyword_params, default_params, has_var_args, has_var_kwds)
-        print(output)
-        return output
+        return _Signature(all_keyword_params, default_params, has_var_args, has_var_kwds)
 else:
     raise Exception("Only Pythons 2 and 3 supported")
