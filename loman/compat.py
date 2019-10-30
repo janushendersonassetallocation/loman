@@ -33,7 +33,6 @@ if six.PY3:
         raise Exception("Only Python3 >=3.4 is supported")
 elif six.PY2:
     def get_signature(func):
-        print("hello world 22")
         argspec = inspect.getargspec(func)
         has_var_args = argspec.varargs is not None
         has_var_kwds = argspec.keywords is not None
