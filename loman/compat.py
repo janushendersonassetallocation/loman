@@ -33,15 +33,26 @@ if six.PY3:
         raise Exception("Only Python3 >=3.4 is supported")
 elif six.PY2:
     def get_signature(func):
+        print("hello world 22")
         argspec = inspect.getargspec(func)
         has_var_args = argspec.varargs is not None
         has_var_kwds = argspec.keywords is not None
         all_keyword_params = argspec.args
+        #Filter out the 'self' argument in case
+        #the user passes in a class method
+        #It is neccessary to test for 'self'
+        #as well as inspect.ismethod since 
+        #ismethod == True for static methods, 
+        #which should not have the first argument dropped
+        if inspect.ismethod(func) and len(all_keyword_params) and all_keyword_params[0].lower() == 'self':
+            all_keyword_params = all_keyword_params[1:]
         if argspec.defaults is None:
             default_params = []
         else:
             n_default_params = len(argspec.defaults)
             default_params = argspec.args[-n_default_params:]
-        return _Signature(all_keyword_params, default_params, has_var_args, has_var_kwds)
+        output= _Signature(all_keyword_params, default_params, has_var_args, has_var_kwds)
+        print(output)
+        return output
 else:
     raise Exception("Only Pythons 2 and 3 supported")
