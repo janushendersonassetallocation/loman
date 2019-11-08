@@ -263,7 +263,7 @@ Loman can serialize computations to disk using the dill package. This can be use
 
 ::
 
-    >>> comp.get_value_dict()
+    >>> comp.to_dict()
     {'a': 1, 'b': 2}
     >>> comp.write_dill('foo.dill')
     >>> comp2 = Computation.read_dill('foo.dill')
