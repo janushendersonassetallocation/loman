@@ -107,6 +107,24 @@ class ComputationFactory(object):
         return Computation(self.definition_class, *args, **kwargs)
 
 
+def _eval_node(name, f, args, kwds, raise_exceptions):
+    """ To make multiprocessing work, this function must be standalone so that pickle works """
+    exc, tb = None, None
+    start_dt = datetime.utcnow()
+    try:
+        logging.debug("Running " + str(name))
+        value = f(*args, **kwds)
+        logging.debug("Completed " + str(name))
+    except Exception as e:
+        value = None
+        exc = e
+        tb = traceback.format_exc()
+        if raise_exceptions:
+            raise
+    end_dt = datetime.utcnow()
+    return value, exc, tb, start_dt, end_dt
+
+
 class Computation(object):
     def __init__(self, definition_class=None, default_executor=None, executor_map=None):
         """
@@ -570,22 +588,6 @@ class Computation(object):
                 raise Exception("Unexpected param type: {}".format(param.type))
         return f, executor_name, args, kwds
 
-    def _eval_node(self, name, f, args, kwds, raise_exceptions):
-        exc, tb = None, None
-        start_dt = datetime.utcnow()
-        try:
-            logging.debug("Running " + str(name))
-            value = f(*args, **kwds)
-            logging.debug("Completed " + str(name))
-        except Exception as e:
-            value = None
-            exc = e
-            tb = traceback.format_exc()
-            if raise_exceptions:
-                raise
-        end_dt = datetime.utcnow()
-        return value, exc, tb, start_dt, end_dt
-
     def _compute_nodes(self, names, raise_exceptions=False):
         LOG.debug('Computing nodes {}'.format(list(map(str, names))))
 
@@ -597,7 +599,7 @@ class Computation(object):
                 executor = self.default_executor
             else:
                 executor = self.executor_map[executor_name]
-            fut = executor.submit(self._eval_node, name, f, args, kwds, raise_exceptions)
+            fut = executor.submit(_eval_node, name, f, args, kwds, raise_exceptions)
             futs[fut] = name
 
         computed = set()
