@@ -16,8 +16,8 @@ Loman
 .. image:: https://travis-ci.org/janushendersonassetallocation/loman.svg?branch=master
     :target: https://travis-ci.org/janushendersonassetallocation/loman
 
-.. image:: https://github.com/westonplatter/loman/actions/workflows/ci.yml/badge.svg?branch=master
-    :target: https://github.com/westonplatter/loman/actions/workflows/ci.yml/badge.svg?branch=master
+.. image:: https://github.com/westonplatter/loman/actions/workflows/ci.yml/badge.svg?branch=configs/github-ci
+    :target: https://github.com/westonplatter/loman/actions/workflows/ci.yml/badge.svg?branch=configs/github-ci
 
 .. image:: https://readthedocs.org/projects/loman/badge/?version=latest
     :target: http://loman.readthedocs.io/
