@@ -13,8 +13,8 @@ Loman
 .. image:: https://img.shields.io/pypi/l/loman.svg
     :target: https://opensource.org/licenses/BSD-3-Clause
 
-.. image:: https://travis-ci.org/janushendersonassetallocation/loman.svg?branch=master
-    :target: https://travis-ci.org/janushendersonassetallocation/loman
+.. image:: https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master
+    :target: https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master
 
 .. image:: https://readthedocs.org/projects/loman/badge/?version=latest
     :target: http://loman.readthedocs.io/
