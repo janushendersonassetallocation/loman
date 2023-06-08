@@ -1138,3 +1138,14 @@ def test_repoint_missing_node():
     comp.repoint('a', 'new_a')
     assert comp.s.new_a == States.PLACEHOLDER
 
+def test_class_method():
+    class Clazz(object):
+        def method(self,a):
+            return a+2
+    c = loman.Computation()
+    c.add_node("a",value=1)
+    obj = Clazz()    
+    c.add_node("b",obj.method)
+    c.compute_all()
+    assert c.v.b == 3
+
