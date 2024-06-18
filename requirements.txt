@@ -1,9 +1,6 @@
 matplotlib
 pydotplus
 pytest
-enum34 >= 1.1.6; python_version < '3.4'
-six >= 1.10.0
 dill >= 0.2.5
 networkx >= 2.0
 pandas >= 0.19.2
-futures >= 3.1.1; python_version <= '2.7'

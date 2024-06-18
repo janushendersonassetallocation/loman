@@ -1,7 +1,6 @@
 import matplotlib as mpl
 import networkx as nx
 import pydotplus
-import six
 
 from loman.consts import NodeAttributes, States
 
@@ -26,8 +25,8 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
         if cmap is None:
             cmap = mpl.colors.LinearSegmentedColormap.from_list('blend', ['#15b01a', '#ffff14', '#e50000'])
         timings = nx.get_node_attributes(comp_dag, NodeAttributes.TIMING)
-        max_duration = max(timing.duration for timing in six.itervalues(timings) if hasattr(timing, 'duration'))
-        min_duration = min(timing.duration for timing in six.itervalues(timings) if hasattr(timing, 'duration'))
+        max_duration = max(timing.duration for timing in timings.values() if hasattr(timing, 'duration'))
+        min_duration = min(timing.duration for timing in timings.values() if hasattr(timing, 'duration'))
     else:
         raise ValueError('{} is not a valid loman colors parameter for visualization'.format(colors))
 
@@ -83,7 +82,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
     viz_dot = pydotplus.Dot()
 
     if graph_attr is not None:
-        for k, v in six.iteritems(graph_attr):
+        for k, v in graph_attr.items():
             viz_dot.set(k, v)
 
     if node_attr is not None:
@@ -92,14 +91,14 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
     if edge_attr is not None:
         viz_dot.set_edge_defaults(**edge_attr)
 
-    for group, names in six.iteritems(node_groups):
+    for group, names in node_groups.items():
         if group is None:
             continue
         c = pydotplus.Subgraph('cluster_' + str(group))
 
         for name in names:
             node = pydotplus.Node(name)
-            for k, v in six.iteritems(viz_dag.node[name]):
+            for k, v in viz_dag.node[name].items():
                 if not k.startswith("_"):
                     node.set(k, v)
             c.add_node(node)
@@ -113,7 +112,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
 
     for name in node_groups.get(None, []):
         node = pydotplus.Node(name)
-        for k, v in six.iteritems(viz_dag.nodes[name]):
+        for k, v in viz_dag.nodes[name].items():
             if not k.startswith("_"):
                 node.set(k, v)
         viz_dot.add_node(node)

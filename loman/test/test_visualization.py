@@ -1,7 +1,6 @@
 import loman.visualization
 from loman import Computation, States
 import loman.computeengine
-import six
 
 
 def test_simple():
@@ -14,8 +13,8 @@ def test_simple():
     d = comp.to_pydot()
 
     nodes = d.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in six.iteritems(nodes)}
-    node = {label: nodes[name][0] for label, name in six.iteritems(label_to_name_mapping)}
+    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
+    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
     assert node['a']['attributes']['fillcolor'] == loman.visualization.state_colors[States.UNINITIALIZED]
     assert node['a']['attributes']['style'] == 'filled'
     assert node['b']['attributes']['fillcolor'] == loman.visualization.state_colors[States.UNINITIALIZED]
@@ -30,8 +29,8 @@ def test_simple():
     d = comp.to_pydot()
 
     nodes = d.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in six.iteritems(nodes)}
-    node = {label: nodes[name][0] for label, name in six.iteritems(label_to_name_mapping)}
+    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
+    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
     assert node['a']['attributes']['fillcolor'] == loman.visualization.state_colors[States.UPTODATE]
     assert node['a']['attributes']['style'] == 'filled'
     assert node['b']['attributes']['fillcolor'] == loman.visualization.state_colors[States.COMPUTABLE]
@@ -46,8 +45,8 @@ def test_simple():
     d = comp.to_pydot()
 
     nodes = d.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in six.iteritems(nodes)}
-    node = {label: nodes[name][0] for label, name in six.iteritems(label_to_name_mapping)}
+    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
+    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
     assert node['a']['attributes']['fillcolor'] == loman.visualization.state_colors[States.UPTODATE]
     assert node['a']['attributes']['style'] == 'filled'
     assert node['b']['attributes']['fillcolor'] == loman.visualization.state_colors[States.UPTODATE]

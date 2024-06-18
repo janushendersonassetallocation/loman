@@ -12,7 +12,6 @@ import decorator
 import dill
 import networkx as nx
 import pandas as pd
-import six
 import types
 
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
@@ -326,9 +325,8 @@ class Computation(object):
         :param old_name: Node to rename, or a dictionary of nodes to rename, with existing names as keys, and new names as values
         :param new_name: New name for node
         """
-
-        if hasattr(old_name, '__getitem__') and not isinstance(old_name, six.string_types):
-            for k, v in six.iteritems(old_name):
+        if hasattr(old_name, '__getitem__') and not isinstance(old_name, str):
+            for k, v in old_name.items():
                 LOG.debug('Renaming node {} to {}'.format(str(k), str(v)))
             if new_name is not None:
                 raise ValueError("new_name must not be set if rename_node is passed a dictionary")
@@ -561,9 +559,9 @@ class Computation(object):
             self._set_state(name, States.COMPUTABLE)
 
     def _get_parameter_data(self, name):
-        for arg, value in six.iteritems(self.dag.nodes[name][NodeAttributes.ARGS]):
+        for arg, value in self.dag.nodes[name][NodeAttributes.ARGS].items():
             yield _ParameterItem(_ParameterType.ARG, arg, value)
-        for param_name, value in six.iteritems(self.dag.nodes[name][NodeAttributes.KWDS]):
+        for param_name, value in self.dag.nodes[name][NodeAttributes.KWDS].items():
             yield _ParameterItem(_ParameterType.KWD, param_name, value)
         for in_node_name in self.dag.predecessors(name):
             param_value = self.dag.nodes[in_node_name][NodeAttributes.VALUE]
@@ -845,7 +843,7 @@ class Computation(object):
                 kwds.append(input_node)
         if max_arg_index >= 0:
             args = [None] * (max_arg_index + 1)
-            for idx, input_node in six.iteritems(args_dict):
+            for idx, input_node in args_dict.items():
                 args[idx] = input_node
             return args + kwds
         else:
@@ -940,11 +938,11 @@ class Computation(object):
         obj = self.copy()
         obj.executor_map = None
         obj.default_executor = None
-        for name, tags in six.iteritems(node_serialize):
+        for name, tags in node_serialize.items():
             if SystemTags.SERIALIZE not in tags:
                 obj._set_uninitialized(name)
 
-        if isinstance(file_, six.string_types):
+        if isinstance(file_, str):
             with open(file_, 'wb') as f:
                 dill.dump(obj, f)
         else:
@@ -958,7 +956,7 @@ class Computation(object):
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        if isinstance(file_, six.string_types):
+        if isinstance(file_, str):
             with open(file_, 'rb') as f:
                 return dill.load(f)
         else:
@@ -974,8 +972,8 @@ class Computation(object):
         """
         obj = Computation()
         obj.dag = nx.DiGraph(self.dag)
-        obj._tag_map = {tag: nodes.copy() for tag, nodes in six.iteritems(self._tag_map)}
-        obj._state_map = {state: nodes.copy() for state, nodes in six.iteritems(self._state_map)}
+        obj._tag_map = {tag: nodes.copy() for tag, nodes in self._tag_map.items()}
+        obj._state_map = {state: nodes.copy() for state, nodes in self._state_map.items()}
         return obj
 
     def add_named_tuple_expansion(self, name, namedtuple_type, group=None):
@@ -1087,10 +1085,10 @@ class Computation(object):
         """
         for n in self.nodes():
             if self.s[n] == States.ERROR:
-                six.print_("{}".format(n))
-                six.print_("=" * len(n))
-                six.print_()
-                six.print_(self.v[n].traceback)
-                six.print_()
+                print("{}".format(n))
+                print("=" * len(n))
+                print()
+                print(self.v[n].traceback)
+                print()
 
 

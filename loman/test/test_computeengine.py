@@ -1,9 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from time import sleep
+import io
 
 from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C
-import six
 from collections import namedtuple
 import random
 import pytest
@@ -117,7 +117,7 @@ def test_serialization():
 
     comp.insert("a", 1)
     comp.compute_all()
-    f = six.BytesIO()
+    f = io.BytesIO()
     comp.write_dill(f)
 
     f.seek(0)
@@ -379,7 +379,7 @@ def test_serialization_skip_flag():
 
     comp.insert("a", 1)
     comp.compute_all()
-    f = six.BytesIO()
+    f = io.BytesIO()
     comp.write_dill(f)
 
     assert comp.state("a") == States.UPTODATE
@@ -647,7 +647,7 @@ def test_no_serialize_flag():
     comp.insert('a', 1)
     comp.compute_all()
 
-    f = six.BytesIO()
+    f = io.BytesIO()
     comp.write_dill(f)
     f.seek(0)
     comp2 = Computation.read_dill(f)
