@@ -2,7 +2,8 @@ import logging
 import os
 import tempfile
 import traceback
-from collections import namedtuple, defaultdict
+from collections import defaultdict
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 from datetime import datetime
 from enum import Enum
@@ -22,9 +23,24 @@ from .util import AttributeView, apply_n, apply1, as_iterable
 
 LOG = logging.getLogger('loman.computeengine')
 
-Error = namedtuple('Error', ['exception', 'traceback'])
-NodeData = namedtuple('NodeData', ['state', 'value'])
-TimingData = namedtuple('TimingData', ['start', 'end', 'duration'])
+
+@dataclass
+class Error:
+    exception: Exception
+    traceback: inspect.Traceback
+
+
+@dataclass
+class NodeData:
+    state: States
+    value: object
+
+
+@dataclass
+class TimingData:
+    start: object
+    end: object
+    duration: object
 
 
 class ComputationException(Exception):
@@ -53,7 +69,11 @@ class _ParameterType(Enum):
     KWD = 2
 
 
-_ParameterItem = namedtuple('ParameterItem', ['type', 'name', 'value'])
+@dataclass
+class _ParameterItem:
+    type: object
+    name: str
+    value: object
 
 
 def _node(func, *args, **kws):
@@ -921,9 +941,9 @@ class Computation(object):
         """
         if input_nodes is not None:
             for n in input_nodes:
-                state, value = self._get_item_one(n)
+                nodedata = self._get_item_one(n)
                 self.add_node(n)
-                self._set_state_and_value(n, state, value)
+                self._set_state_and_value(n, nodedata.state, nodedata.value)
         nodes = self.get_ancestors(output_nodes)
         self.dag.remove_nodes_from([n for n in self.dag if n not in nodes])
 

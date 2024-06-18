@@ -8,6 +8,8 @@ from collections import namedtuple
 import random
 import pytest
 
+from loman.computeengine import NodeData
+
 
 def test_basic():
     def b(a):
@@ -161,13 +163,13 @@ def test_change_structure():
     comp.add_node('d', lambda c: 10 * c)
     comp.insert('a', 10)
     comp.compute_all()
-    assert comp['d'] == (States.UPTODATE, 200)
+    assert comp['d'] == NodeData(States.UPTODATE, 200)
 
     comp.add_node('d', lambda b: 5 * b)
     assert comp.state('d') == States.COMPUTABLE
 
     comp.compute_all()
-    assert comp['d'] == (States.UPTODATE, 55)
+    assert comp['d'] == NodeData(States.UPTODATE, 55)
 
 
 def test_exceptions():
@@ -217,7 +219,7 @@ def test_exception_compute_all():
     comp.add_node('b', lambda a: a/0)
     comp.add_node('c', lambda b: b)
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert comp.state('b') == States.ERROR
     assert comp.state('c') == States.STALE
 
@@ -237,7 +239,7 @@ def test_exception_compute():
     comp.add_node('b', lambda a: a/0)
     comp.add_node('c', lambda b: b)
     comp.compute('c')
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert comp.state('b') == States.ERROR
     assert comp.state('c') == States.STALE
 
@@ -360,14 +362,14 @@ def test_copy_2():
     comp.insert('a', 1)
 
     comp2 = comp.copy()
-    assert comp2['a'] == (States.UPTODATE, 1)
+    assert comp2['a'] == NodeData(States.UPTODATE, 1)
     assert comp2.state('b') == States.COMPUTABLE
 
     comp2.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert comp.state('b') == States.COMPUTABLE
-    assert comp2['a'] == (States.UPTODATE, 1)
-    assert comp2['b'] == (States.UPTODATE, 2)
+    assert comp2['a'] == NodeData(States.UPTODATE, 1)
+    assert comp2['b'] == NodeData(States.UPTODATE, 2)
 
 
 
@@ -411,7 +413,7 @@ def test_insert_many():
         prev = x
     comp.insert_many([(x, x) for x in range(100)])
     for x in range(100):
-        assert comp[x] == (States.UPTODATE, x)
+        assert comp[x] == NodeData(States.UPTODATE, x)
 
 
 def test_insert_from():
@@ -518,8 +520,8 @@ def test_get_item():
     comp.add_node('a', lambda: 1)
     comp.add_node('b', lambda a: a + 1)
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
 
 
 def test_set_stale():
@@ -528,16 +530,16 @@ def test_set_stale():
     comp.add_node('b', lambda a: a + 1)
     comp.compute_all()
 
-    assert comp['a'] == (States.UPTODATE, 1)
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
 
     comp.set_stale('a')
     assert comp.state('a') == States.COMPUTABLE
     assert comp.state('b') == States.STALE
 
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
 
 
 def test_error_stops_compute_all():
@@ -547,7 +549,7 @@ def test_error_stops_compute_all():
     comp.add_node('c', lambda b: b+1)
     comp.insert('a', 1)
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert comp.state('b') == States.ERROR
     assert comp.state('c') == States.STALE
 
@@ -559,7 +561,7 @@ def test_error_stops_compute():
     comp.add_node('c', lambda b: b+1)
     comp.insert('a', 1)
     comp.compute('c')
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert comp.state('b') == States.ERROR
     assert comp.state('c') == States.STALE
 
@@ -573,7 +575,7 @@ def test_map_graph():
     comp.add_map_node('results', 'inputs', subcomp, 'a', 'b')
     comp.insert('inputs', [1, 2, 3])
     comp.compute_all()
-    assert comp['results'] == (States.UPTODATE, [2, 4, 6])
+    assert comp['results'] == NodeData(States.UPTODATE, [2, 4, 6])
 
 
 def test_map_graph_error():
@@ -603,11 +605,11 @@ def test_placeholder():
     assert comp.state('a') == States.UNINITIALIZED
     assert comp.state('b') == States.UNINITIALIZED
     comp.insert('a', 1)
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert comp.state('b') == States.COMPUTABLE
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
 
 
 def test_delete_predecessor():
@@ -616,11 +618,11 @@ def test_delete_predecessor():
     comp.add_node('b', lambda a: a + 1)
     comp.insert('a', 1)
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
     comp.delete_node('a')
     assert comp.state('a') == States.PLACEHOLDER
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
     comp.delete_node('b')
     assert list(comp.dag.nodes()) == []
 
@@ -631,10 +633,10 @@ def test_delete_successor():
     comp.add_node('b', lambda a: a + 1)
     comp.insert('a', 1)
     comp.compute_all()
-    assert comp['a'] == (States.UPTODATE, 1)
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
     comp.delete_node('b')
-    assert comp['a'] == (States.UPTODATE, 1)
+    assert comp['a'] == NodeData(States.UPTODATE, 1)
     assert list(comp.dag.nodes()) == ['a']
     comp.delete_node('a')
     assert list(comp.dag.nodes()) == []
@@ -652,7 +654,7 @@ def test_no_serialize_flag():
     f.seek(0)
     comp2 = Computation.read_dill(f)
     assert comp2.state('a') == States.UNINITIALIZED
-    assert comp2['b'] == (States.UPTODATE, 2)
+    assert comp2['b'] == NodeData(States.UPTODATE, 2)
 
 
 def test_value():
@@ -662,7 +664,7 @@ def test_value():
     comp.add_node('c', lambda a: 2 * a)
     comp.add_node('d', lambda c: 10 * c)
     comp.compute_all()
-    assert comp['d'] == (States.UPTODATE, 200)
+    assert comp['d'] == NodeData(States.UPTODATE, 200)
 
 
 def test_args():
@@ -674,7 +676,7 @@ def test_args():
     comp.add_node('c', value=1)
     comp.add_node('d', f, args=['a', 'b', 'c'])
     comp.compute_all()
-    assert comp['d'] == (States.UPTODATE, 3)
+    assert comp['d'] == NodeData(States.UPTODATE, 3)
 
 
 def test_kwds():
@@ -687,7 +689,7 @@ def test_kwds():
     comp.add_node('d', f, kwds={'a': 'a', 'b': 'b', 'c': 'c'})
     assert comp.state('d') == States.COMPUTABLE
     comp.compute_all()
-    assert comp['d'] == (States.UPTODATE, (set(['a', 'b', 'c']), 3))
+    assert comp['d'] == NodeData(States.UPTODATE, ({'a', 'b', 'c'}, 3))
 
 
 def test_args_and_kwds():
@@ -781,9 +783,9 @@ def test_no_inspect():
     comp.add_node('d', lambda b, c: b + c, kwds={'b': 'b', 'c': 'c'}, inspect=False)
     comp.insert('a', 10)
     comp.compute_all()
-    assert comp['b'] == (States.UPTODATE, 11)
-    assert comp['c'] == (States.UPTODATE, 20)
-    assert comp['d'] == (States.UPTODATE, 31)
+    assert comp['b'] == NodeData(States.UPTODATE, 11)
+    assert comp['c'] == NodeData(States.UPTODATE, 20)
+    assert comp['d'] == NodeData(States.UPTODATE, 31)
 
 
 def test_compute_fib_5():
@@ -838,7 +840,7 @@ def test_compute_with_args():
     assert set(comp.dag.edges()) == {('a', 'b')}
 
     comp.compute_all()
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
 
 
 def test_default_args():
@@ -939,21 +941,21 @@ def test_decorator():
         return a + 1
 
     comp.compute_all()
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
 
     @node(comp, name='c', args=['b'])
     def foo(x):
         return x + 1
 
     comp.compute_all()
-    assert comp['c'] == (States.UPTODATE, 3)
+    assert comp['c'] == NodeData(States.UPTODATE, 3)
 
     @node(comp, kwds={'x': 'b', 'y': 'c'})
     def d(x, y):
         return x + y
 
     comp.compute_all()
-    assert comp['d'] == (States.UPTODATE, 5)
+    assert comp['d'] == NodeData(States.UPTODATE, 5)
 
 
 def test_with_uptodate_predecessors_but_stale_ancestors():
@@ -961,12 +963,12 @@ def test_with_uptodate_predecessors_but_stale_ancestors():
     comp.add_node('a', value=1)
     comp.add_node('b', lambda a: a + 1)
     comp.compute_all()
-    assert comp['b'] == (States.UPTODATE, 2)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
     comp.dag.nodes['a']['state'] = States.UNINITIALIZED # This can happen due to serialization
     comp.add_node('c', lambda b: b + 1)
     comp.compute('c')
-    assert comp['b'] == (States.UPTODATE, 2)
-    assert comp['c'] == (States.UPTODATE, 3)
+    assert comp['b'] == NodeData(States.UPTODATE, 2)
+    assert comp['c'] == NodeData(States.UPTODATE, 3)
 
 
 def test_constant_values():
@@ -985,10 +987,10 @@ def test_constant_values():
 
     assert comp.dag.nodes['b']['args'] == {1: 2}
 
-    assert comp['b'] == (States.UPTODATE, 3)
-    assert comp['c'] == (States.UPTODATE, 4)
-    assert comp['d'] == (States.UPTODATE, 5)
-    assert comp['e'] == (States.UPTODATE, 6)
+    assert comp['b'] == NodeData(States.UPTODATE, 3)
+    assert comp['c'] == NodeData(States.UPTODATE, 4)
+    assert comp['d'] == NodeData(States.UPTODATE, 5)
+    assert comp['e'] == NodeData(States.UPTODATE, 6)
 
 
 def test_compute_multiple():

@@ -1,9 +1,15 @@
 import inspect
-from collections import namedtuple
 
 import sys
+from dataclasses import dataclass, field
 
-_Signature = namedtuple('_Signature', ['kwd_params', 'default_params', 'has_var_args', 'has_var_kwds'])
+
+@dataclass
+class _Signature:
+    kwd_params: list[str] = field()
+    default_params: list[str] = field()
+    has_var_args: bool = field()
+    has_var_kwds: bool = field()
 
 
 def get_signature(func):
