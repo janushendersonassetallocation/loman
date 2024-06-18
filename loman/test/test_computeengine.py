@@ -752,6 +752,39 @@ def test_views():
     assert comp.v.d == 4
 
 
+def test_view_x():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1)
+    comp.add_node("c", lambda a: 2 * a)
+    comp.add_node("d", lambda b, c: b + c)
+
+    assert comp.s.a == States.UNINITIALIZED
+    assert comp.s.b == States.UNINITIALIZED
+    assert comp.s.c == States.UNINITIALIZED
+    assert comp.s.d == States.UNINITIALIZED
+
+    comp.insert("a", 10)
+    assert comp.x.d == 31
+
+
+def test_view_x_exception():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1)
+    comp.add_node("c", lambda a: a / 0)
+    comp.add_node("d", lambda b, c: b + c)
+
+    assert comp.s.a == States.UNINITIALIZED
+    assert comp.s.b == States.UNINITIALIZED
+    assert comp.s.c == States.UNINITIALIZED
+    assert comp.s.d == States.UNINITIALIZED
+
+    comp.insert("a", 10)
+    with pytest.raises(ZeroDivisionError):
+        assert comp.x.d == 31
+
+
 def test_delete_nonexistent_causes_exception():
     comp = Computation()
     with pytest.raises(NonExistentNodeException):

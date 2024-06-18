@@ -168,6 +168,7 @@ class Computation(object):
         self.o = AttributeView(self.nodes, self.get_outputs, self.get_outputs)
         self.t = AttributeView(self.nodes, self.tags, self.tags)
         self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
+        self.x = AttributeView(self.nodes, self.compute_and_get_value)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
         if definition_class is not None:
@@ -756,6 +757,30 @@ class Computation(object):
         :type name: Key or [Keys]
         """
         return apply1(self._value_one, name)
+
+    def compute_and_get_value(self, name):
+        """
+        Get the current value of a node
+
+        This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python attribute name::
+
+            >>> comp = Computation()
+            >>> comp.add_node('foo', value=1)
+            >>> comp.add_node('bar', lambda foo: foo + 1)
+            >>> comp.compute_and_get_value('bar')
+            2
+            >>> comp.x.bar
+            2
+
+        :param name: Name or names of the node to get the value of
+        :type name: Key or [Keys]
+        """
+        if self.state(name) == States.UPTODATE:
+            return self.value(name)
+        self.compute(name, raise_exceptions=True)
+        if self.state(name) == States.UPTODATE:
+            return self.value(name)
+        raise ComputationException(f"Unable to compute node {name}")
 
     def _tag_one(self, name):
         node = self.dag.nodes[name]
