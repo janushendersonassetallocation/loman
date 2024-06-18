@@ -6,7 +6,7 @@ from loman import Computation, States, MapException, LoopDetectedException, NonE
 import six
 from collections import namedtuple
 import random
-from nose.tools import raises, assert_raises
+import pytest
 
 
 def test_basic():
@@ -222,13 +222,13 @@ def test_exception_compute_all():
     assert comp.state('c') == States.STALE
 
 
-@raises(ZeroDivisionError)
 def test_raising_exception_compute():
     comp = Computation()
     comp.add_node('a', value=1)
     comp.add_node('b', lambda a: a/0)
     comp.add_node('c', lambda b: b)
-    comp.compute_all(raise_exceptions=True)
+    with pytest.raises(ZeroDivisionError):
+        comp.compute_all(raise_exceptions=True)
 
 
 def test_exception_compute():
@@ -242,13 +242,13 @@ def test_exception_compute():
     assert comp.state('c') == States.STALE
 
 
-@raises(ZeroDivisionError)
 def test_raising_exception_compute_all():
     comp = Computation()
     comp.add_node('a', value=1)
     comp.add_node('b', lambda a: a/0)
     comp.add_node('c', lambda b: b)
-    comp.compute('c', raise_exceptions=True)
+    with pytest.raises(ZeroDivisionError):
+        comp.compute('c', raise_exceptions=True)
 
 
 def test_update_function():
@@ -710,14 +710,14 @@ def test_args_and_kwds():
                                  'kwds': {'x': 'x', 'y': 'y', 'z': 'z'}}
 
 
-@raises(LoopDetectedException)
 def test_avoid_infinite_loop_compute_all():
     comp = Computation()
     comp.add_node('a', lambda c: c+1)
     comp.add_node('b', lambda a: a+1)
     comp.add_node('c', lambda b: b+1)
     comp.insert('a', 1)
-    comp.compute_all()
+    with pytest.raises(LoopDetectedException):
+        comp.compute_all()
 
 
 def test_views():
@@ -750,16 +750,16 @@ def test_views():
     assert comp.v.d == 4
 
 
-@raises(NonExistentNodeException)
 def test_delete_nonexistent_causes_exception():
     comp = Computation()
-    comp.delete_node('a')
+    with pytest.raises(NonExistentNodeException):
+        comp.delete_node('a')
 
 
-@raises(NonExistentNodeException)
 def test_insert_nonexistent_causes_exception():
     comp = Computation()
-    comp.insert('a', 1)
+    with pytest.raises(NonExistentNodeException):
+        comp.insert('a', 1)
 
 
 def test_insert_many_nonexistent_causes_exception():
@@ -767,7 +767,7 @@ def test_insert_many_nonexistent_causes_exception():
     comp.add_node('a')
     comp.insert('a', 0)
 
-    with assert_raises(NonExistentNodeException):
+    with pytest.raises(NonExistentNodeException):
         comp.insert_many([('a', 1), ('b', 2)])
 
     assert comp.v.a == 0

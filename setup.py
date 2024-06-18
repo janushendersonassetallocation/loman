@@ -20,6 +20,6 @@ setup(
     ],
     install_requires=['six', 'decorator', 'dill', 'pydotplus', 'networkx', 'pandas', 'matplotlib'],
     extras_require={
-        'test': ['pytest', 'nose'],
+        'test': ['pytest'],
     },
 )
