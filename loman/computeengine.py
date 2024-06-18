@@ -90,7 +90,7 @@ def node(comp, name=None, *args, **kw):
     return inner
 
 
-class ConstantValue(object):
+class ConstantValue:
     def __init__(self, value):
         self.value = value
 
@@ -98,7 +98,7 @@ class ConstantValue(object):
 C = ConstantValue
 
 
-class InputNode(object):
+class InputNode:
     def __init__(self, args, kwds):
         self.args = args
         self.kwds = kwds
@@ -108,7 +108,7 @@ def input_node(*args, **kwds):
     return InputNode(args, kwds)
 
 
-class CalcNode(object):
+class CalcNode:
     def __init__(self, f, args, kwds):
         self.f = f
         self.args = args
@@ -119,7 +119,7 @@ def calc_node(f, *args, **kwds):
     return CalcNode(f, args, kwds)
 
 
-class ComputationFactory(object):
+class ComputationFactory:
     def __init__(self, definition_class):
         self.definition_class = definition_class
     def __call__(self, *args, **kwargs):
@@ -144,7 +144,7 @@ def _eval_node(name, f, args, kwds, raise_exceptions):
     return value, exc, tb, start_dt, end_dt
 
 
-class Computation(object):
+class Computation:
     def __init__(self, definition_class=None, default_executor=None, executor_map=None):
         """
 

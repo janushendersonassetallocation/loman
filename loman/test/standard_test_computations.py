@@ -2,7 +2,7 @@ from loman import ComputationFactory, input_node, calc_node
 
 
 @ComputationFactory
-class BasicFourNodeComputation(object):
+class BasicFourNodeComputation:
     a = input_node()
 
     @calc_node

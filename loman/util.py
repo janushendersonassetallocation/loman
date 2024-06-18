@@ -20,7 +20,7 @@ def apply_n(f, *xs, **kwds):
     for p in itertools.product(*[as_iterable(x) for x in xs]):
         f(*p, **kwds)
 
-class AttributeView(object):
+class AttributeView:
     def __init__(self, get_attribute_list, get_attribute, get_item=None):
         self.get_attribute_list = get_attribute_list
         self.get_attribute = get_attribute

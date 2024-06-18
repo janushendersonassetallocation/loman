@@ -12,7 +12,7 @@ class States(Enum):
     PINNED = 6
 
 
-class NodeAttributes(object):
+class NodeAttributes:
     VALUE = 'value'
     STATE = 'state'
     FUNC = 'func'
@@ -24,10 +24,10 @@ class NodeAttributes(object):
     EXECUTOR = 'executor'
 
 
-class EdgeAttributes(object):
+class EdgeAttributes:
     PARAM = 'param'
 
 
-class SystemTags(object):
+class SystemTags:
     SERIALIZE = '__serialize__'
     EXPANSION = '__expansion__'

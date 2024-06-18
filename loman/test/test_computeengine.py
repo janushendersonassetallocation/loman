@@ -851,7 +851,7 @@ def test_multiple_values():
 
 
 def test_compute_with_unpicklable_object():
-    class Unpicklable(object):
+    class Unpicklable:
         def __getstate__(self):
             raise Exception("UNPICKLABLE")
     comp = Computation()
