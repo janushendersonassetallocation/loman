@@ -3,11 +3,13 @@ import inspect
 import sys
 from dataclasses import dataclass, field
 
+from typing import List
+
 
 @dataclass
 class _Signature:
-    kwd_params: list[str] = field()
-    default_params: list[str] = field()
+    kwd_params: List[str] = field()
+    default_params: List[str] = field()
     has_var_args: bool = field()
     has_var_kwds: bool = field()
 
