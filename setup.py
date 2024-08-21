@@ -18,7 +18,7 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7'
     ],
-    install_requires=['six', 'decorator', 'dill', 'pydotplus', 'networkx', 'pandas', 'matplotlib'],
+    install_requires=['decorator', 'dill', 'pydotplus', 'networkx', 'pandas', 'matplotlib'],
     extras_require={
         'test': ['pytest'],
     },
