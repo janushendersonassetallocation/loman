@@ -3,6 +3,8 @@ from datetime import datetime
 from time import sleep
 import io
 
+import pandas as pd
+
 from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C
 from collections import namedtuple
 import random
@@ -1173,3 +1175,38 @@ def test_repoint_missing_node():
     comp.repoint('a', 'new_a')
     assert comp.s.new_a == States.PLACEHOLDER
 
+
+def test_insert_same_value_int():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a+1)
+    comp.insert('a', 1)
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE
+
+    comp.insert('a', 1)
+    assert comp.s.b == States.UPTODATE
+
+    comp.insert('a', 1, force=True)
+    assert comp.s.b != States.UPTODATE
+
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE
+
+
+def test_insert_same_value_df():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a+1)
+    comp.insert('a', pd.DataFrame([[1, 2], [3, 4]], columns=['a', 'b']))
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE
+
+    comp.insert('a', pd.DataFrame([[1, 2], [3, 4]], columns=['a', 'b']))
+    assert comp.s.b == States.UPTODATE
+
+    comp.insert('a', pd.DataFrame([[1, 2], [3, 4]], columns=['a', 'b']), force=True)
+    assert comp.s.b != States.UPTODATE
+
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE

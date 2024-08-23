@@ -1,6 +1,8 @@
 import types
 import itertools
 
+import pandas as pd
+
 
 def apply1(f, xs, *args, **kwds):
     if isinstance(xs, types.GeneratorType):
@@ -60,3 +62,19 @@ class AttributeView:
         else:
             get_attribute = d.get
         return AttributeView(d.keys, get_attribute)
+
+
+pandas_types = (pd.Series, pd.DataFrame)
+
+
+def value_eq(a, b):
+    if a is b:
+        return True
+    if isinstance(a, pandas_types):
+        return a.equals(b)
+    if isinstance(b, pandas_types):
+        return b.equals(a)
+    try:
+        return a == b
+    except Exception:
+        return False

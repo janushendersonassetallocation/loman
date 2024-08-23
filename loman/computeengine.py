@@ -19,7 +19,7 @@ from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
 from .graph_utils import contract_node
 from .visualization import create_viz_dag, to_pydot
 from .compat import get_signature
-from .util import AttributeView, apply_n, apply1, as_iterable
+from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 
 LOG = logging.getLogger('loman.computeengine')
 
@@ -415,12 +415,9 @@ class Computation:
             raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
 
         if not force:
-            try:
-                current_state, current_value = self.__getitem__(name)
-                if current_state == States.UPTODATE and current_value == value:
-                    return
-            except:
-                pass
+            node_data = self.__getitem__(name)
+            if node_data.state == States.UPTODATE and value_eq(value, node_data.value):
+                return
 
         self._set_state_and_value(name, States.UPTODATE, value)
         self._set_descendents(name, States.STALE)
