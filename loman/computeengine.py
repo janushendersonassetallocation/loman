@@ -198,7 +198,7 @@ class Computation:
         :param executor: Name of executor to run node on
         :type executor: string
         """
-        LOG.debug('Adding node {}'.format(str(name)))
+        LOG.debug(f'Adding node {name}')
         args = kwargs.get('args', None)
         kwds = kwargs.get('kwds', None)
         has_value = 'value' in kwargs
@@ -324,10 +324,10 @@ class Computation:
 
         :param name: Name of the node to delete. If the node does not exist, a ``NonExistentNodeException`` will be raised.
         """
-        LOG.debug('Deleting node {}'.format(str(name)))
+        LOG.debug(f'Deleting node {name}')
 
         if not self.dag.has_node(name):
-            raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+            raise NonExistentNodeException(f'Node {name} does not exist')
 
         if len(self.dag.succ[name]) == 0:
             preds = self.dag.predecessors(name)
@@ -348,17 +348,17 @@ class Computation:
         """
         if hasattr(old_name, '__getitem__') and not isinstance(old_name, str):
             for k, v in old_name.items():
-                LOG.debug('Renaming node {} to {}'.format(str(k), str(v)))
+                LOG.debug(f'Renaming node {k} to {v}')
             if new_name is not None:
                 raise ValueError("new_name must not be set if rename_node is passed a dictionary")
             else:
                 mapping = old_name
         else:
-            LOG.debug('Renaming node {} to {}'.format(str(old_name), str(new_name)))
+            LOG.debug(f'Renaming node {old_name} to {new_name}')
             if not self.dag.has_node(old_name):
-                raise NonExistentNodeException('Node {} does not exist'.format(str(old_name)))
+                raise NonExistentNodeException(f'Node {old_name} does not exist')
             if self.dag.has_node(new_name):
-                raise NodeAlreadyExistsException('Node {} does not exist'.format(str(old_name)))
+                raise NodeAlreadyExistsException(f'Node {old_name} does not exist')
             mapping = {old_name: new_name}
 
         nx.relabel_nodes(self.dag, mapping, copy=False)
@@ -409,10 +409,10 @@ class Computation:
         :param value: The value to be inserted into the node.
         :param force: Whether to force recalculation of descendents if node value and state would not be changed
         """
-        LOG.debug('Inserting value into node {}'.format(str(name)))
+        LOG.debug(f'Inserting value into node {name}')
 
         if not self.dag.has_node(name):
-            raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+            raise NonExistentNodeException(f'Node {name} does not exist')
 
         if not force:
             node_data = self.__getitem__(name)
@@ -435,11 +435,11 @@ class Computation:
         :param name_value_pairs: Each tuple should be a pair (name, value), where name is the name of the node to insert the value into.
         :type name_value_pairs: List of tuples
         """
-        LOG.debug('Inserting value into nodes {}'.format(", ".join(str(name) for name, value in name_value_pairs)))
+        LOG.debug(f'Inserting value into nodes {", ".join(str(name) for name, value in name_value_pairs)}')
 
         for name, value in name_value_pairs:
             if not self.dag.has_node(name):
-                raise NonExistentNodeException('Node {} does not exist'.format(str(name)))
+                raise NonExistentNodeException(f'Node {name} does not exist')
 
         stale = set()
         computable = set()
@@ -601,11 +601,11 @@ class Computation:
             elif param.type == _ParameterType.KWD:
                 kwds[param.name] = param.value
             else:
-                raise Exception("Unexpected param type: {}".format(param.type))
+                raise Exception(f"Unexpected param type: {param.type}")
         return f, executor_name, args, kwds
 
     def _compute_nodes(self, names, raise_exceptions=False):
-        LOG.debug('Computing nodes {}'.format(list(map(str, names))))
+        LOG.debug(f'Computing nodes {names}')
 
         futs = {}
 
@@ -640,7 +640,7 @@ class Computation:
                     for n in self.dag.successors(name):
                         logging.debug(str(name) + ' ' + str(n) + ' ' + str(computed))
                         if n in computed:
-                            raise LoopDetectedException("Calculating {} for the second time".format(name))
+                            raise LoopDetectedException(f"Calculating {name} for the second time")
                         self._try_set_computable(n)
                         node0 = self.dag.nodes[n]
                         state = node0[NodeAttributes.STATE]
@@ -664,9 +664,9 @@ class Computation:
         ancestors = nx.ancestors(g, name)
         for n in ancestors:
             if state == States.UNINITIALIZED and len(self.dag.pred[n]) == 0:
-                raise Exception("Cannot compute {} because {} uninitialized".format(name, n))
+                raise Exception(f"Cannot compute {name} because {n} uninitialized")
             if state == States.PLACEHOLDER:
-                raise Exception("Cannot compute {} because {} is placeholder".format(name, n))
+                raise Exception(f"Cannot compute {name} because {n} is placeholder")
 
         ancestors.add(name)
         nodes_sorted = nx.topological_sort(g)
@@ -1048,7 +1048,7 @@ class Computation:
                 return getattr(tuple, field)
             return get_field_value
         for field in namedtuple_type._fields:
-            node_name = "{}.{}".format(name, field)
+            node_name = f'{name}.{field}'
             self.add_node(node_name, make_f(field), kwds={'tuple': name}, group=group)
             self.set_tag(node_name, SystemTags.EXPANSION)
 
@@ -1076,7 +1076,7 @@ class Computation:
                     is_error = True
                     results.append(subgraph.copy())
             if is_error:
-                raise MapException("Unable to calculate {}".format(result_node), results)
+                raise MapException(f"Unable to calculate {result_node}", results)
             return results
         self.add_node(result_node, f, kwds={'xs': input_node})
 
@@ -1127,7 +1127,7 @@ class Computation:
         """
         for n in self.nodes():
             if self.s[n] == States.ERROR:
-                print("{}".format(n))
+                print(f"{n}")
                 print("=" * len(n))
                 print()
                 print(self.v[n].traceback)

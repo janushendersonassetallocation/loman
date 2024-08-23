@@ -28,12 +28,12 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
         max_duration = max(timing.duration for timing in timings.values() if hasattr(timing, 'duration'))
         min_duration = min(timing.duration for timing in timings.values() if hasattr(timing, 'duration'))
     else:
-        raise ValueError('{} is not a valid loman colors parameter for visualization'.format(colors))
+        raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
     for i, (name, data) in enumerate(comp_dag.nodes(data=True)):
-        short_name = "n{}".format(i)
+        short_name = f'n{i}'
         attr_dict = {
             'label': name,
             'style': 'filled',
