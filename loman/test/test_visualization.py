@@ -55,3 +55,12 @@ def test_simple():
     assert node['c']['attributes']['style'] == 'filled'
     assert node['d']['attributes']['fillcolor'] == loman.visualization.state_colors[States.UPTODATE]
     assert node['d']['attributes']['style'] == 'filled'
+
+
+def test_with_groups():
+    comp = Computation()
+    comp.add_node('a', group='foo')
+    comp.add_node('b', lambda a: a + 1, group='foo')
+    comp.add_node('c', lambda a: 2 * a, group='bar')
+    comp.add_node('d', lambda b, c: b + c, group='bar')
+    d = comp.to_pydot()

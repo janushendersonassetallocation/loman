@@ -98,7 +98,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
 
         for name in names:
             node = pydotplus.Node(name)
-            for k, v in viz_dag.node[name].items():
+            for k, v in viz_dag.nodes[name].items():
                 if not k.startswith("_"):
                     node.set(k, v)
             c.add_node(node)
