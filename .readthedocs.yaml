@@ -15,6 +15,7 @@ build:
     # golang: "1.20"
   apt_packages:
     - fontconfig
+    - fonts-liberation
     - libfreetype6
     - graphviz
     - gsfonts
