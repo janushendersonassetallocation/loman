@@ -17,6 +17,7 @@ build:
     - fontconfig
     - libfreetype6
     - graphviz
+    - gsfonts
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
