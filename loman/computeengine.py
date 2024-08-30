@@ -2,13 +2,16 @@ import logging
 import os
 import tempfile
 import traceback
+import typing
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 from datetime import datetime
 from enum import Enum
 
 import inspect
+from typing import List, Dict
+
 import decorator
 import dill
 import networkx as nx
@@ -98,32 +101,54 @@ class ConstantValue:
 C = ConstantValue
 
 
-class InputNode:
-    def __init__(self, args, kwds):
-        self.args = args
-        self.kwds = kwds
+class Node:
+    def add_to_comp(self, comp, name, ctx):
+        raise NotImplementedError()
+
+
+@dataclass
+class InputNode(Node):
+    args: List = field(default_factory=list)
+    kwds: Dict = field(default_factory=dict)
+
+    def add_to_comp(self, comp: 'Computation', name: str, ctx: dict):
+        kwds = ctx.copy()
+        kwds.update(self.kwds)
+        comp.add_node(name, *self.args, **kwds)
 
 
 def input_node(*args, **kwds):
     return InputNode(args, kwds)
 
 
-class CalcNode:
-    def __init__(self, f, args, kwds):
-        self.f = f
-        self.args = args
-        self.kwds = kwds
+@dataclass
+class CalcNode(Node):
+    f: typing.Callable
+    args: List = field(default_factory=list)
+    kwds: Dict = field(default_factory=dict)
+
+    def add_to_comp(self, comp, name, ctx):
+        kwds = ctx.copy()
+        kwds.update(self.kwds)
+        comp.add_node(name, self.f, *self.args, **kwds)
 
 
 def calc_node(f, *args, **kwds):
     return CalcNode(f, args, kwds)
 
 
-class ComputationFactory:
-    def __init__(self, definition_class):
-        self.definition_class = definition_class
-    def __call__(self, *args, **kwargs):
-        return Computation(self.definition_class, *args, **kwargs)
+def ComputationFactory(maybe_cls=None, *, ignore_self=True):
+    def wrap(cls):
+        def create_computation(*args, **kwargs):
+            comp = Computation(*args, **kwargs)
+            comp.add_nodes_from_class(cls, ignore_self=ignore_self)
+            return comp
+        return create_computation
+
+    if maybe_cls is None:
+        return wrap
+
+    return wrap(maybe_cls)
 
 
 def _eval_node(name, f, args, kwds, raise_exceptions):
@@ -142,6 +167,39 @@ def _eval_node(name, f, args, kwds, raise_exceptions):
             raise
     end_dt = datetime.utcnow()
     return value, exc, tb, start_dt, end_dt
+
+
+_MISSING_VALUE_SENTINEL = object()
+
+
+class NullObject:
+    def __getattr__(self, name):
+        print(f'__getattr__: {name}')
+        raise AttributeError(f"'NullObject' object has no attribute '{name}'")
+
+    def __setattr__(self, name, value):
+        print(f'__setattr__: {name}')
+        raise AttributeError(f"'NullObject' object has no attribute '{name}'")
+
+    def __delattr__(self, name):
+        print(f'__delattr__: {name}')
+        raise AttributeError(f"'NullObject' object has no attribute '{name}'")
+
+    def __call__(self, *args, **kwargs):
+        print(f'__call__: {args}, {kwargs}')
+        raise TypeError("'NullObject' object is not callable")
+
+    def __getitem__(self, key):
+        print(f'__getitem__: {key}')
+        raise KeyError(f"'NullObject' object has no item with key '{key}'")
+
+    def __setitem__(self, key, value):
+        print(f'__setitem__: {key}')
+        raise KeyError(f"'NullObject' object cannot have items set with key '{key}'")
+
+    def __repr__(self):
+        print(f'__repr__: {self.__dict__}')
+        return "<NullObject>"
 
 
 class Computation:
@@ -174,7 +232,8 @@ class Computation:
         if definition_class is not None:
             self.add_nodes_from_class(definition_class)
 
-    def add_node(self, name, func=None, **kwargs):
+    def add_node(self, name, func=None, *, args=None, kwds=None, value=_MISSING_VALUE_SENTINEL, serialize=True, inspect=True,
+                 group=None, tags=None, executor=None, ignore_self=False):
         """
         Adds or updates a node in a computation
 
@@ -199,15 +258,11 @@ class Computation:
         :type executor: string
         """
         LOG.debug(f'Adding node {name}')
-        args = kwargs.get('args', None)
-        kwds = kwargs.get('kwds', None)
-        has_value = 'value' in kwargs
-        value = kwargs.get('value', None)
-        serialize = kwargs.get('serialize', True)
-        inspect = kwargs.get('inspect', True)
-        group = kwargs.get('group', None)
-        tags = kwargs.get('tags', [])
-        executor = kwargs.get('executor', None)
+        has_value = value is not _MISSING_VALUE_SENTINEL
+        if value is _MISSING_VALUE_SENTINEL:
+            value = None
+        if tags is None:
+            tags = []
 
         self.dag.add_node(name)
         pred_edges = [(p, name) for p in self.dag.predecessors(name)]
@@ -239,6 +294,14 @@ class Computation:
                         self.dag.add_edge(input_vertex_name, name, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = get_signature(func)
+                if ignore_self and signature.kwd_params[0] == 'self':
+                    signature.kwd_params.remove('self')
+
+                    def new_func(*args, **kwargs):
+                        return func(NullObject(), *args, **kwargs)
+
+                    node[NodeAttributes.FUNC] = new_func
+
                 param_names = set()
                 if not signature.has_var_args:
                     param_names.update(signature.kwd_params[args_count:])
@@ -275,11 +338,10 @@ class Computation:
         if serialize:
             self.set_tag(name, SystemTags.SERIALIZE)
 
-    def add_nodes_from_class(self, cls):
-        for name, node in inspect.getmembers(cls, lambda o: isinstance(o, InputNode)):
-            self.add_node(name, *node.args, **node.kwds)
-        for name, node in inspect.getmembers(cls, lambda o: isinstance(o, CalcNode)):
-            self.add_node(name, node.f, *node.args, **node.kwds)
+    def add_nodes_from_class(self, cls, ignore_self=True):
+        ctx = {'ignore_self': ignore_self}
+        for name, node_defn in inspect.getmembers(cls, lambda o: isinstance(o, Node)):
+            node_defn.add_to_comp(self, name, ctx)
 
     def _refresh_maps(self):
         self._tag_map.clear()
