@@ -160,3 +160,25 @@ def test_standard_computation_does_not_ignore_self():
     comp.add_node('self', value=1)
     comp.compute_all()
     assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calc_node_ignore_self():
+    @ComputationFactory(ignore_self=False)
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(a):
+            return a + 1
+
+        @calc_node(ignore_self=True)
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(b, c):
+            return b + c
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10

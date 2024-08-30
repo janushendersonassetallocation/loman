@@ -2,7 +2,6 @@ import logging
 import os
 import tempfile
 import traceback
-import typing
 from collections import defaultdict
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
@@ -10,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 
 import inspect
-from typing import List, Dict
+from typing import List, Dict, Tuple, Any, Callable
 
 import decorator
 import dill
@@ -108,13 +107,13 @@ class Node:
 
 @dataclass
 class InputNode(Node):
-    args: List = field(default_factory=list)
+    args: Tuple[Any, ...] = field(default_factory=tuple)
     kwds: Dict = field(default_factory=dict)
 
     def add_to_comp(self, comp: 'Computation', name: str, ctx: dict):
         kwds = ctx.copy()
         kwds.update(self.kwds)
-        comp.add_node(name, *self.args, **kwds)
+        comp.add_node(name, **kwds)
 
 
 def input_node(*args, **kwds):
@@ -123,18 +122,22 @@ def input_node(*args, **kwds):
 
 @dataclass
 class CalcNode(Node):
-    f: typing.Callable
-    args: List = field(default_factory=list)
+    f: Callable
     kwds: Dict = field(default_factory=dict)
 
     def add_to_comp(self, comp, name, ctx):
         kwds = ctx.copy()
         kwds.update(self.kwds)
-        comp.add_node(name, self.f, *self.args, **kwds)
+        comp.add_node(name, self.f, **kwds)
 
 
-def calc_node(f, *args, **kwds):
-    return CalcNode(f, args, kwds)
+def calc_node(f=None, **kwds):
+    def wrap(func):
+        return CalcNode(func, kwds)
+
+    if f is None:
+        return wrap
+    return wrap(f)
 
 
 def ComputationFactory(maybe_cls=None, *, ignore_self=True):
