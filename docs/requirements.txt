@@ -4,3 +4,4 @@ pillow
 mock
 commonmark
 recommonmark
+myst-parser
