@@ -19,6 +19,7 @@ build:
     - libfreetype6
     - graphviz
     - gsfonts
+    - libcairo2
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:
