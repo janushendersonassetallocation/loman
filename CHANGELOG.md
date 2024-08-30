@@ -1,5 +1,21 @@
 # Change Log
 
+## [0.4.1] (Pending)
+
+- Ignoring first parameter of a `@calc_node` if it is called `self`. (Can be disabled with `@ComputationFactory(ignore_self=False)` or `@calc_node(ignore_self=False)` ).
+- Fix ReadTheDocs build
+- Convert documentation from reStructuredText to MyST Markdown
+
+## [0.4.0] (2024-08-22)
+
+- Removed Python 2 support
+- Changed test framework from nose to pytest
+- Add `compute_and_get_value`, `x` attribute-style access to compute value of a node and get it in one step
+- Replace namedtuples with dataclasses
+- BUGFIX: Fix equality testing on Computation.insert
+- Use DataFrame.equals and Series.equals to test equality in Computation.insert
+- BUGFIX: Fix handling of groups in rendering functions
+
 ## [0.3.0] (2019-10-24)
 
 - Added `get_original_inputs` to see source inputs of entire computation or a given set of nodes
