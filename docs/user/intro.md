@@ -1,13 +1,11 @@
-Introduction
-============
+# Introduction
 
 Loman is a Python library for keeping track of dependencies between elements of a large computation, allowing you to recalculate only the parts that are necessary as new input data arrives, or as you change how certain elements are calculated.
 
 It stems from experience with real-life systems taking data from many independent source. Often systems are implemented using sets of scheduled tasks. This approach is often pragmatic at first, but suffers several drawbacks as the scale of the system increases:
-
-* When failures occur, such as a required file or data set not being in place on time, then downstream scheduled tasks may execute anyway.
-* When re-runs are required, typically each step must be manually invoked. Often it is not clear which steps must be re-run, and so operators re-run everything until things look right. A large proportion of the operational overhead of many real-world systems comes from needing enough capacity to improvised re-runs when systems fail.
-* As tasks are added, the schedule may be become tight. It may not be clear which items can be moved earlier or later to make room for new tasks.
+- When failures occur, such as a required file or data set not being in place on time, then downstream scheduled tasks may execute anyway.
+- When re-runs are required, typically each step must be manually invoked. Often it is not clear which steps must be re-run, and so operators re-run everything until things look right. A large proportion of the operational overhead of many real-world systems comes from needing enough capacity to improvised re-runs when systems fail.
+- As tasks are added, the schedule may be become tight. It may not be clear which items can be moved earlier or later to make room for new tasks.
 
 Other problems occur at the scale of single programs, which are often programmed as a sequential set of steps. Typically any reasonably complex computation will require multiple iterations before it is correct. A limiting factor is the speed at which the programmer can perform these iterations - there are only so many minutes in each day. Often repeatedly pulling large data sets or re-performing lengthy calculations that will not have changed between iterations ends up substantially slowing progress.
 
