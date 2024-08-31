@@ -182,3 +182,28 @@ def test_computation_factory_methods_calc_node_ignore_self():
     comp = FooComp()
     comp.compute_all()
     assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calling_methods_on_self():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        def add(self, x, y):
+            return x + y
+
+        @calc_node
+        def b(self, a):
+            return self.add(a, 1)
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return self.add(b, c)
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
