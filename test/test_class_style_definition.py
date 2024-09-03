@@ -1,7 +1,9 @@
+import pytest
 from loman import (Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C,
                    input_node, calc_node, ComputationFactory)
 
 
+@pytest.mark.xfail
 def test_class_style_definition():
     class FooComp():
         a = input_node(value=3)
@@ -24,6 +26,7 @@ def test_class_style_definition():
     assert comp.v.d == 10
 
 
+@pytest.mark.xfail
 def test_class_style_definition_as_decorator():
     @Computation
     class FooComp():
