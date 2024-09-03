@@ -9,6 +9,7 @@ from datetime import datetime
 from enum import Enum
 
 import inspect
+from functools import wraps
 from typing import List, Dict, Tuple, Any, Callable
 
 import decorator
@@ -101,7 +102,7 @@ C = ConstantValue
 
 
 class Node:
-    def add_to_comp(self, comp, name, ctx):
+    def add_to_comp(self, comp: 'Computation', name: str, obj: object, ignore_self: bool):
         raise NotImplementedError()
 
 
@@ -110,14 +111,15 @@ class InputNode(Node):
     args: Tuple[Any, ...] = field(default_factory=tuple)
     kwds: Dict = field(default_factory=dict)
 
-    def add_to_comp(self, comp: 'Computation', name: str, ctx: dict):
-        kwds = ctx.copy()
-        kwds.update(self.kwds)
-        comp.add_node(name, **kwds)
+    def __init__(self, *args, **kwds):
+        self.args = args
+        self.kwds = kwds
+
+    def add_to_comp(self, comp: 'Computation', name: str, obj: object, ignore_self: bool):
+        comp.add_node(name, **self.kwds)
 
 
-def input_node(*args, **kwds):
-    return InputNode(args, kwds)
+input_node = InputNode
 
 
 @dataclass
@@ -125,26 +127,46 @@ class CalcNode(Node):
     f: Callable
     kwds: Dict = field(default_factory=dict)
 
-    def add_to_comp(self, comp, name, ctx):
-        kwds = ctx.copy()
-        kwds.update(self.kwds)
-        comp.add_node(name, self.f, **kwds)
+    def add_to_comp(self, comp: 'Computation', name: str, obj: object, ignore_self: bool):
+        kwds = self.kwds.copy()
+        ignore_self = ignore_self or kwds.get('ignore_self', False)
+        f = self.f
+        if ignore_self:
+            signature = get_signature(self.f)
+            if signature.kwd_params[0] == 'self':
+                f = f.__get__(obj, obj.__class__)
+        if 'ignore_self' in kwds:
+            del kwds['ignore_self']
+        comp.add_node(name, f, **kwds)
 
 
 def calc_node(f=None, **kwds):
     def wrap(func):
-        return CalcNode(func, kwds)
-
+        func._loman_node_info = CalcNode(func, kwds)
+        return func
     if f is None:
         return wrap
     return wrap(f)
 
 
+def populate_computation_from_class(comp, cls, obj, ignore_self=True):
+    for name, member in inspect.getmembers(cls):
+        node_ = None
+        if isinstance(member, Node):
+            node_ = member
+        elif hasattr(member, '_loman_node_info'):
+            node_ = getattr(member, '_loman_node_info')
+        if node_ is not None:
+            node_.add_to_comp(comp, name, obj, ignore_self)
+
+
 def ComputationFactory(maybe_cls=None, *, ignore_self=True):
     def wrap(cls):
         def create_computation(*args, **kwargs):
+            obj = cls()
             comp = Computation(*args, **kwargs)
-            comp.add_nodes_from_class(cls, ignore_self=ignore_self)
+            comp._definition_object = obj
+            populate_computation_from_class(comp, cls, obj, ignore_self)
             return comp
         return create_computation
 
@@ -206,7 +228,7 @@ class NullObject:
 
 
 class Computation:
-    def __init__(self, definition_class=None, default_executor=None, executor_map=None):
+    def __init__(self, *, default_executor=None, executor_map=None):
         """
 
         :param definition_class: A class with methods defining the nodes of the Computation
@@ -232,11 +254,9 @@ class Computation:
         self.x = AttributeView(self.nodes, self.compute_and_get_value)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
-        if definition_class is not None:
-            self.add_nodes_from_class(definition_class)
 
     def add_node(self, name, func=None, *, args=None, kwds=None, value=_MISSING_VALUE_SENTINEL, serialize=True, inspect=True,
-                 group=None, tags=None, executor=None, ignore_self=False):
+                 group=None, tags=None, executor=None):
         """
         Adds or updates a node in a computation
 
@@ -297,14 +317,6 @@ class Computation:
                         self.dag.add_edge(input_vertex_name, name, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)})
             if inspect:
                 signature = get_signature(func)
-                if ignore_self and signature.kwd_params[0] == 'self':
-                    signature.kwd_params.remove('self')
-
-                    def new_func(*args, **kwargs):
-                        return func(NullObject(), *args, **kwargs)
-
-                    node[NodeAttributes.FUNC] = new_func
-
                 param_names = set()
                 if not signature.has_var_args:
                     param_names.update(signature.kwd_params[args_count:])
@@ -340,11 +352,6 @@ class Computation:
         self.set_tag(name, tags)
         if serialize:
             self.set_tag(name, SystemTags.SERIALIZE)
-
-    def add_nodes_from_class(self, cls, ignore_self=True):
-        ctx = {'ignore_self': ignore_self}
-        for name, node_defn in inspect.getmembers(cls, lambda o: isinstance(o, Node)):
-            node_defn.add_to_comp(self, name, ctx)
 
     def _refresh_maps(self):
         self._tag_map.clear()
@@ -1197,5 +1204,12 @@ class Computation:
                 print()
                 print(self.v[n].traceback)
                 print()
+
+    @classmethod
+    def from_class(cls, definition_class, ignore_self=True):
+        comp = cls()
+        obj = definition_class()
+        populate_computation_from_class(comp, definition_class, obj, ignore_self=ignore_self)
+        return comp
 
 

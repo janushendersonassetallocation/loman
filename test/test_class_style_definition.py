@@ -1,3 +1,4 @@
+import pytest
 from loman import (Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C,
                    input_node, calc_node, ComputationFactory)
 
@@ -18,14 +19,14 @@ def test_class_style_definition():
         def d(b, c):
             return b + c
 
-    comp = Computation(FooComp)
+    comp = Computation.from_class(FooComp)
     comp.compute_all()
 
     assert comp.v.d == 10
 
 
 def test_class_style_definition_as_decorator():
-    @Computation
+    @Computation.from_class
     class FooComp():
         a = input_node(value=3)
 
@@ -178,6 +179,59 @@ def test_computation_factory_methods_calc_node_ignore_self():
         @calc_node
         def d(b, c):
             return b + c
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calling_methods_on_self():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        def add(self, x, y):
+            return x + y
+
+        @calc_node
+        def b(self, a):
+            return self.add(a, 1)
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return self.add(b, c)
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calling_methods_on_self_recursively():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        def really_add(self, x, y):
+            return x + y
+
+        def add(self, x, y):
+            return self.really_add(x, y)
+
+        @calc_node
+        def b(self, a):
+            return self.add(a, 1)
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return self.add(b, c)
 
     comp = FooComp()
     comp.compute_all()
