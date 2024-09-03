@@ -9,6 +9,7 @@ from datetime import datetime
 from enum import Enum
 
 import inspect
+from functools import wraps
 from typing import List, Dict, Tuple, Any, Callable
 
 import decorator
@@ -128,23 +129,21 @@ class CalcNode(Node):
 
     def add_to_comp(self, comp: 'Computation', name: str, obj: object, ignore_self: bool):
         kwds = self.kwds.copy()
-        if ignore_self or kwds.get('ignore_self', False):
+        ignore_self = ignore_self or kwds.get('ignore_self', False)
+        f = self.f
+        if ignore_self:
             signature = get_signature(self.f)
             if signature.kwd_params[0] == 'self':
-                args_mapping = self.kwds.get(NodeAttributes.ARGS, None)
-                if args_mapping is None:
-                    args_mapping = []
-                args_mapping.insert(0, ConstantValue(obj))
-                kwds[NodeAttributes.ARGS] = args_mapping
+                f = f.__get__(obj, obj.__class__)
         if 'ignore_self' in kwds:
             del kwds['ignore_self']
-        comp.add_node(name, self.f, **kwds)
+        comp.add_node(name, f, **kwds)
 
 
 def calc_node(f=None, **kwds):
     def wrap(func):
-        return CalcNode(func, kwds)
-
+        func._loman_node_info = CalcNode(func, kwds)
+        return func
     if f is None:
         return wrap
     return wrap(f)
@@ -155,8 +154,15 @@ def ComputationFactory(maybe_cls=None, *, ignore_self=True):
         def create_computation(*args, **kwargs):
             obj = cls()
             comp = Computation(*args, **kwargs)
-            for name, node_defn in inspect.getmembers(cls, lambda o: isinstance(o, Node)):
-                node_defn.add_to_comp(comp, name, obj, ignore_self)
+            comp._definition_object = obj
+            for name, member in inspect.getmembers(cls):
+                node_ = None
+                if isinstance(member, Node):
+                    node_ = member
+                elif hasattr(member, '_loman_node_info'):
+                    node_ = getattr(member, '_loman_node_info')
+                if node_ is not None:
+                    node_.add_to_comp(comp, name, obj, ignore_self)
             return comp
         return create_computation
 
