@@ -149,20 +149,24 @@ def calc_node(f=None, **kwds):
     return wrap(f)
 
 
+def populate_computation_from_class(comp, cls, obj, ignore_self=True):
+    for name, member in inspect.getmembers(cls):
+        node_ = None
+        if isinstance(member, Node):
+            node_ = member
+        elif hasattr(member, '_loman_node_info'):
+            node_ = getattr(member, '_loman_node_info')
+        if node_ is not None:
+            node_.add_to_comp(comp, name, obj, ignore_self)
+
+
 def ComputationFactory(maybe_cls=None, *, ignore_self=True):
     def wrap(cls):
         def create_computation(*args, **kwargs):
             obj = cls()
             comp = Computation(*args, **kwargs)
             comp._definition_object = obj
-            for name, member in inspect.getmembers(cls):
-                node_ = None
-                if isinstance(member, Node):
-                    node_ = member
-                elif hasattr(member, '_loman_node_info'):
-                    node_ = getattr(member, '_loman_node_info')
-                if node_ is not None:
-                    node_.add_to_comp(comp, name, obj, ignore_self)
+            populate_computation_from_class(comp, cls, obj, ignore_self)
             return comp
         return create_computation
 
@@ -1200,5 +1204,12 @@ class Computation:
                 print()
                 print(self.v[n].traceback)
                 print()
+
+    @classmethod
+    def from_class(cls, definition_class, ignore_self=True):
+        comp = cls()
+        obj = definition_class()
+        populate_computation_from_class(comp, definition_class, obj, ignore_self=ignore_self)
+        return comp
 
 

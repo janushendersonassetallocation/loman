@@ -3,7 +3,6 @@ from loman import (Computation, States, MapException, LoopDetectedException, Non
                    input_node, calc_node, ComputationFactory)
 
 
-@pytest.mark.xfail
 def test_class_style_definition():
     class FooComp():
         a = input_node(value=3)
@@ -20,15 +19,14 @@ def test_class_style_definition():
         def d(b, c):
             return b + c
 
-    comp = Computation(FooComp)
+    comp = Computation.from_class(FooComp)
     comp.compute_all()
 
     assert comp.v.d == 10
 
 
-@pytest.mark.xfail
 def test_class_style_definition_as_decorator():
-    @Computation
+    @Computation.from_class
     class FooComp():
         a = input_node(value=3)
 
