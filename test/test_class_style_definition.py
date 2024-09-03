@@ -210,3 +210,31 @@ def test_computation_factory_methods_calling_methods_on_self():
     comp = FooComp()
     comp.compute_all()
     assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calling_methods_on_self_recursively():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        def really_add(self, x, y):
+            return x + y
+
+        def add(self, x, y):
+            return self.really_add(x, y)
+
+        @calc_node
+        def b(self, a):
+            return self.add(a, 1)
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return self.add(b, c)
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
