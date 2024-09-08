@@ -255,8 +255,8 @@ class Computation:
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
 
-    def add_node(self, name, func=None, *, args=None, kwds=None, value=_MISSING_VALUE_SENTINEL, serialize=True, inspect=True,
-                 group=None, tags=None, executor=None):
+    def add_node(self, name, func=None, *, args=None, kwds=None, value=_MISSING_VALUE_SENTINEL, converter=None,
+                 serialize=True, inspect=True, group=None, tags=None, executor=None):
         """
         Adds or updates a node in a computation
 
@@ -300,6 +300,7 @@ class Computation:
         node[NodeAttributes.KWDS] = {}
         node[NodeAttributes.FUNC] = None
         node[NodeAttributes.EXECUTOR] = executor
+        node[NodeAttributes.CONVERTER] = converter
 
         if func:
             node[NodeAttributes.FUNC] = func
@@ -551,6 +552,8 @@ class Computation:
 
     def _set_state_and_value(self, name, state, value, require_old_state=True):
         node = self.dag.nodes[name]
+        converter = node.get(NodeAttributes.CONVERTER)
+        converted_value = value if converter is None else converter(value)
         try:
             old_state = node[NodeAttributes.STATE]
             self._state_map[old_state].remove(name)
@@ -558,7 +561,7 @@ class Computation:
             if require_old_state:
                 raise
         node[NodeAttributes.STATE] = state
-        node[NodeAttributes.VALUE] = value
+        node[NodeAttributes.VALUE] = converted_value
         self._state_map[state].add(name)
 
     def _set_states(self, names, state):

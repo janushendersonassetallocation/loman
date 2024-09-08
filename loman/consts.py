@@ -22,6 +22,7 @@ class NodeAttributes:
     KWDS = 'kwds'
     TIMING = 'timing'
     EXECUTOR = 'executor'
+    CONVERTER = 'converter'
 
 
 class EdgeAttributes:
