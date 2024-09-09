@@ -50,3 +50,13 @@ def test_exception_on_computation():
     comp.compute_all()
     assert comp.s.b == States.ERROR
     assert isinstance(comp.v.b.exception, ValueError)
+
+
+def test_exception_in_computation_with_converter():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a / 0, converter=float)
+    comp.insert('a', 1)
+    comp.compute_all()
+    assert comp.s.b == States.ERROR
+    assert isinstance(comp.v.b.exception, ValueError)
