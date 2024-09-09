@@ -59,4 +59,4 @@ def test_exception_in_computation_with_converter():
     comp.insert('a', 1)
     comp.compute_all()
     assert comp.s.b == States.ERROR
-    assert isinstance(comp.v.b.exception, ValueError)
+    assert isinstance(comp.v.b.exception, ZeroDivisionError)

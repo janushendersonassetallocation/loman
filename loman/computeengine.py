@@ -292,7 +292,7 @@ class Computation:
         self.dag.remove_edges_from(pred_edges)
         node = self.dag.nodes[name]
 
-        self._set_state_and_value(name, States.UNINITIALIZED, None, require_old_state=False)
+        self._set_state_and_literal_value(name, States.UNINITIALIZED, None, require_old_state=False)
 
         node[NodeAttributes.TAG] = set()
         node[NodeAttributes.GROUP] = group
@@ -343,9 +343,8 @@ class Computation:
                             self.dag.add_node(in_node_name, **{NodeAttributes.STATE: States.PLACEHOLDER})
                             self._state_map[States.PLACEHOLDER].add(in_node_name)
                     self.dag.add_edge(in_node_name, name, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
-
-        if func or value is not None:
             self._set_descendents(name, States.STALE)
+
         if has_value:
             self._set_uptodate(name, value)
         if node[NodeAttributes.STATE] == States.UNINITIALIZED:
@@ -550,10 +549,24 @@ class Computation:
         node[NodeAttributes.STATE] = state
         self._state_map[state].add(name)
 
-    def _set_state_and_value(self, name, state, value, require_old_state=True):
+    def _set_state_and_value(self, name, state, value, *, throw_conversion_exception=True):
         node = self.dag.nodes[name]
         converter = node.get(NodeAttributes.CONVERTER)
-        converted_value = value if converter is None else converter(value)
+        if converter is None:
+            self._set_state_and_literal_value(name, state, value)
+        else:
+            try:
+                converted_value = converter(value)
+                self._set_state_and_literal_value(name, state, converted_value)
+            except Exception as e:
+                if throw_conversion_exception:
+                    raise e
+                else:
+                    tb = traceback.format_exc()
+                    self._set_error(name, e, tb)
+
+    def _set_state_and_literal_value(self, name, state, value, require_old_state=True):
+        node = self.dag.nodes[name]
         try:
             old_state = node[NodeAttributes.STATE]
             self._state_map[old_state].remove(name)
@@ -561,7 +574,7 @@ class Computation:
             if require_old_state:
                 raise
         node[NodeAttributes.STATE] = state
-        node[NodeAttributes.VALUE] = converted_value
+        node[NodeAttributes.VALUE] = value
         self._state_map[state].add(name)
 
     def _set_states(self, names, state):
@@ -636,8 +649,8 @@ class Computation:
         for n in self.dag.successors(name):
             self._try_set_computable(n)
 
-    def _set_error(self, name, error):
-        self._set_state_and_value(name, States.ERROR, error)
+    def _set_error(self, name, exc, tb):
+        self._set_state_and_literal_value(name, States.ERROR, Error(exc, tb))
         self._set_descendents(name, States.STALE)
 
     def _try_set_computable(self, name):
@@ -709,7 +722,7 @@ class Computation:
                 value, exc, tb, start_dt, end_dt = fut.result()
                 delta = (end_dt - start_dt).total_seconds()
                 if exc is None:
-                    self._set_state_and_value(name, States.UPTODATE, value)
+                    self._set_state_and_value(name, States.UPTODATE, value, throw_conversion_exception=False)
                     node0[NodeAttributes.TIMING] = TimingData(start_dt, end_dt, delta)
                     self._set_descendents(name, States.STALE)
                     for n in self.dag.successors(name):
@@ -722,8 +735,7 @@ class Computation:
                         if state == States.COMPUTABLE and n in names:
                             run(n)
                 else:
-                    self._set_state_and_value(name, States.ERROR, Error(exc, tb))
-                    self._set_descendents(name, States.STALE)
+                    self._set_error(name, exc, tb)
                 computed.add(name)
 
     def _get_calc_nodes(self, name):
@@ -1040,7 +1052,7 @@ class Computation:
             for n in input_nodes:
                 nodedata = self._get_item_one(n)
                 self.add_node(n)
-                self._set_state_and_value(n, nodedata.state, nodedata.value)
+                self._set_state_and_literal_value(n, nodedata.state, nodedata.value)
         nodes = self.get_ancestors(output_nodes)
         self.dag.remove_nodes_from([n for n in self.dag if n not in nodes])
 
