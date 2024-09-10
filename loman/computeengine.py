@@ -559,11 +559,10 @@ class Computation:
                 converted_value = converter(value)
                 self._set_state_and_literal_value(name, state, converted_value)
             except Exception as e:
+                tb = traceback.format_exc()
+                self._set_error(name, e, tb)
                 if throw_conversion_exception:
                     raise e
-                else:
-                    tb = traceback.format_exc()
-                    self._set_error(name, e, tb)
 
     def _set_state_and_literal_value(self, name, state, value, require_old_state=True):
         node = self.dag.nodes[name]

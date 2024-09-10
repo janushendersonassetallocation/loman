@@ -33,6 +33,7 @@ def test_exception_on_add_node():
     comp = Computation()
     with pytest.raises(ValueError):
         comp.add_node('a', value=1, converter=throw_exception)
+    assert comp.s.a == States.ERROR and isinstance(comp.v.a.exception, ValueError)
 
 
 def test_exception_on_insert():
@@ -40,6 +41,7 @@ def test_exception_on_insert():
     comp.add_node('a', converter=throw_exception)
     with pytest.raises(ValueError):
         comp.insert('a', 1)
+    assert comp.s.a == States.ERROR and isinstance(comp.v.a.exception, ValueError)
 
 
 def test_exception_on_computation():
