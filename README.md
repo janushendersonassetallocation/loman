@@ -4,7 +4,7 @@
 [![PyPI - Wheel](https://img.shields.io/pypi/wheel/loman.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/loman.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - License](https://img.shields.io/pypi/l/loman.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![Github - Test Status](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master)
+[![Github - Test Status](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml)
 [![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
 
 Loman tracks the state of your computations, and the dependencies between them, allowing full and partial recalculations.
