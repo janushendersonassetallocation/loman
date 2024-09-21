@@ -1057,7 +1057,12 @@ class Computation:
         self.dag.remove_nodes_from([n for n in self.dag if n not in nodes])
 
     def __getstate__(self):
-        return {'dag': self.dag}
+        node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
+        obj = self.copy()
+        for name, tags in node_serialize.items():
+            if SystemTags.SERIALIZE not in tags:
+                obj._set_uninitialized(name)
+        return {'dag': obj.dag}
 
     def __setstate__(self, state):
         self.__init__()
@@ -1103,17 +1108,11 @@ class Computation:
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
-        obj = self.copy()
-        for name, tags in node_serialize.items():
-            if SystemTags.SERIALIZE not in tags:
-                obj._set_uninitialized(name)
-
         if isinstance(file_, str):
             with open(file_, 'wb') as f:
-                dill.dump(obj, f)
+                dill.dump(self, f)
         else:
-            dill.dump(obj, file_)
+            dill.dump(self, file_)
 
     @staticmethod
     def read_dill(file_):
