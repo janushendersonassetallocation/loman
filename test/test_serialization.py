@@ -144,11 +144,10 @@ def test_roundtrip_old_dill():
 
 class UnserializableObject:
     def __init__(self):
-        self.thread = threading.Thread(target=self._dummy_thread)
-        self.thread.start()
+        self.data = "This is some data"
 
-    def _dummy_thread(self):
-        pass
+    def __getstate__(self):
+        raise TypeError(f"{self.__class__.__name__} is not serializable")
 
 
 def test_serialize_nested_loman_with_unserializable_nodes():
