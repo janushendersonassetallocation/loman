@@ -1,4 +1,7 @@
 import io
+import threading
+
+import pytest
 
 from loman import Computation, States, ComputationFactory, input_node, calc_node
 from loman.computeengine import NodeData
@@ -137,3 +140,52 @@ def test_roundtrip_old_dill():
     for n in comp.dag.nodes():
         assert comp.dag.nodes[n].get('state', None) == foo.dag.nodes[n].get('state', None)
         assert comp.dag.nodes[n].get('value', None) == foo.dag.nodes[n].get('value', None)
+
+
+class UnserializableObject:
+    def __init__(self):
+        self.thread = threading.Thread(target=self._dummy_thread)
+        self.thread.start()
+
+    def _dummy_thread(self):
+        pass
+
+
+def test_serialize_nested_loman_with_unserializable_nodes():
+    @ComputationFactory
+    class CompInner:
+        a = input_node(value=3)
+
+        @calc_node
+        def unserializable(self, a):
+            return UnserializableObject()
+
+    @ComputationFactory
+    class CompOuter:
+        COMP = input_node()
+
+        @calc_node
+        def out(self, COMP):
+            return COMP.x.a + 10
+
+    inner = CompInner()
+    inner.compute_all()
+    print(inner.v.unserializable)
+    outer = CompOuter()
+    outer.insert('COMP', inner)
+    outer.compute_all()
+
+    with pytest.raises(TypeError):
+        f = io.BytesIO()
+        outer.write_dill(f)
+
+    outer.v.COMP.clear_tag('unserializable', '__serialize__')
+
+    f = io.BytesIO()
+    outer.write_dill(f)
+
+    f.seek(0)
+    outer2 = Computation.read_dill(f)
+
+    assert outer2.v.COMP.v.a == outer.v.COMP.v.a
+    assert outer2.v.out == outer.v.out
