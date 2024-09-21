@@ -107,3 +107,33 @@ def test_serialize_nested_loman():
 
     assert outer2.v.COMP.v.b == outer.v.COMP.v.b
     assert outer2.v.out == outer.v.out
+
+
+def test_roundtrip_old_dill():
+    def b(x):
+        return x + 1
+
+    def c(x):
+        return 2 * x
+
+    def d(x, y):
+        return x + y
+
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", b, kwds={'x': 'a'})
+    comp.add_node("c", c, kwds={'x': 'a'})
+    comp.add_node("d", d, kwds={'x': 'b', 'y': 'c'})
+
+    comp.insert("a", 1)
+    comp.compute_all()
+    f = io.BytesIO()
+    comp.write_dill_old(f)
+
+    f.seek(0)
+    foo = Computation.read_dill(f)
+
+    assert set(comp.dag.nodes) == set(foo.dag.nodes)
+    for n in comp.dag.nodes():
+        assert comp.dag.nodes[n].get('state', None) == foo.dag.nodes[n].get('state', None)
+        assert comp.dag.nodes[n].get('value', None) == foo.dag.nodes[n].get('value', None)
