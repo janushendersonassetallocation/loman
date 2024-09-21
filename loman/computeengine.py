@@ -2,6 +2,7 @@ import logging
 import os
 import tempfile
 import traceback
+import warnings
 from collections import defaultdict
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
@@ -1055,6 +1056,46 @@ class Computation:
         nodes = self.get_ancestors(output_nodes)
         self.dag.remove_nodes_from([n for n in self.dag if n not in nodes])
 
+    def __getstate__(self):
+        return {'dag': self.dag}
+
+    def __setstate__(self, state):
+        self.__init__()
+        self.dag = state['dag']
+        self._refresh_maps()
+
+    def write_dill_old(self, file_):
+        """
+        Serialize a computation to a file or file-like object
+
+        :param file_: If string, writes to a file
+        :type file_: File-like object, or string
+        """
+        warnings.warn("write_dill_old is deprecated, use write_dill instead", DeprecationWarning, stacklevel=2)
+        original_getstate = self.__class__.__getstate__
+        original_setstate = self.__class__.__setstate__
+
+        try:
+            del self.__class__.__getstate__
+            del self.__class__.__setstate__
+
+            node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
+            obj = self.copy()
+            obj.executor_map = None
+            obj.default_executor = None
+            for name, tags in node_serialize.items():
+                if SystemTags.SERIALIZE not in tags:
+                    obj._set_uninitialized(name)
+
+            if isinstance(file_, str):
+                with open(file_, 'wb') as f:
+                    dill.dump(obj, f)
+            else:
+                dill.dump(obj, file_)
+        finally:
+            self.__class__.__getstate__ = original_getstate
+            self.__class__.__setstate__ = original_setstate
+
     def write_dill(self, file_):
         """
         Serialize a computation to a file or file-like object
@@ -1064,8 +1105,6 @@ class Computation:
         """
         node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
         obj = self.copy()
-        obj.executor_map = None
-        obj.default_executor = None
         for name, tags in node_serialize.items():
             if SystemTags.SERIALIZE not in tags:
                 obj._set_uninitialized(name)
@@ -1086,9 +1125,13 @@ class Computation:
         """
         if isinstance(file_, str):
             with open(file_, 'rb') as f:
-                return dill.load(f)
+                obj = dill.load(f)
         else:
-            return dill.load(file_)
+            obj = dill.load(file_)
+        if isinstance(obj, Computation):
+            return obj
+        else:
+            raise Exception()
 
     def copy(self):
         """
