@@ -1109,9 +1109,13 @@ class Computation:
         """
         if isinstance(file_, str):
             with open(file_, 'rb') as f:
-                return dill.load(f)
+                obj = dill.load(f)
         else:
-            return dill.load(file_)
+            obj = dill.load(file_)
+        if isinstance(obj, Computation):
+            return obj
+        else:
+            raise Exception()
 
     def copy(self):
         """
