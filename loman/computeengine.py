@@ -1085,7 +1085,6 @@ class Computation:
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        warnings.warn("write_dill_old is deprecated, use write_dill instead", DeprecationWarning, stacklevel=2)
         node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
         obj = self.copy()
         obj.executor_map = None
