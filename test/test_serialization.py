@@ -74,3 +74,36 @@ def test_no_serialize_flag():
     comp2 = Computation.read_dill(f)
     assert comp2.state('a') == States.UNINITIALIZED
     assert comp2['b'] == NodeData(States.UPTODATE, 2)
+
+
+def test_serialize_nested_loman():
+    @ComputationFactory
+    class CompInner:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(self, a):
+            return a + 1
+
+    @ComputationFactory
+    class CompOuter:
+        COMP = input_node()
+
+        @calc_node
+        def out(self, COMP):
+            return COMP.x.b + 10
+
+    inner = CompInner()
+    inner.compute_all()
+
+    outer = CompOuter()
+    outer.insert('COMP', inner)
+    outer.compute_all()
+
+    f = io.BytesIO()
+    outer.write_dill(f)
+    f.seek(0)
+    outer2 = Computation.read_dill(f)
+
+    assert outer2.v.COMP.v.b == outer.v.COMP.v.b
+    assert outer2.v.out == outer.v.out
