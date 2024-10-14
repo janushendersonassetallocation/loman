@@ -42,9 +42,9 @@ class NodeData:
 
 @dataclass
 class TimingData:
-    start: object
-    end: object
-    duration: object
+    start: datetime
+    end: datetime
+    duration: float
 
 
 class ComputationException(Exception):
