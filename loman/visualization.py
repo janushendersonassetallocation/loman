@@ -72,8 +72,34 @@ class ColorByTiming(NodeFormatter):
         }
 
 
-def create_viz_dag(comp_dag, colors='state', cmap=None):
-    node_formatters = []
+class StandardLabel(NodeFormatter):
+    def format(self, name, data):
+        return {
+            'label': str(name)
+        }
+
+
+class StandardGroup(NodeFormatter):
+    def format(self, name, data):
+        group = data.get(NodeAttributes.GROUP)
+        if group is None:
+            return None
+        return {
+            '_group': group
+        }
+
+
+class StandardStylingOverrides(NodeFormatter):
+    def format(self, name, data):
+        tags = data.get(NodeAttributes.TAG)
+        if 'style_small' in tags:
+            return {'width': 0.3, 'height': 0.2, 'fontsize': 8}
+        elif 'style_dot' in tags:
+            return {'shape': 'point', 'width': 0.1}
+
+
+def get_node_formatters(cmap, colors):
+    node_formatters = [StandardLabel(), StandardGroup()]
     colors = colors.lower()
     if colors == 'state':
         node_formatters.append(ColorByState(cmap))
@@ -81,6 +107,12 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
         node_formatters.append(ColorByTiming(cmap))
     else:
         raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
+    node_formatters.append(StandardStylingOverrides())
+    return node_formatters
+
+
+def create_viz_dag(comp_dag, colors='state', cmap=None):
+    node_formatters = get_node_formatters(cmap, colors)
 
     for node_formatter in node_formatters:
         node_formatter.calibrate(comp_dag.nodes(data=True))
@@ -89,17 +121,18 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
     node_index_map = {}
     for i, (name, data) in enumerate(comp_dag.nodes(data=True)):
         short_name = f'n{i}'
-        attr_dict = {
-            'label': name,
-            '_group': data.get(NodeAttributes.GROUP)
-        }
+        attr_dict = {}
 
         for node_formatter in node_formatters:
             format_attrs = node_formatter.format(name, data)
-            attr_dict.update(format_attrs)
+            if format_attrs is not None:
+                attr_dict.update(format_attrs)
+
+        attr_dict = {k: v for k, v in attr_dict.items() if v is not None}
 
         viz_dag.add_node(short_name, **attr_dict)
         node_index_map[name] = short_name
+
     for name1, name2 in comp_dag.edges():
         short_name_1 = node_index_map[name1]
         short_name_2 = node_index_map[name2]
@@ -111,6 +144,7 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
         attr_dict = {'_group': group}
 
         viz_dag.add_edge(short_name_1, short_name_2, **attr_dict)
+
     return viz_dag
 
 
