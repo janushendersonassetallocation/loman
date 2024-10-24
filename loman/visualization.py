@@ -92,6 +92,8 @@ class StandardGroup(NodeFormatter):
 class StandardStylingOverrides(NodeFormatter):
     def format(self, name, data):
         tags = data.get(NodeAttributes.TAG)
+        if tags is None:
+            return
         if 'style_small' in tags:
             return {'width': 0.3, 'height': 0.2, 'fontsize': 8}
         elif 'style_dot' in tags:
