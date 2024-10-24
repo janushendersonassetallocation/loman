@@ -251,13 +251,14 @@ class Computation:
         self.i = AttributeView(self.nodes, self.get_inputs, self.get_inputs)
         self.o = AttributeView(self.nodes, self.get_outputs, self.get_outputs)
         self.t = AttributeView(self.nodes, self.tags, self.tags)
+        self.style = AttributeView(self.nodes, self.styles, self.styles)
         self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
         self.x = AttributeView(self.nodes, self.compute_and_get_value)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
 
     def add_node(self, name, func=None, *, args=None, kwds=None, value=_MISSING_VALUE_SENTINEL, converter=None,
-                 serialize=True, inspect=True, group=None, tags=None, executor=None):
+                 serialize=True, inspect=True, group=None, tags=None, style=None, executor=None):
         """
         Adds or updates a node in a computation
 
@@ -278,6 +279,8 @@ class Computation:
         :type group: default None
         :param tags: Set of tags to apply to node
         :type tags: Iterable
+        :param styles: Style to apply to node
+        :type styles: String, default None
         :param executor: Name of executor to run node on
         :type executor: string
         """
@@ -296,6 +299,7 @@ class Computation:
         self._set_state_and_literal_value(name, States.UNINITIALIZED, None, require_old_state=False)
 
         node[NodeAttributes.TAG] = set()
+        node[NodeAttributes.STYLE] = style
         node[NodeAttributes.GROUP] = group
         node[NodeAttributes.ARGS] = {}
         node[NodeAttributes.KWDS] = {}
@@ -388,6 +392,29 @@ class Computation:
         :param tag: Tag to clear
         """
         apply_n(self._clear_tag_one, name, tag)
+
+    def _set_style_one(self, name, style):
+        self.dag.nodes[name][NodeAttributes.STYLE] = style
+
+    def set_style(self, name, style):
+        """
+        Set styles on a node or nodes.
+
+        :param name: Node or nodes to set style for
+        :param style: Style to set
+        """
+        apply_n(self._set_style_one, name, style)
+
+    def _clear_style_one(self, name):
+        self.dag.nodes[name][NodeAttributes.STYLE] = None
+
+    def clear_style(self, name):
+        """
+        Clear style on a node or nodes.
+
+        :param name: Node or nodes to clear styles for
+        """
+        apply_n(self._clear_style_one, name)
 
     def delete_node(self, name):
         """
@@ -896,6 +923,23 @@ class Computation:
             if nodes1 is not None:
                 nodes.update(nodes1)
         return nodes
+
+    def _style_one(self, name):
+        node = self.dag.nodes[name]
+        return node[NodeAttributes.STYLE]
+
+    def styles(self, name):
+        """
+        Get the tags associated with a node
+
+            >>> comp = Computation()
+            >>> comp.add_node('a', styles='dot')
+            >>> comp.style.a
+            'dot'
+        :param name: Name or names of the node to get the tags of
+        :return:
+        """
+        return apply1(self._style_one, name)
 
     def _get_item_one(self, name):
         node = self.dag.nodes[name]
