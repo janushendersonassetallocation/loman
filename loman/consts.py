@@ -18,6 +18,7 @@ class NodeAttributes:
     FUNC = 'func'
     GROUP = 'group'
     TAG = 'tag'
+    STYLE = 'style'
     ARGS = 'args'
     KWDS = 'kwds'
     TIMING = 'timing'
