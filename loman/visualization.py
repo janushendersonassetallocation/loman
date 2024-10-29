@@ -1,4 +1,5 @@
-from typing import Optional
+import pandas as pd
+from typing import Optional, List
 
 import matplotlib as mpl
 import networkx as nx
@@ -6,6 +7,7 @@ import numpy as np
 import pydotplus
 from matplotlib.colors import Colormap
 
+import loman
 from loman.consts import NodeAttributes, States
 
 
@@ -72,6 +74,27 @@ class ColorByTiming(NodeFormatter):
         }
 
 
+class ShapeByType(NodeFormatter):
+    def format(self, name, data):
+        value = data.get(NodeAttributes.VALUE)
+        if value is None:
+            return
+        if isinstance(value, np.ndarray):
+            return {'shape': 'rect'}
+        elif isinstance(value, pd.DataFrame):
+            return {'shape': 'box3d'}
+        elif np.isscalar(value):
+            return {'shape': 'ellipse'}
+        elif isinstance(value, (list, tuple)):
+            return {'shape': 'ellipse', 'peripheries': 2}
+        elif isinstance(value, dict):
+            return {'shape': 'house', 'peripheries': 2}
+        elif isinstance(value, loman.Computation):
+            return {'shape': 'hexagon'}
+        else:
+            return {'shape': 'diamond'}
+
+
 class StandardLabel(NodeFormatter):
     def format(self, name, data):
         return {
@@ -97,11 +120,21 @@ class StandardStylingOverrides(NodeFormatter):
         if style == 'small':
             return {'width': 0.3, 'height': 0.2, 'fontsize': 8}
         elif style == 'dot':
-            return {'shape': 'point', 'width': 0.1}
+            return {'shape': 'point', 'width': 0.1, 'peripheries': 1}
 
 
-def get_node_formatters(cmap, colors):
+def get_node_formatters(cmap, colors, shapes):
     node_formatters = [StandardLabel(), StandardGroup()]
+
+    if isinstance(shapes, str):
+        shapes = shapes.lower()
+    if shapes == 'type':
+        node_formatters.append(ShapeByType())
+    elif shapes is None:
+        pass
+    else:
+        raise ValueError(f"{shapes} is not a valid loman shapes parameter for visualization")
+
     colors = colors.lower()
     if colors == 'state':
         node_formatters.append(ColorByState(cmap))
@@ -113,11 +146,10 @@ def get_node_formatters(cmap, colors):
     return node_formatters
 
 
-def create_viz_dag(comp_dag, colors='state', cmap=None):
-    node_formatters = get_node_formatters(cmap, colors)
-
-    for node_formatter in node_formatters:
-        node_formatter.calibrate(comp_dag.nodes(data=True))
+def create_viz_dag(comp_dag, node_formatters: Optional[List[NodeFormatter]] = None):
+    if node_formatters is not None:
+        for node_formatter in node_formatters:
+            node_formatter.calibrate(comp_dag.nodes(data=True))
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
@@ -125,10 +157,11 @@ def create_viz_dag(comp_dag, colors='state', cmap=None):
         short_name = f'n{i}'
         attr_dict = {}
 
-        for node_formatter in node_formatters:
-            format_attrs = node_formatter.format(name, data)
-            if format_attrs is not None:
-                attr_dict.update(format_attrs)
+        if node_formatters is not None:
+            for node_formatter in node_formatters:
+                format_attrs = node_formatter.format(name, data)
+                if format_attrs is not None:
+                    attr_dict.update(format_attrs)
 
         attr_dict = {k: v for k, v in attr_dict.items() if v is not None}
 
