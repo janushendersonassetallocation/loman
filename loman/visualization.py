@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Optional
+from typing import Optional, List
 
 import matplotlib as mpl
 import networkx as nx
@@ -146,11 +146,10 @@ def get_node_formatters(cmap, colors, shapes):
     return node_formatters
 
 
-def create_viz_dag(comp_dag, colors='state', cmap=None, shapes=None):
-    node_formatters = get_node_formatters(cmap, colors, shapes)
-
-    for node_formatter in node_formatters:
-        node_formatter.calibrate(comp_dag.nodes(data=True))
+def create_viz_dag(comp_dag, node_formatters: Optional[List[NodeFormatter]] = None):
+    if node_formatters is not None:
+        for node_formatter in node_formatters:
+            node_formatter.calibrate(comp_dag.nodes(data=True))
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
@@ -158,10 +157,11 @@ def create_viz_dag(comp_dag, colors='state', cmap=None, shapes=None):
         short_name = f'n{i}'
         attr_dict = {}
 
-        for node_formatter in node_formatters:
-            format_attrs = node_formatter.format(name, data)
-            if format_attrs is not None:
-                attr_dict.update(format_attrs)
+        if node_formatters is not None:
+            for node_formatter in node_formatters:
+                format_attrs = node_formatter.format(name, data)
+                if format_attrs is not None:
+                    attr_dict.update(format_attrs)
 
         attr_dict = {k: v for k, v in attr_dict.items() if v is not None}
 

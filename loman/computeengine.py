@@ -21,7 +21,7 @@ import types
 
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
 from .graph_utils import contract_node
-from .visualization import create_viz_dag, to_pydot
+from .visualization import create_viz_dag, to_pydot, get_node_formatters
 from .compat import get_signature
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 
@@ -1265,7 +1265,8 @@ class Computation:
                 hide_nodes.discard(name1)
                 hide_nodes.discard(name2)
             contract_node(struct_dag, hide_nodes)
-        viz_dag = create_viz_dag(struct_dag, colors=colors, cmap=cmap, shapes=shapes)
+        node_formatters = get_node_formatters(cmap, colors, shapes)
+        viz_dag = create_viz_dag(struct_dag, node_formatters=node_formatters)
         viz_dot = to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
         return viz_dot
 
