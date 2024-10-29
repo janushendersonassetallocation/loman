@@ -1255,7 +1255,7 @@ class Computation:
     def _repr_svg_(self):
         return self.to_pydot().create_svg().decode('utf-8')
 
-    def to_pydot(self, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def to_pydot(self, *, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False, shapes=None):
         struct_dag = nx.DiGraph(self.dag)
         if not show_expansion:
             hide_nodes = set(struct_dag.nodes())
@@ -1265,21 +1265,23 @@ class Computation:
                 hide_nodes.discard(name1)
                 hide_nodes.discard(name2)
             contract_node(struct_dag, hide_nodes)
-        viz_dag = create_viz_dag(struct_dag, colors=colors, cmap=cmap)
+        viz_dag = create_viz_dag(struct_dag, colors=colors, cmap=cmap, shapes=shapes)
         viz_dot = to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
         return viz_dot
 
-    def draw(self, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw(self, *, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False, shapes=None):
         """
         Draw a computation's current state using the GraphViz utility
 
+        :param colors: 'state' - colors indicate state. 'timing' - colors indicate execution time. Default: 'state'.
+        :param shapes: None - ovals. 'type' - shapes indicate type. Default: None.
         :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
         :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
         d = self.to_pydot(colors=colors, cmap=cmap, graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
-                          show_expansion=show_expansion)
+                          show_expansion=show_expansion, shapes=shapes)
 
         def repr_svg(self):
             return self.create_svg().decode('utf-8')
