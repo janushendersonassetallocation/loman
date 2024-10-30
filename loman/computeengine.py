@@ -24,6 +24,7 @@ from .graph_utils import contract_node
 from .visualization import create_viz_dag, to_pydot, get_node_formatters
 from .compat import get_signature
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
+from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, ComputationException
 
 LOG = logging.getLogger('loman.computeengine')
 
@@ -45,27 +46,6 @@ class TimingData:
     start: datetime
     end: datetime
     duration: float
-
-
-class ComputationException(Exception):
-    pass
-
-
-class MapException(ComputationException):
-    def __init__(self, message, results):
-        super(MapException, self).__init__(message)
-        self.results = results
-
-
-class LoopDetectedException(ComputationException):
-    pass
-
-
-class NonExistentNodeException(ComputationException):
-    pass
-
-class NodeAlreadyExistsException(ComputationException):
-    pass
 
 
 class _ParameterType(Enum):
@@ -458,7 +438,7 @@ class Computation:
             if not self.dag.has_node(old_name):
                 raise NonExistentNodeException(f'Node {old_name} does not exist')
             if self.dag.has_node(new_name):
-                raise NodeAlreadyExistsException(f'Node {old_name} does not exist')
+                raise NodeAlreadyExistsException(f'Node {new_name} already exists')
             mapping = {old_name: new_name}
 
         nx.relabel_nodes(self.dag, mapping, copy=False)
