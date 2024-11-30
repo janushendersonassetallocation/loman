@@ -5,7 +5,7 @@
 :titlesonly:
 
 creating/index
-viewing/index
+querying/index
 manipulating/index
 other/index
 ```

@@ -1,8 +1,8 @@
-# Viewing Computation Graphs
+# Visualizing Computation Graphs
 
 Loman supports viewing computations as graphs using the open source Graphviz graph visualization software.
 
-By default, in a Jupyter notebook, when a graph is evaluated, it will show a graphical representation of its state:
+By default, in a Jupyter notebook, when a graph is evaluated, it will show a graphical representation of its computation dependencies and its state:
 
 ```pycon
 >>> from loman import *
