@@ -1,4 +1,4 @@
-# Creating Nodes Using a Decorator
+# Adding Nodes Using the `node` Decorator
 
 Loman provide a decorator `@node`, which allows functions to be added to computations. The first parameter is the Computation object to add a node to. By default, it will take the node name from the function, and the names of input nodes from the names of the parameter of the function, but any parameters provided are passed through to `add_node`, including name:
 
