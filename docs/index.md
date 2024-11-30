@@ -10,7 +10,7 @@ Loman is a Python library to deal with complex dependencies between sets of calc
 user/intro
 user/install
 user/quickstart
-user/advanced
+user/features/index
 user/strategies
 ```
 
