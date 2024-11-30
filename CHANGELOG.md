@@ -1,8 +1,11 @@
 # Change Log
 
-## [0.4.1] (Pending)
+## [0.4.1] (2024-11-29)
 
-- Ignoring first parameter of a `@calc_node` if it is called `self`. (Can be disabled with `@ComputationFactory(ignore_self=False)` or `@calc_node(ignore_self=False)` ).
+- If first parameter of a `@calc_node` is called `self`, then it can be used to call non-calc_node methods of the class. (Can be disabled with `@ComputationFactory(ignore_self=False)` or `@calc_node(ignore_self=False)` ).
+- Add support for convertors to force input and calc node values to a particular type/form
+- Add support for serializing nodes that are computations
+- create_viz_dag now takes a list of node_formatters, which apply arbitrary formatting to the visualization node based on the lomnan node (Included NodeFormatters are `ColorByState`, `ColorByTiming`, `ShapeByType`, `StandardLabel`, `StandardGroup`, `StandardStylingOverrides`)
 - Fix ReadTheDocs build
 - Convert documentation from reStructuredText to MyST Markdown
 
