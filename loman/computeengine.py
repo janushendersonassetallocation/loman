@@ -1418,20 +1418,21 @@ class Computation:
     def to_pydot(self, *, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False, shapes=None):
         struct_dag = nx.DiGraph(self.dag)
         if not show_expansion:
-            self.hide_expansion_nodes(struct_dag)
+            self.contract_nodes(struct_dag, self.nodes_by_tag(SystemTags.EXPANSION))
         node_formatters = get_node_formatters(cmap, colors, shapes)
         viz_dag = create_viz_dag(struct_dag, node_formatters=node_formatters)
         viz_dot = to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
         return viz_dot
 
-    def hide_expansion_nodes(self, struct_dag):
-        hide_nodes = set(struct_dag.nodes())
-        for name1, name2 in struct_dag.edges():
-            if SystemTags.EXPANSION in self.tags(name2):
+    @staticmethod
+    def contract_nodes(dag, nodes):
+        hide_nodes = set(dag.nodes())
+        for name1, name2 in dag.edges():
+            if name2 in nodes:
                 continue
             hide_nodes.discard(name1)
             hide_nodes.discard(name2)
-        contract_node(struct_dag, hide_nodes)
+        contract_node(dag, hide_nodes)
 
     def draw(self, *, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False, shapes=None):
         """
