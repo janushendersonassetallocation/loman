@@ -432,7 +432,6 @@ class Computation:
         :param name: Node or nodes to clear tags for
         :param tag: Tag to clear
         """
-        name = NodeKey.from_name(name)
         apply_n(self._clear_tag_one, name, tag)
 
     def _set_style_one(self, name: InputName, style):
