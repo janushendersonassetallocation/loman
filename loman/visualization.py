@@ -123,7 +123,7 @@ class StandardStylingOverrides(NodeFormatter):
             return {'shape': 'point', 'width': 0.1, 'peripheries': 1}
 
 
-def get_node_formatters(cmap, colors, shapes):
+def get_node_formatters(cmap=None, colors='state', shapes=None):
     node_formatters = [StandardLabel(), StandardGroup()]
 
     if isinstance(shapes, str):
