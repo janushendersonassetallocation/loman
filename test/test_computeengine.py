@@ -892,6 +892,22 @@ def test_tags():
     assert {'c'} == comp.nodes_by_tag('baz')
 
 
+def test_set_and_clear_multiple_tags():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a + 1)
+    comp.set_tag(['a', 'b'], ['foo', 'bar'])
+    assert 'foo' in comp.t.a
+    assert 'foo' in comp.t.b
+    assert 'bar' in comp.t.a
+    assert 'bar' in comp.t.b
+    comp.clear_tag(['a', 'b'], ['foo', 'bar'])
+    assert 'foo' not in comp.t.a
+    assert 'foo' not in comp.t.b
+    assert 'bar' not in comp.t.a
+    assert 'bar' not in comp.t.b
+
+
 def test_decorator():
     comp = Computation()
     comp.add_node('a', value=1)
