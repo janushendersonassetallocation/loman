@@ -129,18 +129,18 @@ def test_state_map_updated_with_placeholder():
     comp = Computation()
     comp.add_node('b', lambda a: a+1)
     assert comp.s.a == States.PLACEHOLDER
-    assert 'a' in comp._state_map[States.PLACEHOLDER]
+    assert 'a' in comp._get_names_for_state(States.PLACEHOLDER)
 
 
 def test_state_map_updated_with_placeholder_kwds():
     comp = Computation()
     comp.add_node('b', lambda x: x+1, kwds={'x': 'a'})
     assert comp.s.a == States.PLACEHOLDER
-    assert 'a' in comp._state_map[States.PLACEHOLDER]
+    assert 'a' in comp._get_names_for_state(States.PLACEHOLDER)
 
 
 def test_state_map_updated_with_placeholder_args():
     comp = Computation()
     comp.add_node('b', lambda x: x+1, args=['a'])
     assert comp.s.a == States.PLACEHOLDER
-    assert 'a' in comp._state_map[States.PLACEHOLDER]
+    assert 'a' in comp._get_names_for_state(States.PLACEHOLDER)

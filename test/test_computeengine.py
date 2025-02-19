@@ -9,7 +9,7 @@ from collections import namedtuple
 import random
 import pytest
 
-from loman.computeengine import NodeData
+from loman.computeengine import NodeData, NodeKey
 
 
 def test_basic():
@@ -32,7 +32,7 @@ def test_basic():
     assert comp.state('c') == States.UNINITIALIZED
     assert comp.state('b') == States.UNINITIALIZED
     assert comp.state('d') == States.UNINITIALIZED
-    assert comp._state_map[States.UNINITIALIZED] == set(['a', 'b', 'c', 'd'])
+    assert comp._get_names_for_state(States.UNINITIALIZED) == set(['a', 'b', 'c', 'd'])
 
     comp.insert("a", 1)
     assert comp.state('a') == States.UPTODATE
@@ -60,7 +60,7 @@ def test_basic():
     assert comp.value('a') == 2
     assert comp.value('b') == 3
 
-    assert set(comp._get_calc_nodes("d")) == set(['c', 'd'])
+    assert set(comp._get_calc_node_names("d")) == set(['c', 'd'])
 
 
 def test_parameter_mapping():
@@ -579,9 +579,9 @@ def test_delete_successor():
     assert comp['b'] == NodeData(States.UPTODATE, 2)
     comp.delete_node('b')
     assert comp['a'] == NodeData(States.UPTODATE, 1)
-    assert list(comp.dag.nodes()) == ['a']
+    assert list(comp.nodes()) == ['a']
     comp.delete_node('a')
-    assert list(comp.dag.nodes()) == []
+    assert list(comp.nodes()) == []
 
 
 def test_value():
@@ -797,7 +797,7 @@ def test_compute_with_args():
     comp.add_node('b', f, args=['a'])
 
     assert set(comp.nodes()) == {'a', 'b'}
-    assert set(comp.dag.edges()) == {('a', 'b')}
+    assert set(comp.dag.edges()) == {(NodeKey.from_name('a'), NodeKey.from_name('b'))}
 
     comp.compute_all()
     assert comp['b'] == NodeData(States.UPTODATE, 2)
@@ -924,7 +924,7 @@ def test_with_uptodate_predecessors_but_stale_ancestors():
     comp.add_node('b', lambda a: a + 1)
     comp.compute_all()
     assert comp['b'] == NodeData(States.UPTODATE, 2)
-    comp.dag.nodes['a']['state'] = States.UNINITIALIZED # This can happen due to serialization
+    comp.dag.nodes[NodeKey.from_name('a')]['state'] = States.UNINITIALIZED # This can happen due to serialization
     comp.add_node('c', lambda b: b + 1)
     comp.compute('c')
     assert comp['b'] == NodeData(States.UPTODATE, 2)
@@ -945,7 +945,7 @@ def test_constant_values():
 
     comp.compute_all()
 
-    assert comp.dag.nodes['b']['args'] == {1: 2}
+    assert comp.dag.nodes[NodeKey.from_name('b')]['args'] == {1: 2}
 
     assert comp['b'] == NodeData(States.UPTODATE, 3)
     assert comp['c'] == NodeData(States.UPTODATE, 4)
@@ -968,17 +968,17 @@ def test_compute_multiple():
 def test_state_map_with_adding_existing_node():
     comp = Computation()
     comp.add_node('a', lambda: 1)
-    assert comp._state_map[States.COMPUTABLE] == {'a'}
-    assert comp._state_map[States.UPTODATE] == set()
+    assert comp._get_names_for_state(States.COMPUTABLE) == {'a'}
+    assert comp._get_names_for_state(States.UPTODATE) == set()
     comp.compute('a')
-    assert comp._state_map[States.COMPUTABLE] == set()
-    assert comp._state_map[States.UPTODATE] == {'a'}
+    assert comp._get_names_for_state(States.COMPUTABLE) == set()
+    assert comp._get_names_for_state(States.UPTODATE) == {'a'}
     comp.add_node('a', lambda: 1)
-    assert comp._state_map[States.COMPUTABLE] == {'a'}
-    assert comp._state_map[States.UPTODATE] == set()
+    assert comp._get_names_for_state(States.COMPUTABLE) == {'a'}
+    assert comp._get_names_for_state(States.UPTODATE) == set()
     comp.compute('a')
-    assert comp._state_map[States.COMPUTABLE] == set()
-    assert comp._state_map[States.UPTODATE] == {'a'}
+    assert comp._get_names_for_state(States.COMPUTABLE) == set()
+    assert comp._get_names_for_state(States.UPTODATE) == {'a'}
 
 
 def test_pinning():
