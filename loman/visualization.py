@@ -218,7 +218,7 @@ class GraphView:
             f.write(self.viz_dot.create_pdf())
             os.startfile(f.name)
 
-    def repr_svg(self):
+    def _repr_svg_(self):
         return self.svg()
 
 
