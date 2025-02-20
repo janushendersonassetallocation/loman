@@ -1,3 +1,5 @@
+import os
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -12,6 +14,7 @@ from matplotlib.colors import Colormap
 
 import loman
 from loman.consts import NodeAttributes, States
+from loman.graph_utils import contract_node
 
 
 class NodeFormatter(ABC):
@@ -23,7 +26,7 @@ class NodeFormatter(ABC):
         pass
 
     @staticmethod
-    def create(cmap=None, colors='state', shapes=None):
+    def create(cmap: Optional[dict | Colormap] = None, colors: str = 'state', shapes: Optional[str] = None):
         node_formatters = [StandardLabel(), StandardGroup()]
 
         if isinstance(shapes, str):
@@ -167,7 +170,59 @@ class CompositeNodeFormatter(NodeFormatter):
         return d
 
 
-def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None):
+def contract_nodes(dag, nodes):
+    hide_nodes = set(dag.nodes())
+    for name1, name2 in dag.edges():
+        if name2 in nodes:
+            continue
+        hide_nodes.discard(name1)
+        hide_nodes.discard(name2)
+    contract_node(dag, hide_nodes)
+
+
+@dataclass
+class GraphView:
+    computation: 'loman.Computation'
+    node_formatter: Optional[NodeFormatter] = None
+
+    graph_attr: Optional[dict] = None
+    node_attr: Optional[dict] = None
+    edge_attr: Optional[dict] = None
+
+    nodes_to_contract: Optional[list] = None
+
+    struct_dag: Optional[nx.DiGraph] = None
+    viz_dag: Optional[nx.DiGraph] = None
+    viz_dot: Optional[pydotplus.Dot] = None
+
+    def __post_init__(self):
+        self.refresh()
+
+    def refresh(self):
+        node_formatter = self.node_formatter
+        if node_formatter is None:
+            node_formatter = NodeFormatter.create()
+        self.struct_dag = nx.DiGraph(self.computation.dag)
+        if self.nodes_to_contract is not None:
+            contract_nodes(self.struct_dag, self.nodes_to_contract)
+        self.viz_dag = create_viz_dag(self.struct_dag, node_formatter)
+        self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
+
+    def svg(self) -> Optional[str]:
+        if self.viz_dot is None:
+            return None
+        return self.viz_dot.create_svg().decode('utf-8')
+
+    def view(self):
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            f.write(self.viz_dot.create_pdf())
+            os.startfile(f.name)
+
+    def repr_svg(self):
+        return self.svg()
+
+
+def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None) -> nx.DiGraph:
     if node_formatter is not None:
         node_formatter.calibrate(comp_dag.nodes(data=True))
 
@@ -202,7 +257,7 @@ def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None):
     return viz_dag
 
 
-def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
+def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
     node_groups = {}
     for name, data in viz_dag.nodes(data=True):
         group = data.get('_group')

@@ -10,9 +10,9 @@ def test_simple():
     comp.add_node('c', lambda a: 2 * a)
     comp.add_node('d', lambda b, c: b + c)
 
-    d = comp.to_pydot()
+    v = loman.visualization.GraphView(comp)
 
-    nodes = d.obj_dict['nodes']
+    nodes = v.viz_dot.obj_dict['nodes']
     label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
     node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
@@ -26,9 +26,8 @@ def test_simple():
 
     comp.insert('a', 1)
 
-    d = comp.to_pydot()
-
-    nodes = d.obj_dict['nodes']
+    v.refresh()
+    nodes = v.viz_dot.obj_dict['nodes']
     label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
     node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
@@ -42,9 +41,8 @@ def test_simple():
 
     comp.compute_all()
 
-    d = comp.to_pydot()
-
-    nodes = d.obj_dict['nodes']
+    v.refresh()
+    nodes = v.viz_dot.obj_dict['nodes']
     label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
     node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
@@ -63,4 +61,4 @@ def test_with_groups():
     comp.add_node('b', lambda a: a + 1, group='foo')
     comp.add_node('c', lambda a: 2 * a, group='bar')
     comp.add_node('d', lambda b, c: b + c, group='bar')
-    d = comp.to_pydot()
+    v = loman.visualization.GraphView(comp)
