@@ -1,6 +1,4 @@
 import logging
-import os
-import tempfile
 import traceback
 import warnings
 from collections import defaultdict
@@ -19,8 +17,7 @@ import pandas as pd
 import types
 
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
-from .graph_utils import contract_node
-from .visualization import create_viz_dag, to_pydot, NodeFormatter, GraphView
+from .visualization import NodeFormatter, GraphView
 from .compat import get_signature
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, ComputationException
