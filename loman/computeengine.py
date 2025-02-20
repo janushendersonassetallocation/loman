@@ -114,7 +114,8 @@ class CalcNode(Node):
         f = self.f
         if ignore_self:
             signature = get_signature(self.f)
-            if signature.kwd_params[0] == 'self':
+            if (len(signature.kwd_params) > 0 and 
+                signature.kwd_params[0] == 'self'):
                 f = f.__get__(obj, obj.__class__)
         if 'ignore_self' in kwds:
             del kwds['ignore_self']
