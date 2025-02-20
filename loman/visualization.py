@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 import pandas as pd
-from typing import Optional, List, Any
+from typing import Optional
 
 import matplotlib as mpl
 import networkx as nx
@@ -14,12 +15,35 @@ from loman.consts import NodeAttributes, States
 
 
 class NodeFormatter(ABC):
-    def calibrate(self, nodes):
+    def calibrate(self, nodes) -> None:
         pass
 
     @abstractmethod
-    def format(self, name, data) -> dict:
+    def format(self, name, data) -> Optional[dict]:
         pass
+
+    @staticmethod
+    def create(cmap=None, colors='state', shapes=None):
+        node_formatters = [StandardLabel(), StandardGroup()]
+
+        if isinstance(shapes, str):
+            shapes = shapes.lower()
+        if shapes == 'type':
+            node_formatters.append(ShapeByType())
+        elif shapes is None:
+            pass
+        else:
+            raise ValueError(f"{shapes} is not a valid loman shapes parameter for visualization")
+
+        colors = colors.lower()
+        if colors == 'state':
+            node_formatters.append(ColorByState(cmap))
+        elif colors == 'timing':
+            node_formatters.append(ColorByTiming(cmap))
+        else:
+            raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
+        node_formatters.append(StandardStylingOverrides())
+        return CompositeNodeFormatter(node_formatters)
 
 
 class ColorByState(NodeFormatter):
@@ -126,45 +150,37 @@ class StandardStylingOverrides(NodeFormatter):
             return {'shape': 'point', 'width': 0.1, 'peripheries': 1}
 
 
-def get_node_formatters(cmap=None, colors='state', shapes=None):
-    node_formatters = [StandardLabel(), StandardGroup()]
+@dataclass
+class CompositeNodeFormatter(NodeFormatter):
+    formatters: list[NodeFormatter] = field(default_factory=list)
 
-    if isinstance(shapes, str):
-        shapes = shapes.lower()
-    if shapes == 'type':
-        node_formatters.append(ShapeByType())
-    elif shapes is None:
-        pass
-    else:
-        raise ValueError(f"{shapes} is not a valid loman shapes parameter for visualization")
+    def calibrate(self, nodes):
+        for formatter in self.formatters:
+            formatter.calibrate(nodes)
 
-    colors = colors.lower()
-    if colors == 'state':
-        node_formatters.append(ColorByState(cmap))
-    elif colors == 'timing':
-        node_formatters.append(ColorByTiming(cmap))
-    else:
-        raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
-    node_formatters.append(StandardStylingOverrides())
-    return node_formatters
+    def format(self, name, data):
+        d = {}
+        for formatter in self.formatters:
+            format_attrs = formatter.format(name, data)
+            if format_attrs is not None:
+                d.update(format_attrs)
+        return d
 
 
-def create_viz_dag(comp_dag, node_formatters: Optional[List[NodeFormatter]] = None):
-    if node_formatters is not None:
-        for node_formatter in node_formatters:
-            node_formatter.calibrate(comp_dag.nodes(data=True))
+def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None):
+    if node_formatter is not None:
+        node_formatter.calibrate(comp_dag.nodes(data=True))
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
     for i, (name, data) in enumerate(comp_dag.nodes(data=True)):
         short_name = f'n{i}'
-        attr_dict = {}
+        attr_dict = None
 
-        if node_formatters is not None:
-            for node_formatter in node_formatters:
-                format_attrs = node_formatter.format(name, data)
-                if format_attrs is not None:
-                    attr_dict.update(format_attrs)
+        if node_formatter is not None:
+            attr_dict = node_formatter.format(name, data)
+        if attr_dict is None:
+            attr_dict = {}
 
         attr_dict = {k: v for k, v in attr_dict.items() if v is not None}
 

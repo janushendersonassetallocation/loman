@@ -20,7 +20,7 @@ import types
 
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
 from .graph_utils import contract_node
-from .visualization import create_viz_dag, to_pydot, get_node_formatters
+from .visualization import create_viz_dag, to_pydot, NodeFormatter
 from .compat import get_signature
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, ComputationException
@@ -1413,14 +1413,15 @@ class Computation:
         self.add_node(target, identity_function, kwds={'x': source})
 
     def _repr_svg_(self):
-        node_formatters = get_node_formatters()
-        return self.to_pydot(node_formatters=node_formatters).create_svg().decode('utf-8')
+        return self.to_pydot().create_svg().decode('utf-8')
 
-    def to_pydot(self, *, node_formatters, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def to_pydot(self, *, node_formatter=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+        if node_formatter is None:
+            node_formatter = NodeFormatter.create()
         struct_dag = nx.DiGraph(self.dag)
         if not show_expansion:
             self.contract_nodes(struct_dag, self.nodes_by_tag(SystemTags.EXPANSION))
-        viz_dag = create_viz_dag(struct_dag, node_formatters=node_formatters)
+        viz_dag = create_viz_dag(struct_dag, node_formatter=node_formatter)
         viz_dot = to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
         return viz_dot
 
@@ -1446,8 +1447,8 @@ class Computation:
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
-        node_formatters = get_node_formatters(cmap, colors, shapes)
-        d = self.to_pydot(node_formatters=node_formatters, graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
+        node_formatter = NodeFormatter.create(cmap, colors, shapes)
+        d = self.to_pydot(node_formatter=node_formatter, graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
                           show_expansion=show_expansion)
 
         def repr_svg(self):
@@ -1457,8 +1458,8 @@ class Computation:
         return d
 
     def view(self, cmap=None, colors='state', shapes=None):
-        node_formatters = get_node_formatters(cmap, colors, shapes)
-        d = self.to_pydot(node_formatters=node_formatters)
+        node_formatters = NodeFormatter.create(cmap, colors, shapes)
+        d = self.to_pydot(node_formatter=node_formatters)
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             f.write(d.create_pdf())
             os.startfile(f.name)
