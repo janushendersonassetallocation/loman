@@ -1,5 +1,7 @@
+from abc import ABC, abstractmethod
+
 import pandas as pd
-from typing import Optional, List
+from typing import Optional, List, Any
 
 import matplotlib as mpl
 import networkx as nx
@@ -11,11 +13,12 @@ import loman
 from loman.consts import NodeAttributes, States
 
 
-class NodeFormatter:
+class NodeFormatter(ABC):
     def calibrate(self, nodes):
         pass
 
-    def format(self, name, data):
+    @abstractmethod
+    def format(self, name, data) -> dict:
         pass
 
 
