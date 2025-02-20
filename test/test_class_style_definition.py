@@ -236,3 +236,15 @@ def test_computation_factory_methods_calling_methods_on_self_recursively():
     comp = FooComp()
     comp.compute_all()
     assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+def test_computation_factory_calc_node_no_args():
+    @ComputationFactory
+    class FooComp():
+
+        @calc_node
+        def a():
+            return 3
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.a == States.UPTODATE and comp.v.a == 3
