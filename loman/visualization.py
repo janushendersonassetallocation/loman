@@ -69,7 +69,7 @@ class ColorByTiming(NodeFormatter):
             col = '#FFFFFF'
         else:
             duration = timing_data.duration
-            norm_duration = (duration - self.min_duration) / (self.max_duration - self.min_duration)
+            norm_duration: float = (duration - self.min_duration) / (self.max_duration - self.min_duration)
             col = mpl.colors.rgb2hex(self.cmap(norm_duration))
         return {
             'style': 'filled',
