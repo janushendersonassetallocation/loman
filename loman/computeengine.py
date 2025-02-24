@@ -1393,7 +1393,7 @@ class Computation:
         path = to_path(path)
         return to_path(prefix).join(path)
 
-    def add_block(self, base_path: str | Path, block: 'Computation'):
+    def add_block(self, base_path: Union[str, Path], block: 'Computation'):
         for node_name in block.nodes():
             node_key = NodeKey.from_name(node_name)
             node_data = block.dag.nodes[node_key]
