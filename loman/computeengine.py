@@ -74,9 +74,9 @@ def node(comp, name=None, *args, **kw):
     return inner
 
 
+@dataclass()
 class ConstantValue:
-    def __init__(self, value):
-        self.value = value
+    value: object
 
 
 C = ConstantValue
@@ -255,6 +255,10 @@ def names_to_node_keys(names: Union[InputName, InputNames]) -> List[NodeKey]:
 
 def node_keys_to_names(node_keys: Iterable[NodeKey]) -> List[Name]:
     return [node_key.name for node_key in node_keys]
+
+
+def identity_function(x):
+    return x
 
 
 class Computation:
@@ -773,6 +777,31 @@ class Computation:
             else:
                 raise Exception(f"Unexpected param type: {param.type}")
         return f, executor_name, args, kwds
+
+    def get_definition_args_kwds(self, name: InputName) -> tuple[list, dict]:
+        res_args = []
+        res_kwds = {}
+        node_key = NodeKey.from_name(name)
+        for idx, value in self.dag.nodes[node_key][NodeAttributes.ARGS].items():
+            while len(res_args) <= idx:
+                res_args.append(None)
+            res_args[idx] = C(value)
+        for param_name, value in self.dag.nodes[node_key][NodeAttributes.KWDS].items():
+            res_kwds[param_name] = C(value)
+        for in_node_key in self.dag.predecessors(node_key):
+            edge = self.dag[in_node_key][node_key]
+            param_type, param_name = edge[EdgeAttributes.PARAM]
+            if param_type == _ParameterType.ARG:
+                idx: int = param_name
+                while len(res_args) <= idx:
+                    res_args.append(None)
+                res_args[idx] = in_node_key.name
+            elif param_type == _ParameterType.KWD:
+                res_kwds[param_name] = in_node_key.name
+            else:
+                raise Exception(f"Unexpected param type: {param_type}")
+        return res_args, res_kwds
+
 
     def _compute_nodes(self, node_keys: Iterable[NodeKey], raise_exceptions: bool = False):
         LOG.debug(f'Computing nodes {node_keys}')
@@ -1357,6 +1386,31 @@ class Computation:
                 raise MapException(f"Unable to calculate {result_node}", results)
             return results
         self.add_node(result_node, f, kwds={'xs': input_node})
+
+    def prepend_path(self, path, prefix):
+        if isinstance(path, ConstantValue):
+            return path
+        path = to_path(path)
+        return to_path(prefix).join(path)
+
+    def add_block(self, base_path: str | Path, block: 'Computation'):
+        for node_name in block.nodes():
+            node_key = NodeKey.from_name(node_name)
+            node_data = block.dag.nodes[node_key]
+            tags = node_data[NodeAttributes.TAG]
+            style = node_data[NodeAttributes.STYLE]
+            group = node_data[NodeAttributes.GROUP]
+            args, kwds = block.get_definition_args_kwds(node_key)
+            args = [self.prepend_path(arg, base_path) for arg in args]
+            kwds = {k: self.prepend_path(v, base_path) for k, v in kwds.items()}
+            func = node_data[NodeAttributes.FUNC]
+            executor = node_data[NodeAttributes.EXECUTOR]
+            converter = node_data[NodeAttributes.CONVERTER]
+            new_node_name = self.prepend_path(node_name, base_path)
+            self.add_node(new_node_name, func, args=args, kwds=kwds, converter=converter, serialize=False, inspect=False, group=group, tags=tags, style=style, executor=executor)
+
+    def link(self, target: InputName, source: InputName):
+        self.add_node(target, identity_function, kwds={'x': source})
 
     def _repr_svg_(self):
         return self.to_pydot().create_svg().decode('utf-8')
