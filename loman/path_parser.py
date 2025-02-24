@@ -67,7 +67,8 @@ class Path:
                 parts_append(part)
                 nextchar = path_str[end:end + 1]
                 assert nextchar == '' or nextchar == '/'
-                end = end + 1
+                if nextchar != '':
+                    end = end + 1
             else:
                 chunk = PART.match(path_str, end)
                 end = chunk.end()
@@ -97,9 +98,12 @@ class Path:
             raise PathNotFound()
         return Path(self.parts[:-1], self.is_absolute_path)
 
-    def join(self, *parts: str) -> Path:
-        parts_all = self.parts + tuple(parts)
-        return Path(parts_all, self.is_absolute_path)
+    def join(self, *parts: list[PathType]) -> Path:
+        parts_all = list(self.parts)
+        for p in parts:
+            path = to_path(p)
+            parts_all.extend(path.parts)
+        return Path(tuple(parts_all), self.is_absolute_path)
 
     def is_descendent_of(self, other: Path):
         n_self_parts = len(self.parts)
