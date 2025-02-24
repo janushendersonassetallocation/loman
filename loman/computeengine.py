@@ -774,6 +774,31 @@ class Computation:
                 raise Exception(f"Unexpected param type: {param.type}")
         return f, executor_name, args, kwds
 
+    def get_definition_args_kwds(self, name: InputName) -> tuple[list, dict]:
+        res_args = []
+        res_kwds = {}
+        node_key = NodeKey.from_name(name)
+        for idx, value in self.dag.nodes[node_key][NodeAttributes.ARGS].items():
+            while len(res_args) <= idx:
+                res_args.append(None)
+            res_args[idx] = C(value)
+        for param_name, value in self.dag.nodes[node_key][NodeAttributes.KWDS].items():
+            res_kwds[param_name] = C(value)
+        for in_node_key in self.dag.predecessors(node_key):
+            edge = self.dag[in_node_key][node_key]
+            param_type, param_name = edge[EdgeAttributes.PARAM]
+            if param_type == _ParameterType.ARG:
+                idx: int = param_name
+                while len(res_args) <= idx:
+                    res_args.append(None)
+                res_args[idx] = in_node_key.name
+            elif param_type == _ParameterType.KWD:
+                res_kwds[param_name] = in_node_key.name
+            else:
+                raise Exception(f"Unexpected param type: {param_type}")
+        return res_args, res_kwds
+
+
     def _compute_nodes(self, node_keys: Iterable[NodeKey], raise_exceptions: bool = False):
         LOG.debug(f'Computing nodes {node_keys}')
 

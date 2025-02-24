@@ -1151,3 +1151,21 @@ def test_insert_same_value_df():
 
     comp.compute_all()
     assert comp.s.b == States.UPTODATE
+def test_args_kwds():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    def add(x, y):
+        return x + y
+
+    comp.add_node('b', add, args=['a', C(2)])
+    comp.add_node('c', add, args=[C(3), 'a'])
+    comp.add_node('d', add, kwds={'x': C(4), 'y': 'a'})
+    comp.add_node('e', add, kwds={'y': C(5), 'x': 'a'})
+
+    comp.compute_all()
+
+    assert comp.get_definition_args_kwds('b') == (['a', C(2)], {})
+    assert comp.get_definition_args_kwds('c') == ([C(3), 'a'], {})
+    assert comp.get_definition_args_kwds('d') == ([], {'x': C(4), 'y': 'a'})
+    assert comp.get_definition_args_kwds('e') == ([], {'y': C(5), 'x': 'a'})
