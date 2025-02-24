@@ -1151,6 +1151,18 @@ def test_insert_same_value_df():
 
     comp.compute_all()
     assert comp.s.b == States.UPTODATE
+
+
+def test_link():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b')
+    comp.link('b', 'a')
+    comp.insert('a', 5)
+    comp.compute_all()
+    assert comp.v.b == 5
+
+
 def test_args_kwds():
     comp = Computation()
     comp.add_node('a', value=1)
