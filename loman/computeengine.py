@@ -74,9 +74,9 @@ def node(comp, name=None, *args, **kw):
     return inner
 
 
+@dataclass()
 class ConstantValue:
-    def __init__(self, value):
-        self.value = value
+    value: object
 
 
 C = ConstantValue
