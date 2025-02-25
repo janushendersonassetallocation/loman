@@ -171,16 +171,6 @@ class CompositeNodeFormatter(NodeFormatter):
         return d
 
 
-def contract_nodes(dag, nodes):
-    hide_nodes = set(dag.nodes())
-    for name1, name2 in dag.edges():
-        if name2 in nodes:
-            continue
-        hide_nodes.discard(name1)
-        hide_nodes.discard(name2)
-    contract_node(dag, hide_nodes)
-
-
 @dataclass
 class GraphView:
     computation: 'loman.Computation'
