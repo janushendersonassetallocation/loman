@@ -1,6 +1,10 @@
+import networkx as nx
+
 import loman.visualization
 from loman import Computation, States
 import loman.computeengine
+from collections import namedtuple
+from loman.consts import SystemTags
 
 
 def test_simple():
@@ -62,3 +66,24 @@ def test_with_groups():
     comp.add_node('c', lambda a: 2 * a, group='bar')
     comp.add_node('d', lambda b, c: b + c, group='bar')
     v = loman.visualization.GraphView(comp)
+
+def test_show_expansion():
+    Coordinate = namedtuple('Coordinate', ['x', 'y'])
+    comp = Computation()
+    comp.add_node('c', value=Coordinate(1, 2))
+    comp.add_node('foo', lambda x: x + 1, kwds={'x': 'c.x'})
+    comp.add_named_tuple_expansion('c', Coordinate)
+    comp.compute_all()
+
+    node_formatter = loman.visualization.NodeFormatter.create()
+
+    view_uncontracted = loman.visualization.GraphView(comp, node_formatter=node_formatter)
+    view_uncontracted.refresh()
+    labels = nx.get_node_attributes(view_uncontracted.viz_dag, 'label')
+    assert set(labels.values()) == {'c', 'c.x', 'c.y', 'foo'}
+
+    nodes_to_contract = comp.nodes_by_tag(SystemTags.EXPANSION)
+    view_contracted = loman.visualization.GraphView(comp, node_formatter=node_formatter, nodes_to_contract=nodes_to_contract)
+    view_contracted.refresh()
+    labels = nx.get_node_attributes(view_contracted.viz_dag, 'label')
+    assert set(labels.values()) == {'c', 'foo'}

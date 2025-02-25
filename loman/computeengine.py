@@ -1,27 +1,28 @@
+import inspect
 import logging
 import traceback
+import types
 import warnings
 from collections import defaultdict
-from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-
-import inspect
 from typing import List, Dict, Tuple, Any, Callable, Set, Union, Mapping, Optional, Iterable
 
 import decorator
 import dill
 import networkx as nx
 import pandas as pd
-import types
 
-from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
-from .visualization import NodeFormatter, GraphView
 from .compat import get_signature
+from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
+from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
+    ComputationException
+from .path_parser import to_path, Path
+from .structs import node_keys_to_names, InputName, NodeKey, InputNames, Names, Name, names_to_node_keys
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
-from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, ComputationException
-from .path_parser import Path, to_path
+from .visualization import NodeFormatter, GraphView
 
 LOG = logging.getLogger('loman.computeengine')
 
@@ -204,54 +205,6 @@ class NullObject:
     def __repr__(self):
         print(f'__repr__: {self.__dict__}')
         return "<NullObject>"
-
-
-InputName = Union[str, Path, 'NodeKey', object]
-InputNames = List[InputName]
-Name = Union[str, 'NodeKey', object]
-Names = List[Name]
-
-
-@dataclass(frozen=True)
-class NodeKey:
-    path: Path
-    obj: object
-
-    @classmethod
-    def from_name(cls, name: InputName):
-        if isinstance(name, str):
-            return cls(to_path(name), None)
-        elif isinstance(name, Path):
-            return cls(name, None)
-        elif isinstance(name, NodeKey):
-            return name
-        elif isinstance(name, object):
-            return cls(Path.root(), name)
-        else:
-            raise ValueError(f"Unexpected error creating node key for name {name}")
-
-    def __str__(self):
-        if self.obj is None:
-            return self.path.str_no_absolute()
-        else:
-            return f'{self.path.str_no_absolute()}: {self.obj}'
-
-    @property
-    def name(self) -> Name:
-        if self.obj is None:
-            return self.path.str_no_absolute()
-        elif self.path.is_root and not isinstance(self.obj, str):
-            return self.obj
-        else:
-            return self
-
-
-def names_to_node_keys(names: Union[InputName, InputNames]) -> List[NodeKey]:
-    return [NodeKey.from_name(name) for name in as_iterable(names)]
-
-
-def node_keys_to_names(node_keys: Iterable[NodeKey]) -> List[Name]:
-    return [node_key.name for node_key in node_keys]
 
 
 def identity_function(x):
