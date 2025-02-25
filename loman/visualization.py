@@ -204,7 +204,7 @@ class GraphView:
             node_formatter = NodeFormatter.create()
         self.struct_dag = nx.DiGraph(self.computation.dag)
         if self.nodes_to_contract is not None:
-            contract_nodes(self.struct_dag, self.nodes_to_contract)
+            contract_node(self.struct_dag, self.nodes_to_contract)
         self.viz_dag = create_viz_dag(self.struct_dag, node_formatter)
         self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 

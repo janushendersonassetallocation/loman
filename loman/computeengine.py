@@ -1425,7 +1425,7 @@ class Computation:
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
-        nodes_to_contract = self.nodes_by_tag(SystemTags.EXPANSION) if show_expansion else None
+        nodes_to_contract = self.nodes_by_tag(SystemTags.EXPANSION) if not show_expansion else None
         v = GraphView(self, node_formatter=node_formatter,
                       graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
                       nodes_to_contract=nodes_to_contract)
