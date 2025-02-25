@@ -1,5 +1,5 @@
 import pytest
-from loman.path_parser import to_path, Path
+from loman.path_parser import to_path, Path, path_join
 
 TEST_DATA = [
     ('/A', Path(('A', ), is_absolute_path=True)),
@@ -28,3 +28,17 @@ TEST_JOIN_DATA = [
 def test_join_paths(base_path, join_parts, expected_path):
     result = base_path.join(*join_parts)
     assert result == expected_path
+
+
+TEST_JOIN_DATA_2 = [
+    (['A', 'B'], 'A/B'),
+    (['A', 'B', 'C'], 'A/B/C'),
+    (['A', 'B/C'], 'A/B/C'),
+    (['/A', 'B'], '/A/B'),
+    (['/A', 'B', 'C'], '/A/B/C'),
+    (['/A', 'B/C'], '/A/B/C'),
+]
+@pytest.mark.parametrize("paths,expected_path", TEST_JOIN_DATA_2)
+def test_join_paths_2(paths, expected_path):
+    result = path_join(*paths)
+    assert result == to_path(expected_path)
