@@ -1,5 +1,10 @@
+import os
+import tempfile
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+
 import pandas as pd
-from typing import Optional, List
+from typing import Optional
 
 import matplotlib as mpl
 import networkx as nx
@@ -8,15 +13,41 @@ import pydotplus
 from matplotlib.colors import Colormap
 
 import loman
-from loman.consts import NodeAttributes, States
+from .structs import NodeKey
+from .consts import NodeAttributes, States
+from .graph_utils import contract_node
 
 
-class NodeFormatter:
-    def calibrate(self, nodes):
+class NodeFormatter(ABC):
+    def calibrate(self, nodes) -> None:
         pass
 
-    def format(self, name, data):
+    @abstractmethod
+    def format(self, name, data) -> Optional[dict]:
         pass
+
+    @staticmethod
+    def create(cmap: Optional[dict | Colormap] = None, colors: str = 'state', shapes: Optional[str] = None):
+        node_formatters = [StandardLabel(), StandardGroup()]
+
+        if isinstance(shapes, str):
+            shapes = shapes.lower()
+        if shapes == 'type':
+            node_formatters.append(ShapeByType())
+        elif shapes is None:
+            pass
+        else:
+            raise ValueError(f"{shapes} is not a valid loman shapes parameter for visualization")
+
+        colors = colors.lower()
+        if colors == 'state':
+            node_formatters.append(ColorByState(cmap))
+        elif colors == 'timing':
+            node_formatters.append(ColorByTiming(cmap))
+        else:
+            raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
+        node_formatters.append(StandardStylingOverrides())
+        return CompositeNodeFormatter(node_formatters)
 
 
 class ColorByState(NodeFormatter):
@@ -66,7 +97,7 @@ class ColorByTiming(NodeFormatter):
             col = '#FFFFFF'
         else:
             duration = timing_data.duration
-            norm_duration = (duration - self.min_duration) / (self.max_duration - self.min_duration)
+            norm_duration: float = (duration - self.min_duration) / max(1e-8, self.max_duration - self.min_duration)
             col = mpl.colors.rgb2hex(self.cmap(norm_duration))
         return {
             'style': 'filled',
@@ -123,45 +154,90 @@ class StandardStylingOverrides(NodeFormatter):
             return {'shape': 'point', 'width': 0.1, 'peripheries': 1}
 
 
-def get_node_formatters(cmap, colors, shapes):
-    node_formatters = [StandardLabel(), StandardGroup()]
+@dataclass
+class CompositeNodeFormatter(NodeFormatter):
+    formatters: list[NodeFormatter] = field(default_factory=list)
 
-    if isinstance(shapes, str):
-        shapes = shapes.lower()
-    if shapes == 'type':
-        node_formatters.append(ShapeByType())
-    elif shapes is None:
-        pass
-    else:
-        raise ValueError(f"{shapes} is not a valid loman shapes parameter for visualization")
+    def calibrate(self, nodes):
+        for formatter in self.formatters:
+            formatter.calibrate(nodes)
 
-    colors = colors.lower()
-    if colors == 'state':
-        node_formatters.append(ColorByState(cmap))
-    elif colors == 'timing':
-        node_formatters.append(ColorByTiming(cmap))
-    else:
-        raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
-    node_formatters.append(StandardStylingOverrides())
-    return node_formatters
+    def format(self, name, data):
+        d = {}
+        for formatter in self.formatters:
+            format_attrs = formatter.format(name, data)
+            if format_attrs is not None:
+                d.update(format_attrs)
+        return d
 
 
-def create_viz_dag(comp_dag, node_formatters: Optional[List[NodeFormatter]] = None):
-    if node_formatters is not None:
-        for node_formatter in node_formatters:
-            node_formatter.calibrate(comp_dag.nodes(data=True))
+def contract_nodes(dag, nodes):
+    hide_nodes = set(dag.nodes())
+    for name1, name2 in dag.edges():
+        if name2 in nodes:
+            continue
+        hide_nodes.discard(name1)
+        hide_nodes.discard(name2)
+    contract_node(dag, hide_nodes)
+
+
+@dataclass
+class GraphView:
+    computation: 'loman.Computation'
+    node_formatter: Optional[NodeFormatter] = None
+
+    graph_attr: Optional[dict] = None
+    node_attr: Optional[dict] = None
+    edge_attr: Optional[dict] = None
+
+    nodes_to_contract: Optional[list] = None
+
+    struct_dag: Optional[nx.DiGraph] = None
+    viz_dag: Optional[nx.DiGraph] = None
+    viz_dot: Optional[pydotplus.Dot] = None
+
+    def __post_init__(self):
+        self.refresh()
+
+    def refresh(self):
+        node_formatter = self.node_formatter
+        if node_formatter is None:
+            node_formatter = NodeFormatter.create()
+        self.struct_dag = nx.DiGraph(self.computation.dag)
+        if self.nodes_to_contract is not None:
+            nodes_to_contract = [NodeKey.from_name(node) for node in self.nodes_to_contract]
+            contract_node(self.struct_dag, nodes_to_contract)
+        self.viz_dag = create_viz_dag(self.struct_dag, node_formatter)
+        self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
+
+    def svg(self) -> Optional[str]:
+        if self.viz_dot is None:
+            return None
+        return self.viz_dot.create_svg().decode('utf-8')
+
+    def view(self):
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            f.write(self.viz_dot.create_pdf())
+            os.startfile(f.name)
+
+    def _repr_svg_(self):
+        return self.svg()
+
+
+def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None) -> nx.DiGraph:
+    if node_formatter is not None:
+        node_formatter.calibrate(comp_dag.nodes(data=True))
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
     for i, (name, data) in enumerate(comp_dag.nodes(data=True)):
         short_name = f'n{i}'
-        attr_dict = {}
+        attr_dict = None
 
-        if node_formatters is not None:
-            for node_formatter in node_formatters:
-                format_attrs = node_formatter.format(name, data)
-                if format_attrs is not None:
-                    attr_dict.update(format_attrs)
+        if node_formatter is not None:
+            attr_dict = node_formatter.format(name, data)
+        if attr_dict is None:
+            attr_dict = {}
 
         attr_dict = {k: v for k, v in attr_dict.items() if v is not None}
 
@@ -183,7 +259,7 @@ def create_viz_dag(comp_dag, node_formatters: Optional[List[NodeFormatter]] = No
     return viz_dag
 
 
-def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None):
+def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
     node_groups = {}
     for name, data in viz_dag.nodes(data=True):
         group = data.get('_group')

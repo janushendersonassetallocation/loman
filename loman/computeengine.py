@@ -1,30 +1,28 @@
+import inspect
 import logging
-import os
-import tempfile
 import traceback
+import types
 import warnings
 from collections import defaultdict
-from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-
-import inspect
 from typing import List, Dict, Tuple, Any, Callable, Set, Union, Mapping, Optional, Iterable
 
 import decorator
 import dill
 import networkx as nx
 import pandas as pd
-import types
 
-from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
-from .graph_utils import contract_node
-from .visualization import create_viz_dag, to_pydot, get_node_formatters
 from .compat import get_signature
+from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
+from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
+    ComputationException
+from .path_parser import to_path, Path
+from .structs import node_keys_to_names, InputName, NodeKey, InputNames, Names, Name, names_to_node_keys
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
-from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, ComputationException
-from .path_parser import Path, to_path
+from .visualization import NodeFormatter, GraphView
 
 LOG = logging.getLogger('loman.computeengine')
 
@@ -207,54 +205,6 @@ class NullObject:
     def __repr__(self):
         print(f'__repr__: {self.__dict__}')
         return "<NullObject>"
-
-
-InputName = Union[str, Path, 'NodeKey', object]
-InputNames = List[InputName]
-Name = Union[str, 'NodeKey', object]
-Names = List[Name]
-
-
-@dataclass(frozen=True)
-class NodeKey:
-    path: Path
-    obj: object
-
-    @classmethod
-    def from_name(cls, name: InputName):
-        if isinstance(name, str):
-            return cls(to_path(name), None)
-        elif isinstance(name, Path):
-            return cls(name, None)
-        elif isinstance(name, NodeKey):
-            return name
-        elif isinstance(name, object):
-            return cls(Path.root(), name)
-        else:
-            raise ValueError(f"Unexpected error creating node key for name {name}")
-
-    def __str__(self):
-        if self.obj is None:
-            return self.path.str_no_absolute()
-        else:
-            return f'{self.path.str_no_absolute()}: {self.obj}'
-
-    @property
-    def name(self) -> Name:
-        if self.obj is None:
-            return self.path.str_no_absolute()
-        elif self.path.is_root and not isinstance(self.obj, str):
-            return self.obj
-        else:
-            return self
-
-
-def names_to_node_keys(names: Union[InputName, InputNames]) -> List[NodeKey]:
-    return [NodeKey.from_name(name) for name in as_iterable(names)]
-
-
-def node_keys_to_names(node_keys: Iterable[NodeKey]) -> List[Name]:
-    return [node_key.name for node_key in node_keys]
 
 
 def identity_function(x):
@@ -1413,27 +1363,13 @@ class Computation:
         self.add_node(target, identity_function, kwds={'x': source})
 
     def _repr_svg_(self):
-        return self.to_pydot().create_svg().decode('utf-8')
+        return GraphView(self).svg()
 
-    def to_pydot(self, *, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False, shapes=None):
-        struct_dag = nx.DiGraph(self.dag)
-        if not show_expansion:
-            hide_nodes = set(struct_dag.nodes())
-            for name1, name2 in struct_dag.edges():
-                if not show_expansion and SystemTags.EXPANSION in self.tags(name2):
-                    continue
-                hide_nodes.discard(name1)
-                hide_nodes.discard(name2)
-            contract_node(struct_dag, hide_nodes)
-        node_formatters = get_node_formatters(cmap, colors, shapes)
-        viz_dag = create_viz_dag(struct_dag, node_formatters=node_formatters)
-        viz_dot = to_pydot(viz_dag, graph_attr, node_attr, edge_attr)
-        return viz_dot
-
-    def draw(self, *, colors='state', cmap=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False, shapes=None):
+    def draw(self, *, cmap=None, colors='state', shapes=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
 
+        :param cmap: Default: None
         :param colors: 'state' - colors indicate state. 'timing' - colors indicate execution time. Default: 'state'.
         :param shapes: None - ovals. 'type' - shapes indicate type. Default: None.
         :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
@@ -1441,20 +1377,17 @@ class Computation:
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
-        d = self.to_pydot(colors=colors, cmap=cmap, graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
-                          show_expansion=show_expansion, shapes=shapes)
+        node_formatter = NodeFormatter.create(cmap, colors, shapes)
+        nodes_to_contract = self.nodes_by_tag(SystemTags.EXPANSION) if not show_expansion else None
+        v = GraphView(self, node_formatter=node_formatter,
+                      graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
+                      nodes_to_contract=nodes_to_contract)
+        return v
 
-        def repr_svg(self):
-            return self.create_svg().decode('utf-8')
-
-        d._repr_svg_ = types.MethodType(repr_svg, d)
-        return d
-
-    def view(self, colors='state', cmap=None):
-        d = self.to_pydot(colors=colors, cmap=cmap)
-        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
-            f.write(d.create_pdf())
-            os.startfile(f.name)
+    def view(self, cmap=None, colors='state', shapes=None):
+        node_formatter = NodeFormatter.create(cmap, colors, shapes)
+        v = GraphView(self, node_formatter=node_formatter)
+        v.view()
 
     def print_errors(self):
         """
