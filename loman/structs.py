@@ -43,6 +43,20 @@ class NodeKey:
         else:
             return self
 
+    @property
+    def label(self) -> str:
+        if self.obj is None:
+            return self.path.last_part
+        else:
+            return str(self.obj)
+
+    @property
+    def group_path(self) -> Path:
+        if self.obj is None:
+            return self.path.parent()
+        else:
+            return self.path
+
 
 def names_to_node_keys(names: Union[InputName, InputNames]) -> List[NodeKey]:
     return [NodeKey.from_name(name) for name in as_iterable(names)]

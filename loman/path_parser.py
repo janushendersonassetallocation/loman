@@ -40,6 +40,31 @@ def to_paths(paths: PathsType) -> List[Path]:
             raise ValueError(f"Unexpected type for paths {paths}: {paths.__class__}")
 
 
+def path_join(*paths: PathsType) -> Path:
+    first_path = None
+    parts_all = []
+    for path in paths:
+        if path is None:
+            continue
+        path = to_path(path)
+        if first_path is None:
+            first_path = path
+        parts_all.extend(path.parts)
+    is_absolute_path = first_path.is_absolute_path if first_path is not None else False
+    return Path(tuple(parts_all), is_absolute_path=is_absolute_path)
+
+
+def path_common_parent(path1: PathType, path2: PathType):
+    path1 = to_path(path1)
+    path2 = to_path(path2)
+    parts = []
+    for p1, p2 in zip(path1.parts, path2.parts):
+        if p1 != p2:
+            break
+        parts.append(p1)
+    return Path(tuple(parts), path1.is_absolute_path)
+
+
 @dataclass(frozen=True)
 class Path:
     parts: Tuple[str, ...] = field()
@@ -98,12 +123,8 @@ class Path:
             raise PathNotFound()
         return Path(self.parts[:-1], self.is_absolute_path)
 
-    def join(self, *parts: list[PathType]) -> Path:
-        parts_all = list(self.parts)
-        for p in parts:
-            path = to_path(p)
-            parts_all.extend(path.parts)
-        return Path(tuple(parts_all), self.is_absolute_path)
+    def join(self, *parts: List[PathType]) -> Path:
+        return path_join(self, *parts)
 
     def is_descendent_of(self, other: Path):
         n_self_parts = len(self.parts)
@@ -117,6 +138,10 @@ class Path:
     @property
     def is_root(self):
         return len(self.parts) == 0
+
+    @property
+    def last_part(self):
+        return '' if self.is_root else self.parts[-1]
 
 
 class PathNotFound(Exception):

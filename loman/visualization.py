@@ -13,6 +13,7 @@ import pydotplus
 from matplotlib.colors import Colormap
 
 import loman
+from .path_parser import path_join, Path, path_common_parent
 from .structs import NodeKey
 from .consts import NodeAttributes, States
 from .graph_utils import contract_node
@@ -23,7 +24,7 @@ class NodeFormatter(ABC):
         pass
 
     @abstractmethod
-    def format(self, name, data) -> Optional[dict]:
+    def format(self, name: NodeKey, data) -> Optional[dict]:
         pass
 
     @staticmethod
@@ -67,7 +68,7 @@ class ColorByState(NodeFormatter):
             state_colors = self.DEFAULT_STATE_COLORS.copy()
         self.state_colors = state_colors
 
-    def format(self, name, data):
+    def format(self, name: NodeKey, data):
         return {
             'style': 'filled',
             'fillcolor': self.state_colors[data.get(NodeAttributes.STATE, None)]
@@ -91,7 +92,7 @@ class ColorByTiming(NodeFormatter):
         self.max_duration = max(durations)
         self.min_duration = min(durations)
 
-    def format(self, name, data):
+    def format(self, name: NodeKey, data):
         timing_data = data.get(NodeAttributes.TIMING)
         if timing_data is None:
             col = '#FFFFFF'
@@ -106,7 +107,7 @@ class ColorByTiming(NodeFormatter):
 
 
 class ShapeByType(NodeFormatter):
-    def format(self, name, data):
+    def format(self, name: NodeKey, data):
         value = data.get(NodeAttributes.VALUE)
         if value is None:
             return
@@ -127,20 +128,25 @@ class ShapeByType(NodeFormatter):
 
 
 class StandardLabel(NodeFormatter):
-    def format(self, name, data):
-        return {
-            'label': str(name)
-        }
+    def format(self, name: NodeKey, data):
+        return {'label': name.label}
+
+
+def get_group_path(name: NodeKey, data):
+    name_group_path = name.group_path
+    attribute_group = data.get(NodeAttributes.GROUP)
+    attribute_group_path = None if attribute_group is None else Path((attribute_group,))
+
+    group_path = path_join(name_group_path, attribute_group_path)
+    return group_path
 
 
 class StandardGroup(NodeFormatter):
-    def format(self, name, data):
-        group = data.get(NodeAttributes.GROUP)
-        if group is None:
+    def format(self, name: NodeKey, data):
+        group_path = get_group_path(name, data)
+        if group_path.is_root:
             return None
-        return {
-            '_group': group
-        }
+        return {'_group': str(group_path)}
 
 
 class StandardStylingOverrides(NodeFormatter):
@@ -169,16 +175,6 @@ class CompositeNodeFormatter(NodeFormatter):
             if format_attrs is not None:
                 d.update(format_attrs)
         return d
-
-
-def contract_nodes(dag, nodes):
-    hide_nodes = set(dag.nodes())
-    for name1, name2 in dag.edges():
-        if name2 in nodes:
-            continue
-        hide_nodes.discard(name1)
-        hide_nodes.discard(name2)
-    contract_node(dag, hide_nodes)
 
 
 @dataclass
@@ -248,11 +244,14 @@ def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None) -> 
         short_name_1 = node_index_map[name1]
         short_name_2 = node_index_map[name2]
 
-        group1 = comp_dag.nodes[name1].get(NodeAttributes.GROUP)
-        group2 = comp_dag.nodes[name2].get(NodeAttributes.GROUP)
-        group = group1 if group1 == group2 else None
+        group_path1 = get_group_path(name1, comp_dag.nodes[name1])
+        group_path2 = get_group_path(name2, comp_dag.nodes[name2])
+        group_path = path_common_parent(group_path1, group_path2)
 
-        attr_dict = {'_group': group}
+        attr_dict = {}
+        if not group_path.is_root:
+            #group_path = None
+            attr_dict['_group'] = str(group_path)
 
         viz_dag.add_edge(short_name_1, short_name_2, **attr_dict)
 
@@ -298,7 +297,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
             edge = pydotplus.Edge(name1, name2)
             c.add_edge(edge)
 
-        c.obj_dict['label'] = str(group)
+        c.obj_dict['attributes']['label'] = str(group)
         viz_dot.add_subgraph(c)
 
     for name in node_groups.get(None, []):
