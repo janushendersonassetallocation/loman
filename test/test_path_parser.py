@@ -37,6 +37,7 @@ TEST_JOIN_DATA_2 = [
     (['/A', 'B'], '/A/B'),
     (['/A', 'B', 'C'], '/A/B/C'),
     (['/A', 'B/C'], '/A/B/C'),
+    (['A', None, 'B'], 'A/B'),
 ]
 @pytest.mark.parametrize("paths,expected_path", TEST_JOIN_DATA_2)
 def test_join_paths_2(paths, expected_path):

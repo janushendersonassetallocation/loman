@@ -41,11 +41,16 @@ def to_paths(paths: PathsType) -> List[Path]:
 
 
 def path_join(*paths: PathsType) -> Path:
+    first_path = None
     parts_all = []
-    paths = to_paths(paths)
     for path in paths:
+        if path is None:
+            continue
+        path = to_path(path)
+        if first_path is None:
+            first_path = path
         parts_all.extend(path.parts)
-    is_absolute_path = paths[0].is_absolute_path if len(paths) > 0 else False
+    is_absolute_path = first_path.is_absolute_path if first_path is not None else False
     return Path(tuple(parts_all), is_absolute_path=is_absolute_path)
 
 
