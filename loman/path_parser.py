@@ -49,6 +49,17 @@ def path_join(*paths: PathsType) -> Path:
     return Path(tuple(parts_all), is_absolute_path=is_absolute_path)
 
 
+def path_common_parent(path1: PathType, path2: PathType):
+    path1 = to_path(path1)
+    path2 = to_path(path2)
+    parts = []
+    for p1, p2 in zip(path1.parts, path2.parts):
+        if p1 != p2:
+            break
+        parts.append(p1)
+    return Path(tuple(parts), path1.is_absolute_path)
+
+
 @dataclass(frozen=True)
 class Path:
     parts: Tuple[str, ...] = field()
