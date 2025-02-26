@@ -732,24 +732,28 @@ class Computation:
         res_args = []
         res_kwds = {}
         node_key = NodeKey.from_name(name)
-        for idx, value in self.dag.nodes[node_key][NodeAttributes.ARGS].items():
-            while len(res_args) <= idx:
-                res_args.append(None)
-            res_args[idx] = C(value)
-        for param_name, value in self.dag.nodes[node_key][NodeAttributes.KWDS].items():
-            res_kwds[param_name] = C(value)
-        for in_node_key in self.dag.predecessors(node_key):
-            edge = self.dag[in_node_key][node_key]
-            param_type, param_name = edge[EdgeAttributes.PARAM]
-            if param_type == _ParameterType.ARG:
-                idx: int = param_name
+        node_data = self.dag.nodes[node_key]
+        if NodeAttributes.ARGS in node_data:
+            for idx, value in node_data[NodeAttributes.ARGS].items():
                 while len(res_args) <= idx:
                     res_args.append(None)
-                res_args[idx] = in_node_key.name
-            elif param_type == _ParameterType.KWD:
-                res_kwds[param_name] = in_node_key.name
-            else:
-                raise Exception(f"Unexpected param type: {param_type}")
+                res_args[idx] = C(value)
+        if NodeAttributes.KWDS in node_data:
+            for param_name, value in node_data[NodeAttributes.KWDS].items():
+                res_kwds[param_name] = C(value)
+        for in_node_key in self.dag.predecessors(node_key):
+            edge = self.dag[in_node_key][node_key]
+            if EdgeAttributes.PARAM in edge:
+                param_type, param_name = edge[EdgeAttributes.PARAM]
+                if param_type == _ParameterType.ARG:
+                    idx: int = param_name
+                    while len(res_args) <= idx:
+                        res_args.append(None)
+                    res_args[idx] = in_node_key.name
+                elif param_type == _ParameterType.KWD:
+                    res_kwds[param_name] = in_node_key.name
+                else:
+                    raise Exception(f"Unexpected param type: {param_type}")
         return res_args, res_kwds
 
 
@@ -1347,15 +1351,15 @@ class Computation:
         for node_name in block.nodes():
             node_key = NodeKey.from_name(node_name)
             node_data = block.dag.nodes[node_key]
-            tags = node_data[NodeAttributes.TAG]
-            style = node_data[NodeAttributes.STYLE]
-            group = node_data[NodeAttributes.GROUP]
+            tags = node_data.get(NodeAttributes.TAG, None)
+            style = node_data.get(NodeAttributes.STYLE, None)
+            group = node_data.get(NodeAttributes.GROUP, None)
             args, kwds = block.get_definition_args_kwds(node_key)
             args = [self.prepend_path(arg, base_path) for arg in args]
             kwds = {k: self.prepend_path(v, base_path) for k, v in kwds.items()}
-            func = node_data[NodeAttributes.FUNC]
-            executor = node_data[NodeAttributes.EXECUTOR]
-            converter = node_data[NodeAttributes.CONVERTER]
+            func = node_data.get(NodeAttributes.FUNC, None)
+            executor = node_data.get(NodeAttributes.EXECUTOR, None)
+            converter = node_data.get(NodeAttributes.CONVERTER, None)
             new_node_name = self.prepend_path(node_name, base_path)
             self.add_node(new_node_name, func, args=args, kwds=kwds, converter=converter, serialize=False, inspect=False, group=group, tags=tags, style=style, executor=executor)
 
