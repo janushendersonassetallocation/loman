@@ -139,6 +139,10 @@ class Path:
     def is_root(self):
         return len(self.parts) == 0
 
+    @property
+    def last_part(self):
+        return '' if self.is_root else self.parts[-1]
+
 
 class PathNotFound(Exception):
     pass
