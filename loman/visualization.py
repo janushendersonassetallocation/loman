@@ -132,7 +132,7 @@ class StandardLabel(NodeFormatter):
         return {'label': name.label}
 
 
-def get_group_path(name: NodeKey, data):
+def get_group_path(name: NodeKey, data: dict) -> Path:
     name_group_path = name.group_path
     attribute_group = data.get(NodeAttributes.GROUP)
     attribute_group_path = None if attribute_group is None else Path((attribute_group,))
@@ -146,7 +146,7 @@ class StandardGroup(NodeFormatter):
         group_path = get_group_path(name, data)
         if group_path.is_root:
             return None
-        return {'_group': str(group_path)}
+        return {'_group': group_path}
 
 
 class StandardStylingOverrides(NodeFormatter):
@@ -251,7 +251,7 @@ def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None) -> 
         attr_dict = {}
         if not group_path.is_root:
             #group_path = None
-            attr_dict['_group'] = str(group_path)
+            attr_dict['_group'] = group_path
 
         viz_dag.add_edge(short_name_1, short_name_2, **attr_dict)
 
@@ -259,32 +259,22 @@ def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None) -> 
 
 
 def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
+    root = Path(tuple(), False)
+
     node_groups = {}
     for name, data in viz_dag.nodes(data=True):
-        group = data.get('_group')
+        group = data.get('_group', root)
         node_groups.setdefault(group, []).append(name)
 
     edge_groups = {}
     for name1, name2, data in viz_dag.edges(data=True):
-        group = data.get('_group')
+        group = data.get('_group', root)
         edge_groups.setdefault(group, []).append((name1, name2))
 
-    viz_dot = pydotplus.Dot()
-
-    if graph_attr is not None:
-        for k, v in graph_attr.items():
-            viz_dot.set(k, v)
-
-    if node_attr is not None:
-        viz_dot.set_node_defaults(**node_attr)
-
-    if edge_attr is not None:
-        viz_dot.set_edge_defaults(**edge_attr)
+    subgraphs = {root: create_root_graph(graph_attr, node_attr, edge_attr)}
 
     for group, names in node_groups.items():
-        if group is None:
-            continue
-        c = pydotplus.Subgraph('cluster_' + str(group))
+        c = subgraphs[root] if group is root else create_subgraph(group)
 
         for name in names:
             node = pydotplus.Node(name)
@@ -293,22 +283,50 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
                     node.set(k, v)
             c.add_node(node)
 
-        for name1, name2 in edge_groups.get(group, []):
+        subgraphs[group] = c
+
+    groups = list(subgraphs.keys())
+    for group in groups:
+        group1 = group
+        while True:
+            if group1.is_root:
+                break
+            group1 = group1.parent()
+            if group1 in subgraphs:
+                break
+            subgraphs[group1] = create_subgraph(group1)
+
+    for group, subgraph in subgraphs.items():
+        if group.is_root:
+            continue
+        parent = group
+        while True:
+            parent = parent.parent()
+            if parent in subgraphs or parent.is_root:
+                break
+        subgraphs[parent].add_subgraph(subgraph)
+
+    for group, edges in edge_groups.items():
+        c = subgraphs[group]
+        for name1, name2 in edges:
             edge = pydotplus.Edge(name1, name2)
             c.add_edge(edge)
 
-        c.obj_dict['attributes']['label'] = str(group)
-        viz_dot.add_subgraph(c)
+    return subgraphs[root]
 
-    for name in node_groups.get(None, []):
-        node = pydotplus.Node(name)
-        for k, v in viz_dag.nodes[name].items():
-            if not k.startswith("_"):
-                node.set(k, v)
-        viz_dot.add_node(node)
 
-    for name1, name2 in edge_groups.get(None, []):
-        edge = pydotplus.Edge(name1, name2)
-        viz_dot.add_edge(edge)
+def create_root_graph(graph_attr, node_attr, edge_attr):
+    root_graph = pydotplus.Dot()
+    if graph_attr is not None:
+        for k, v in graph_attr.items():
+            root_graph.set(k, v)
+    if node_attr is not None:
+        root_graph.set_node_defaults(**node_attr)
+    if edge_attr is not None:
+        root_graph.set_edge_defaults(**edge_attr)
+    return root_graph
 
-    return viz_dot
+def create_subgraph(group: Path):
+    c = pydotplus.Subgraph('cluster_' + str(group))
+    c.obj_dict['attributes']['label'] = str(group)
+    return c
