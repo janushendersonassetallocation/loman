@@ -10,10 +10,10 @@ Name = Union[str, 'NodeKey', object]
 Names = List[Name]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class NodeKey:
     path: Path
-    obj: object
+    obj: object = None
 
     @classmethod
     def from_name(cls, name: InputName):
@@ -56,6 +56,13 @@ class NodeKey:
             return self.path.parent()
         else:
             return self.path
+
+    def __repr__(self):
+        path_str = str(self.path)
+        quoted_path_str = repr(path_str)
+        if self.obj is None:
+            return f'{self.__class__.__name__}({quoted_path_str})'
+        return f'{self.__class__.__name__}({quoted_path_str}, {self.obj})'
 
 
 def names_to_node_keys(names: Union[InputName, InputNames]) -> List[NodeKey]:
