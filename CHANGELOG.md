@@ -7,6 +7,7 @@
 - Nodes keyed using NodeKey with paths to support nested blocks
 - Visualization modified to support grouping elements in same block
 - BUGFIX: Fix calc nodes with no parameters
+- Switched to use Python build front-end
 
 ## [0.4.1] (2024-11-29)
 
