@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 import pandas as pd
-from typing import Optional
+from typing import Optional, List, Union
 
 import matplotlib as mpl
 import networkx as nx
@@ -28,7 +28,7 @@ class NodeFormatter(ABC):
         pass
 
     @staticmethod
-    def create(cmap: Optional[dict | Colormap] = None, colors: str = 'state', shapes: Optional[str] = None):
+    def create(cmap: Optional[Union[dict, Colormap]] = None, colors: str = 'state', shapes: Optional[str] = None):
         node_formatters = [StandardLabel(), StandardGroup()]
 
         if isinstance(shapes, str):
@@ -162,7 +162,7 @@ class StandardStylingOverrides(NodeFormatter):
 
 @dataclass
 class CompositeNodeFormatter(NodeFormatter):
-    formatters: list[NodeFormatter] = field(default_factory=list)
+    formatters: List[NodeFormatter] = field(default_factory=list)
 
     def calibrate(self, nodes):
         for formatter in self.formatters:
