@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loman"
+version = "0.5.0"
+authors = [
+  { name="Ed Parcell", email="edparcell@gmail.com" },
+]
+description = "Loman tracks state of computations, and the dependencies between them, allowing full and partial recalculations."
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries"
+]
+license = "BSD-3-Clause"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "decorator",
+    "matplotlib",
+    "pydotplus",
+    "pytest",
+    "dill >= 0.2.5",
+    "networkx >= 2.0",
+    "pandas >= 0.19.2"
+]
+
+[project.urls]
+Homepage = "https://github.com/janusassetallocation/loman"
