@@ -1,5 +1,13 @@
 # Change Log
 
+## [0.5.0] (2025-04-10)
+
+- Add support for blocks (Computation.add_block)
+- Add support for links (Computation.link)
+- Nodes keyed using NodeKey with paths to support nested blocks
+- Visualization modified to support grouping elements in same block
+- BUGFIX: Fix calc nodes with no parameters
+
 ## [0.4.1] (2024-11-29)
 
 - If first parameter of a `@calc_node` is called `self`, then it can be used to call non-calc_node methods of the class. (Can be disabled with `@ComputationFactory(ignore_self=False)` or `@calc_node(ignore_self=False)` ).
