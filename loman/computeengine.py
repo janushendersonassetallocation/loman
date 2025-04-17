@@ -1419,8 +1419,7 @@ class Computation:
         provided in the 'dependencies' dictionary.
 
         Each key in the 'dependencies' dictionary corresponds to a node identifier, and the associated
-        value is the dependency object to inject. If the value is a callable, it will be called without
-        arguments to produce the dependency object.
+        value is the dependency object to inject. If the value is a callable, it will be added as a calc node.
 
         :param dependencies: A dictionary where each key-value pair consists of a node identifier and
                              its corresponding dependency object or a callable that returns the dependency object.
@@ -1434,5 +1433,6 @@ class Computation:
                 if obj is None:
                     continue
                 if callable(obj):
-                    obj = obj()
-                self.add_node(n, value=obj)
+                    self.add_node(n, obj)
+                else:
+                    self.add_node(n, value=obj)
