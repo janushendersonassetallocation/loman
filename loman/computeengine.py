@@ -1412,4 +1412,27 @@ class Computation:
         populate_computation_from_class(comp, definition_class, obj, ignore_self=ignore_self)
         return comp
 
+    def inject_dependencies(self, dependencies: dict, *, force: bool = False):
+        """
+        Injects dependencies into the nodes of the current computation where nodes are in a placeholder state
+        (or all possible nodes when the 'force' parameter is set to True), using values
+        provided in the 'dependencies' dictionary.
 
+        Each key in the 'dependencies' dictionary corresponds to a node identifier, and the associated
+        value is the dependency object to inject. If the value is a callable, it will be called without
+        arguments to produce the dependency object.
+
+        :param dependencies: A dictionary where each key-value pair consists of a node identifier and
+                             its corresponding dependency object or a callable that returns the dependency object.
+        :param force: A boolean flag that, when set to True, forces the replacement of existing node values
+                      with the ones provided in 'dependencies', regardless of their current state. Defaults to False.
+        :return: None
+        """
+        for n in self.nodes():
+            if force or self.s[n] == States.PLACEHOLDER:
+                obj = dependencies.get(n)
+                if obj is None:
+                    continue
+                if callable(obj):
+                    obj = obj()
+                self.add_node(n, value=obj)
