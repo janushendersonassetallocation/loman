@@ -1,5 +1,9 @@
 # Change Log
 
+## [0.5.1] (TBD)
+
+- Modify add_node so that argument names of supplied function will look up within same block, rather than root block
+
 ## [0.5.0] (2025-04-10)
 
 - Add support for blocks (Computation.add_block)

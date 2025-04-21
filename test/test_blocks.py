@@ -1,5 +1,6 @@
 from loman import *
 
+
 def test_simple_block():
     comp_inner = Computation()
     comp_inner.add_node('a')
@@ -24,3 +25,25 @@ def test_simple_block():
     assert comp.v['foo/d'] == 22
     assert comp.v['bar/d'] == 31
     assert comp.v.output == 22 + 31
+
+
+def test_add_node_for_block_definition():
+    comp = Computation()
+    comp.add_node('foo/a')
+    comp.add_node('foo/b', lambda a: a + 1)
+    comp.add_node('foo/c', lambda a: 2 * a)
+    comp.add_node('foo/d', lambda b, c: b + c)
+    comp.insert('foo/a', value=7)
+    comp.compute_all()
+    assert comp.v['foo/d'] == 22
+
+
+def test_add_node_for_block_definition_with_kwds():
+    comp = Computation()
+    comp.add_node('foo_a/a')
+    comp.add_node('foo_b/b', lambda a: a + 1, kwds={'a': 'foo_a/a'})
+    comp.add_node('foo_c/c', lambda a: 2 * a, kwds={'a': 'foo_a/a'})
+    comp.add_node('foo_d/d', lambda b, c: b + c,  kwds={'b': 'foo_b/b', 'c': 'foo_c/c'})
+    comp.insert('foo_a/a', value=7)
+    comp.compute_all()
+    assert comp.v['foo_d/d'] == 22

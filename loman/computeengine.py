@@ -312,26 +312,30 @@ class Computation:
                             self.dag.add_node(input_vertex_node_key, **{NodeAttributes.STATE: States.PLACEHOLDER})
                             self._state_map[States.PLACEHOLDER].add(input_vertex_node_key)
                         self.dag.add_edge(input_vertex_node_key, node_key, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)})
+            param_map = {}
             if inspect:
                 signature = get_signature(func)
-                param_names = set()
                 if not signature.has_var_args:
-                    param_names.update(signature.kwd_params[args_count:])
+                    for param_name in signature.kwd_params[args_count:]:
+                        if kwds is not None and param_name in kwds:
+                            param_source = kwds[param_name]
+                        else:
+                            param_source = node_key.group_path.join(param_name)
+                        param_map[param_name] = param_source
                 if signature.has_var_kwds and kwds is not None:
-                    param_names.update(kwds.keys())
+                    for param_name, param_source in kwds.items():
+                        param_map[param_name] = param_source
                 default_names = signature.default_params
             else:
-                if kwds is None:
-                    param_names = []
-                else:
-                    param_names = kwds.keys()
+                if kwds is not None:
+                    for param_name, param_source in kwds.items():
+                        param_map[param_name] = param_source
                 default_names = []
-            for param_name in param_names:
-                value_source = kwds.get(param_name, param_name) if kwds else param_name
-                if isinstance(value_source, ConstantValue):
-                    node[NodeAttributes.KWDS][param_name] = value_source.value
+            for param_name, param_source in param_map.items():
+                if isinstance(param_source, ConstantValue):
+                    node[NodeAttributes.KWDS][param_name] = param_source.value
                 else:
-                    in_node_name = value_source
+                    in_node_name = param_source
                     in_node_key = NodeKey.from_name(in_node_name)
                     if not self.dag.has_node(in_node_key):
                         if param_name in default_names:

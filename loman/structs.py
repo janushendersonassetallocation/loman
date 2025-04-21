@@ -57,6 +57,18 @@ class NodeKey:
         else:
             return self.path
 
+    def join(self, *parts):
+        if len(parts) == 0:
+            return self
+        if self.obj is not None:
+            raise Exception('Cannot join a node key with an object path')
+        last_part = parts[-1]
+        try:
+            to_path(last_part)
+            return NodeKey(self.path.join(*parts), None)
+        except ValueError:
+            return NodeKey(self.path.join(*parts[:-1]), last_part)
+
     def __repr__(self):
         path_str = str(self.path)
         quoted_path_str = repr(path_str)
