@@ -19,7 +19,7 @@ from .compat import get_signature
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
 from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
     ComputationException
-from .path_parser import to_path, Path
+from .path_parser import to_path, Path, PathType
 from .structs import node_keys_to_names, InputName, NodeKey, InputNames, Names, Name, names_to_node_keys
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 from .visualization import NodeFormatter, GraphView
@@ -1345,13 +1345,14 @@ class Computation:
             return results
         self.add_node(result_node, f, kwds={'xs': input_node})
 
-    def prepend_path(self, path, prefix):
+    def prepend_path(self, path, prefix_path: Path):
         if isinstance(path, ConstantValue):
             return path
         path = to_path(path)
-        return to_path(prefix).join(path)
+        return prefix_path.join(path)
 
-    def add_block(self, base_path: Union[str, Path], block: 'Computation'):
+    def add_block(self, base_path: PathType, block: 'Computation', *, links: Optional[dict] = None):
+        base_path = to_path(base_path)
         for node_name in block.nodes():
             node_key = NodeKey.from_name(node_name)
             node_data = block.dag.nodes[node_key]
@@ -1366,6 +1367,9 @@ class Computation:
             converter = node_data.get(NodeAttributes.CONVERTER, None)
             new_node_name = self.prepend_path(node_name, base_path)
             self.add_node(new_node_name, func, args=args, kwds=kwds, converter=converter, serialize=False, inspect=False, group=group, tags=tags, style=style, executor=executor)
+        if links is not None:
+            for target, source in links.items():
+                self.link(base_path.join(target), source)
 
     def link(self, target: InputName, source: InputName):
         self.add_node(target, identity_function, kwds={'x': source})
