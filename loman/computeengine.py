@@ -1351,7 +1351,7 @@ class Computation:
         path = to_path(path)
         return prefix_path.join(path)
 
-    def add_block(self, base_path: PathType, block: 'Computation', *, links: Optional[dict] = None):
+    def add_block(self, base_path: PathType, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None):
         base_path = to_path(base_path)
         for node_name in block.nodes():
             node_key = NodeKey.from_name(node_name)
@@ -1367,6 +1367,9 @@ class Computation:
             converter = node_data.get(NodeAttributes.CONVERTER, None)
             new_node_name = self.prepend_path(node_name, base_path)
             self.add_node(new_node_name, func, args=args, kwds=kwds, converter=converter, serialize=False, inspect=False, group=group, tags=tags, style=style, executor=executor)
+            if keep_values:
+                new_node_key = NodeKey.from_name(new_node_name)
+                self._set_state_and_literal_value(new_node_key, node_data[NodeAttributes.STATE], node_data[NodeAttributes.VALUE])
         if links is not None:
             for target, source in links.items():
                 self.link(base_path.join(target), source)

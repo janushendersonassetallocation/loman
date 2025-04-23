@@ -69,3 +69,51 @@ def test_add_block_with_links():
     assert comp.v['foo/d'] == 22
     assert comp.v['bar/d'] == 31
     assert comp.v.output == 22 + 31
+
+
+def test_add_block_with_keep_values_false():
+    comp_inner = Computation()
+    comp_inner.add_node('a', value=7)
+    comp_inner.add_node('b', lambda a: a + 1)
+    comp_inner.add_node('c', lambda a: 2 * a)
+    comp_inner.add_node('d', lambda b, c: b + c)
+    comp_inner.compute_all()
+
+    comp = Computation()
+    comp.add_block('foo', comp_inner, keep_values=False, links={'a': 'input_foo'})
+    comp.add_block('bar', comp_inner, keep_values=False, links={'a': 'input_bar'})
+    comp.add_node('output', lambda x, y: x + y, kwds={'x': 'foo/d', 'y': 'bar/d'})
+
+    comp.add_node('input_foo', value=7)
+    comp.add_node('input_bar', value=10)
+
+    comp.compute_all()
+
+    assert comp.v['foo/d'] == 22
+    assert comp.v['bar/d'] == 31
+    assert comp.v.output == 22 + 31
+
+
+def test_add_block_with_keep_values_true():
+    comp_inner = Computation()
+    comp_inner.add_node('a', value=7)
+    comp_inner.add_node('b', lambda a: a + 1)
+    comp_inner.add_node('c', lambda a: 2 * a)
+    comp_inner.add_node('d', lambda b, c: b + c)
+    comp_inner.compute_all()
+
+    comp = Computation()
+    comp.add_block('foo', comp_inner, keep_values=True)
+    comp.add_block('bar', comp_inner, keep_values=True, links={'a': 'input_bar'})
+    comp.add_node('output', lambda x, y: x + y, kwds={'x': 'foo/d', 'y': 'bar/d'})
+
+    comp.add_node('input_bar', value=10)
+
+    assert comp.v['foo/d'] == 22
+    assert comp.v['bar/d'] == 22
+
+    comp.compute_all()
+
+    assert comp.v['foo/d'] == 22
+    assert comp.v['bar/d'] == 31
+    assert comp.v.output == 22 + 31
