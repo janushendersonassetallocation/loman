@@ -1395,8 +1395,9 @@ class Computation:
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
         node_transformations = {}
-        for node in self.nodes_by_tag(SystemTags.EXPANSION):
-            node_transformations[node] = NodeTransformations.CONTRACT
+        if not show_expansion:
+            for nodekey in self.nodes_by_tag(SystemTags.EXPANSION):
+                node_transformations[nodekey] = NodeTransformations.CONTRACT
         v = GraphView(self, root=root, node_formatter=node_formatter,
                       graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
                       node_transformations=node_transformations)

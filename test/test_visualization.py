@@ -11,6 +11,45 @@ from loman.structs import NodeKey
 from test.standard_test_computations import create_example_block_computation
 
 
+def node_set(nodes):
+    s = set()
+    for n in nodes:
+        nodekey = NodeKey.from_name(n)
+        s.add(nodekey)
+    return s
+
+
+def edges_set(edges):
+    s = set()
+    for a, b in edges:
+        nk_a = NodeKey.from_name(a)
+        nk_b = NodeKey.from_name(a)
+        el = frozenset((nk_a, nk_b))
+        s.add(el)
+    return s
+
+
+def edges_from_chain(chain_iter):
+    a, b = tee(chain_iter)
+    next(b, None)
+    return zip(a, b)
+
+
+def check_graph(g, expected_chains):
+    expected_nodes = set()
+    for chain in expected_chains:
+        for node in chain:
+            expected_nodes.add(node)
+
+    expected_edges = set()
+    for chain in expected_chains:
+        for node_a, node_b in edges_from_chain(chain):
+            expected_edges.add((node_a, node_b))
+
+    assert node_set(expected_nodes) == node_set(g.nodes)
+    assert edges_set(expected_edges) == edges_set(g.edges)
+
+
 def test_simple():
     comp = Computation()
     comp.add_node('a')
@@ -71,6 +110,7 @@ def test_with_groups():
     comp.add_node('d', lambda b, c: b + c, group='bar')
     v = loman.visualization.GraphView(comp)
 
+
 def test_show_expansion():
     Coordinate = namedtuple('Coordinate', ['x', 'y'])
     comp = Computation()
@@ -79,59 +119,15 @@ def test_show_expansion():
     comp.add_named_tuple_expansion('c', Coordinate)
     comp.compute_all()
 
-    node_formatter = loman.visualization.NodeFormatter.create()
-
-    view_uncontracted = loman.visualization.GraphView(comp, node_formatter=node_formatter)
+    view_uncontracted = comp.draw(show_expansion=True)
     view_uncontracted.refresh()
     labels = nx.get_node_attributes(view_uncontracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'c.x', 'c.y', 'foo'}
 
-    node_transformations = {}
-    for node in comp.nodes_by_tag(SystemTags.EXPANSION):
-        node_transformations[node] = NodeTransformations.CONTRACT
-    view_contracted = loman.visualization.GraphView(comp, node_formatter=node_formatter, node_transformations=node_transformations)
+    view_contracted = comp.draw(show_expansion=False)
     view_contracted.refresh()
     labels = nx.get_node_attributes(view_contracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'foo'}
-
-
-def node_set(nodes):
-    s = set()
-    for n in nodes:
-        nodekey = NodeKey.from_name(n)
-        s.add(nodekey)
-    return s
-
-
-def edges_set(edges):
-    s = set()
-    for a, b in edges:
-        nk_a = NodeKey.from_name(a)
-        nk_b = NodeKey.from_name(a)
-        el = frozenset((nk_a, nk_b))
-        s.add(el)
-    return s
-
-
-def edges_from_chain(chain_iter):
-    a, b = tee(chain_iter)
-    next(b, None)
-    return zip(a, b)
-
-
-def check_graph(g, expected_chains):
-    expected_nodes = set()
-    for chain in expected_chains:
-        for node in chain:
-            expected_nodes.add(node)
-
-    expected_edges = set()
-    for chain in expected_chains:
-        for node_a, node_b in edges_from_chain(chain):
-            expected_edges.add((node_a, node_b))
-
-    assert node_set(expected_nodes) == node_set(g.nodes)
-    assert edges_set(expected_edges) == edges_set(g.edges)
 
 
 def test_with_visualization_with_groups():
