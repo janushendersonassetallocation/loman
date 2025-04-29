@@ -4,8 +4,7 @@ from dataclasses import dataclass, field
 
 import json
 import re
-from typing import List, Union, Iterable, Tuple
-
+from typing import List, Union, Iterable, Tuple, Optional
 
 PART = re.compile(r'([^/]*)/?')
 
@@ -130,6 +129,17 @@ class Path:
         n_self_parts = len(self.parts)
         n_other_parts = len(other.parts)
         return n_self_parts > n_other_parts and self.parts[:n_other_parts] == other.parts
+
+    def drop_root(self, root: Optional[PathType]):
+        if root is None:
+            return self
+        root_path = to_path(root)
+        n_root_parts = len(root_path.parts)
+        if self.is_descendent_of(root_path):
+            parts = self.parts[n_root_parts:]
+            return Path(parts, is_absolute_path=False)
+        else:
+            return None
 
     @classmethod
     def root(cls):

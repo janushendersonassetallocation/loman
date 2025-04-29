@@ -57,6 +57,12 @@ class NodeKey:
         else:
             return self.path
 
+    def drop_root(self, root):
+        path = self.path.drop_root(root)
+        if path is None:
+            return None
+        return NodeKey(path, self.obj)
+
     def join(self, *parts):
         if len(parts) == 0:
             return self

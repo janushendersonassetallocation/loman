@@ -2,6 +2,7 @@
 
 ## [0.5.1] (TBD)
 
+- Add root parameter to Computation.draw to support viewing sub-blocks.
 - Modify add_node so that argument names of supplied function will look up within same block, rather than root block
 - Add links parameter to Computation.add_block
 - Add keep_values parameter to Computation.add_block

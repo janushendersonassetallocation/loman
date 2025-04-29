@@ -1380,10 +1380,11 @@ class Computation:
     def _repr_svg_(self):
         return GraphView(self).svg()
 
-    def draw(self, *, cmap=None, colors='state', shapes=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw(self, root: Optional[PathType] = None, *, cmap=None, colors='state', shapes=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
 
+        :param root: Optional PathType. Sub-block to draw
         :param cmap: Default: None
         :param colors: 'state' - colors indicate state. 'timing' - colors indicate execution time. Default: 'state'.
         :param shapes: None - ovals. 'type' - shapes indicate type. Default: None.
@@ -1394,7 +1395,7 @@ class Computation:
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
         nodes_to_contract = self.nodes_by_tag(SystemTags.EXPANSION) if not show_expansion else None
-        v = GraphView(self, node_formatter=node_formatter,
+        v = GraphView(self, root=root, node_formatter=node_formatter,
                       graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
                       nodes_to_contract=nodes_to_contract)
         return v

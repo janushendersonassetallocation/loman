@@ -14,7 +14,7 @@ from matplotlib.colors import Colormap
 
 import loman
 from .path_parser import path_join, Path, path_common_parent
-from .structs import NodeKey
+from .structs import NodeKey, InputName
 from .consts import NodeAttributes, States
 from .graph_utils import contract_node
 
@@ -180,6 +180,7 @@ class CompositeNodeFormatter(NodeFormatter):
 @dataclass
 class GraphView:
     computation: 'loman.Computation'
+    root: Optional[InputName] = None
     node_formatter: Optional[NodeFormatter] = None
 
     graph_attr: Optional[dict] = None
@@ -195,15 +196,39 @@ class GraphView:
     def __post_init__(self):
         self.refresh()
 
+    @staticmethod
+    def get_sub_block(dag, root):
+        dag_out = nx.DiGraph()
+
+        nodekey_map = {}
+
+        for nodekey, data in dag.nodes(data=True):
+            new_nodekey = nodekey.drop_root(root)
+            if new_nodekey is None:
+                continue
+            dag_out.add_node(new_nodekey, **data)
+            nodekey_map[nodekey] = new_nodekey
+
+        for nodekey_u, nodekey_v, data in dag.edges(data=True):
+            new_nodekey_u = nodekey_map.get(nodekey_u)
+            new_nodekey_v = nodekey_map.get(nodekey_v)
+            if new_nodekey_u is None or new_nodekey_v is None:
+                continue
+            dag_out.add_edge(new_nodekey_u, new_nodekey_v, **data)
+
+        return dag_out
+
     def refresh(self):
-        node_formatter = self.node_formatter
-        if node_formatter is None:
-            node_formatter = NodeFormatter.create()
-        self.struct_dag = nx.DiGraph(self.computation.dag)
+        self.struct_dag = self.get_sub_block(self.computation.dag, self.root)
         if self.nodes_to_contract is not None:
             nodes_to_contract = [NodeKey.from_name(node) for node in self.nodes_to_contract]
             contract_node(self.struct_dag, nodes_to_contract)
+
+        node_formatter = self.node_formatter
+        if node_formatter is None:
+            node_formatter = NodeFormatter.create()
         self.viz_dag = create_viz_dag(self.struct_dag, node_formatter)
+
         self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 
     def svg(self) -> Optional[str]:

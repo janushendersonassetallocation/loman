@@ -1,3 +1,5 @@
+from itertools import tee
+
 import networkx as nx
 
 import loman.visualization
@@ -5,6 +7,7 @@ from loman import Computation, States
 import loman.computeengine
 from collections import namedtuple
 from loman.consts import SystemTags
+from loman.structs import NodeKey
 
 
 def test_simple():
@@ -87,3 +90,75 @@ def test_show_expansion():
     view_contracted.refresh()
     labels = nx.get_node_attributes(view_contracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'foo'}
+
+
+def node_set(nodes):
+    s = set()
+    for n in nodes:
+        nodekey = NodeKey.from_name(n)
+        s.add(nodekey)
+    return s
+
+
+def edges_set(edges):
+    s = set()
+    for a, b in edges:
+        nk_a = NodeKey.from_name(a)
+        nk_b = NodeKey.from_name(a)
+        el = frozenset((nk_a, nk_b))
+        s.add(el)
+    return s
+
+
+def edges_from_chain(chain_iter):
+    a, b = tee(chain_iter)
+    next(b, None)
+    return zip(a, b)
+
+
+def check_graph(g, expected_chains):
+    expected_nodes = set()
+    for chain in expected_chains:
+        for node in chain:
+            expected_nodes.add(node)
+
+    expected_edges = set()
+    for chain in expected_chains:
+        for node_a, node_b in edges_from_chain(chain):
+            expected_edges.add((node_a, node_b))
+
+    assert node_set(expected_nodes) == node_set(g.nodes)
+    assert edges_set(expected_edges) == edges_set(g.edges)
+
+
+def test_with_visualization_with_groups():
+    comp_inner = Computation()
+    comp_inner.add_node('a', value=7)
+    comp_inner.add_node('b', lambda a: a + 1)
+    comp_inner.add_node('c', lambda a: 2 * a)
+    comp_inner.add_node('d', lambda b, c: b + c)
+    comp_inner.compute_all()
+
+    comp = Computation()
+    comp.add_block('foo', comp_inner, keep_values=False, links={'a': 'input_foo'})
+    comp.add_block('bar', comp_inner, keep_values=False, links={'a': 'input_bar'})
+    comp.add_node('output', lambda x, y: x + y, kwds={'x': 'foo/d', 'y': 'bar/d'})
+
+    comp.add_node('input_foo', value=7)
+    comp.add_node('input_bar', value=10)
+
+    comp.compute_all()
+
+    v = comp.draw()
+    check_graph(v.struct_dag, [
+        ('input_foo', 'foo/a', 'foo/b', 'foo/d', 'output'),
+        ('foo/a', 'foo/c', 'foo/d'),
+        ('input_bar', 'bar/a', 'bar/b', 'bar/d', 'output'),
+        ('bar/a', 'bar/c', 'bar/d'),
+    ])
+
+    v_foo = comp.draw('/foo')
+    check_graph(v_foo.struct_dag,[('a', 'b', 'd'), ('a', 'c', 'd')])
+
+    v_bar = comp.draw('/bar')
+    check_graph(v_bar.struct_dag, [('a', 'b', 'd'), ('a', 'c', 'd')])
