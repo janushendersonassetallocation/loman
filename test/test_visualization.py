@@ -8,6 +8,7 @@ import loman.computeengine
 from collections import namedtuple
 from loman.consts import SystemTags, NodeTransformations
 from loman.structs import NodeKey
+from test.standard_test_computations import create_example_block_computation
 
 
 def test_simple():
@@ -134,20 +135,7 @@ def check_graph(g, expected_chains):
 
 
 def test_with_visualization_with_groups():
-    comp_inner = Computation()
-    comp_inner.add_node('a', value=7)
-    comp_inner.add_node('b', lambda a: a + 1)
-    comp_inner.add_node('c', lambda a: 2 * a)
-    comp_inner.add_node('d', lambda b, c: b + c)
-    comp_inner.compute_all()
-
-    comp = Computation()
-    comp.add_block('foo', comp_inner, keep_values=False, links={'a': 'input_foo'})
-    comp.add_block('bar', comp_inner, keep_values=False, links={'a': 'input_bar'})
-    comp.add_node('output', lambda x, y: x + y, kwds={'x': 'foo/d', 'y': 'bar/d'})
-
-    comp.add_node('input_foo', value=7)
-    comp.add_node('input_bar', value=10)
+    comp = create_example_block_computation()
 
     comp.compute_all()
 
