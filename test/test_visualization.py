@@ -6,7 +6,7 @@ import loman.visualization
 from loman import Computation, States
 import loman.computeengine
 from collections import namedtuple
-from loman.consts import SystemTags
+from loman.consts import SystemTags, NodeTransformations
 from loman.structs import NodeKey
 
 
@@ -85,8 +85,10 @@ def test_show_expansion():
     labels = nx.get_node_attributes(view_uncontracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'c.x', 'c.y', 'foo'}
 
-    nodes_to_contract = comp.nodes_by_tag(SystemTags.EXPANSION)
-    view_contracted = loman.visualization.GraphView(comp, node_formatter=node_formatter, nodes_to_contract=nodes_to_contract)
+    node_transformations = {}
+    for node in comp.nodes_by_tag(SystemTags.EXPANSION):
+        node_transformations[node] = NodeTransformations.CONTRACT
+    view_contracted = loman.visualization.GraphView(comp, node_formatter=node_formatter, node_transformations=node_transformations)
     view_contracted.refresh()
     labels = nx.get_node_attributes(view_contracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'foo'}

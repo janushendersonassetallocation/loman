@@ -15,7 +15,7 @@ from matplotlib.colors import Colormap
 import loman
 from .path_parser import path_join, Path, path_common_parent
 from .structs import NodeKey, InputName
-from .consts import NodeAttributes, States
+from .consts import NodeAttributes, States, NodeTransformations
 from .graph_utils import contract_node
 
 
@@ -182,12 +182,11 @@ class GraphView:
     computation: 'loman.Computation'
     root: Optional[InputName] = None
     node_formatter: Optional[NodeFormatter] = None
+    node_transformations: Optional[dict] = None
 
     graph_attr: Optional[dict] = None
     node_attr: Optional[dict] = None
     edge_attr: Optional[dict] = None
-
-    nodes_to_contract: Optional[list] = None
 
     struct_dag: Optional[nx.DiGraph] = None
     viz_dag: Optional[nx.DiGraph] = None
@@ -197,10 +196,12 @@ class GraphView:
         self.refresh()
 
     @staticmethod
-    def get_sub_block(dag, root):
+    def get_sub_block(dag, root, node_transformations):
         dag_out = nx.DiGraph()
 
         nodekey_map = {}
+
+        nodes_to_contract = []
 
         for nodekey, data in dag.nodes(data=True):
             new_nodekey = nodekey.drop_root(root)
@@ -208,6 +209,8 @@ class GraphView:
                 continue
             dag_out.add_node(new_nodekey, **data)
             nodekey_map[nodekey] = new_nodekey
+            if node_transformations.get(nodekey) == NodeTransformations.CONTRACT:
+                nodes_to_contract.append(new_nodekey)
 
         for nodekey_u, nodekey_v, data in dag.edges(data=True):
             new_nodekey_u = nodekey_map.get(nodekey_u)
@@ -216,13 +219,13 @@ class GraphView:
                 continue
             dag_out.add_edge(new_nodekey_u, new_nodekey_v, **data)
 
+        contract_node(dag_out, nodes_to_contract)
+
         return dag_out
 
     def refresh(self):
-        self.struct_dag = self.get_sub_block(self.computation.dag, self.root)
-        if self.nodes_to_contract is not None:
-            nodes_to_contract = [NodeKey.from_name(node) for node in self.nodes_to_contract]
-            contract_node(self.struct_dag, nodes_to_contract)
+        node_transformations = {NodeKey.from_name(k): v for k, v in self.node_transformations.items()} if self.node_transformations is not None else {}
+        self.struct_dag = self.get_sub_block(self.computation.dag, self.root, node_transformations)
 
         node_formatter = self.node_formatter
         if node_formatter is None:
