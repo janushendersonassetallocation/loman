@@ -59,9 +59,7 @@ def test_simple():
 
     v = loman.visualization.GraphView(comp)
 
-    nodes = v.viz_dot.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
-    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
+    node = get_label_to_node_mapping(v)
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
     assert node['a']['attributes']['style'] == 'filled'
     assert node['b']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
@@ -74,9 +72,7 @@ def test_simple():
     comp.insert('a', 1)
 
     v.refresh()
-    nodes = v.viz_dot.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
-    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
+    node = get_label_to_node_mapping(v)
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
     assert node['a']['attributes']['style'] == 'filled'
     assert node['b']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.COMPUTABLE]
@@ -89,9 +85,7 @@ def test_simple():
     comp.compute_all()
 
     v.refresh()
-    nodes = v.viz_dot.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
-    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
+    node = get_label_to_node_mapping(v)
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
     assert node['a']['attributes']['style'] == 'filled'
     assert node['b']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
@@ -100,6 +94,13 @@ def test_simple():
     assert node['c']['attributes']['style'] == 'filled'
     assert node['d']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
     assert node['d']['attributes']['style'] == 'filled'
+
+
+def get_label_to_node_mapping(v):
+    nodes = v.viz_dot.obj_dict['nodes']
+    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
+    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
+    return node
 
 
 def test_with_groups():
@@ -168,3 +169,7 @@ def test_with_visualization_collapsed_blocks():
         ('input_foo', 'foo', 'output'),
         ('input_bar', 'bar', 'output')
     ])
+    node = get_label_to_node_mapping(v)
+    assert node['foo']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
+    assert node['foo']['attributes']['shape'] == 'rect'
+    assert node['foo']['attributes']['peripheries'] == 2

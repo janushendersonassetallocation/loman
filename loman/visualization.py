@@ -54,7 +54,10 @@ class NodeFormatter(ABC):
             node_formatters.append(ColorByTiming(cmap))
         else:
             raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
+
         node_formatters.append(StandardStylingOverrides())
+        node_formatters.append(RectBlocks())
+
         return CompositeNodeFormatter(node_formatters)
 
 
@@ -76,12 +79,22 @@ class ColorByState(NodeFormatter):
         self.state_colors = state_colors
 
     def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
         if len(nodes) == 1:
-            data = nodes[0].data
-            return {
-                'style': 'filled',
-                'fillcolor': self.state_colors[data.get(NodeAttributes.STATE, None)]
-            }
+            state = states[0]
+        else:
+            if all(state == States.UPTODATE for state in states):
+                state = States.UPTODATE
+            elif any(state == States.ERROR for state in states):
+                state = States.ERROR
+            elif any(state == States.STALE for state in states):
+                state = States.STALE
+            else:
+                state = None
+        return {
+            'style': 'filled',
+            'fillcolor': self.state_colors[state]
+        }
 
 
 class ColorByTiming(NodeFormatter):
@@ -138,6 +151,12 @@ class ShapeByType(NodeFormatter):
                 return {'shape': 'hexagon'}
             else:
                 return {'shape': 'diamond'}
+
+
+class RectBlocks(NodeFormatter):
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        if len(nodes) > 1:
+            return {'shape': 'rect', 'peripheries': 2}
 
 
 class StandardLabel(NodeFormatter):
