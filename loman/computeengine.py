@@ -1380,7 +1380,11 @@ class Computation:
     def _repr_svg_(self):
         return GraphView(self).svg()
 
-    def draw(self, root: Optional[PathType] = None, *, cmap=None, colors='state', shapes=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw(self, root: Optional[PathType] = None, *,
+             node_transformations: Optional[dict] = None,
+             cmap=None, colors='state', shapes=None,
+             graph_attr=None, node_attr=None, edge_attr=None,
+             show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
 
@@ -1394,7 +1398,7 @@ class Computation:
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
-        node_transformations = {}
+        node_transformations = node_transformations.copy() if node_transformations is not None else {}
         if not show_expansion:
             for nodekey in self.nodes_by_tag(SystemTags.EXPANSION):
                 node_transformations[nodekey] = NodeTransformations.CONTRACT

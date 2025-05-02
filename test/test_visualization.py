@@ -130,7 +130,7 @@ def test_show_expansion():
     assert set(labels.values()) == {'c', 'foo'}
 
 
-def test_with_visualization_with_groups():
+def test_with_visualization_blocks():
     comp = create_example_block_computation()
 
     comp.compute_all()
@@ -144,7 +144,7 @@ def test_with_visualization_with_groups():
     ])
 
 
-def test_with_visualization_with_groups_view_subblocks():
+def test_with_visualization_view_subblocks():
     comp = create_example_block_computation()
 
     comp.compute_all()
@@ -156,15 +156,15 @@ def test_with_visualization_with_groups_view_subblocks():
     check_graph(v_bar.struct_dag, [('a', 'b', 'd'), ('a', 'c', 'd')])
 
 
-def test_with_visualization_with_groups():
+def test_with_visualization_collapsed_blocks():
     comp = create_example_block_computation()
 
     comp.compute_all()
 
-    v = comp.draw()
+    node_transformations = {'foo': NodeTransformations.COLLAPSE, 'bar': NodeTransformations.COLLAPSE}
+
+    v = comp.draw(node_transformations=node_transformations)
     check_graph(v.struct_dag, [
-        ('input_foo', 'foo/a', 'foo/b', 'foo/d', 'output'),
-        ('foo/a', 'foo/c', 'foo/d'),
-        ('input_bar', 'bar/a', 'bar/b', 'bar/d', 'output'),
-        ('bar/a', 'bar/c', 'bar/d'),
+        ('input_foo', 'foo', 'output'),
+        ('input_bar', 'bar', 'output')
     ])

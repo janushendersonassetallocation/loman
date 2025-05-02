@@ -75,6 +75,12 @@ class NodeKey:
         except ValueError:
             return NodeKey(self.path.join(*parts[:-1]), last_part)
 
+    def is_descendent_of(self, other: 'NodeKey'):
+        if other.obj is None:
+            return self.path.is_descendent_of(other.path)
+        else:
+            return self.path == other.path
+
     def __repr__(self):
         path_str = str(self.path)
         quoted_path_str = repr(path_str)

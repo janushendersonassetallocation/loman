@@ -37,3 +37,4 @@ class SystemTags:
 
 class NodeTransformations:
     CONTRACT = '__contract__'
+    COLLAPSE = '__collapse__'
