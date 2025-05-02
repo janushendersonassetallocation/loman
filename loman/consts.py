@@ -33,3 +33,8 @@ class EdgeAttributes:
 class SystemTags:
     SERIALIZE = '__serialize__'
     EXPANSION = '__expansion__'
+
+
+class NodeTransformations:
+    CONTRACT = '__contract__'
+    COLLAPSE = '__collapse__'

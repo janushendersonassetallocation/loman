@@ -1,6 +1,7 @@
 import os
 import tempfile
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -15,16 +16,22 @@ from matplotlib.colors import Colormap
 import loman
 from .path_parser import path_join, Path, path_common_parent
 from .structs import NodeKey, InputName
-from .consts import NodeAttributes, States
+from .consts import NodeAttributes, States, NodeTransformations
 from .graph_utils import contract_node
+
+@dataclass
+class Node:
+    nodekey: NodeKey
+    original_nodekey: NodeKey
+    data: dict
 
 
 class NodeFormatter(ABC):
-    def calibrate(self, nodes) -> None:
+    def calibrate(self, nodes: List[Node]) -> None:
         pass
 
     @abstractmethod
-    def format(self, name: NodeKey, data) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
         pass
 
     @staticmethod
@@ -47,7 +54,10 @@ class NodeFormatter(ABC):
             node_formatters.append(ColorByTiming(cmap))
         else:
             raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
+
         node_formatters.append(StandardStylingOverrides())
+        node_formatters.append(RectBlocks())
+
         return CompositeNodeFormatter(node_formatters)
 
 
@@ -68,10 +78,22 @@ class ColorByState(NodeFormatter):
             state_colors = self.DEFAULT_STATE_COLORS.copy()
         self.state_colors = state_colors
 
-    def format(self, name: NodeKey, data):
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
+        if len(nodes) == 1:
+            state = states[0]
+        else:
+            if all(state == States.UPTODATE for state in states):
+                state = States.UPTODATE
+            elif any(state == States.ERROR for state in states):
+                state = States.ERROR
+            elif any(state == States.STALE for state in states):
+                state = States.STALE
+            else:
+                state = None
         return {
             'style': 'filled',
-            'fillcolor': self.state_colors[data.get(NodeAttributes.STATE, None)]
+            'fillcolor': self.state_colors[state]
         }
 
 
@@ -83,48 +105,58 @@ class ColorByTiming(NodeFormatter):
         self.min_duration = np.nan
         self.max_duration = np.nan
 
-    def calibrate(self, nodes):
+    def calibrate(self, nodes: List[Node]) -> None:
         durations = []
-        for name, data in nodes:
-            timing = data.get(NodeAttributes.TIMING)
+        for node in nodes:
+            timing = node.data.get(NodeAttributes.TIMING)
             if timing is not None:
                 durations.append(timing.duration)
         self.max_duration = max(durations)
         self.min_duration = min(durations)
 
-    def format(self, name: NodeKey, data):
-        timing_data = data.get(NodeAttributes.TIMING)
-        if timing_data is None:
-            col = '#FFFFFF'
-        else:
-            duration = timing_data.duration
-            norm_duration: float = (duration - self.min_duration) / max(1e-8, self.max_duration - self.min_duration)
-            col = mpl.colors.rgb2hex(self.cmap(norm_duration))
-        return {
-            'style': 'filled',
-            'fillcolor': col
-        }
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        if len(nodes) == 1:
+            data = nodes[0].data
+            timing_data = data.get(NodeAttributes.TIMING)
+            if timing_data is None:
+                col = '#FFFFFF'
+            else:
+                duration = timing_data.duration
+                norm_duration: float = (duration - self.min_duration) / max(1e-8, self.max_duration - self.min_duration)
+                col = mpl.colors.rgb2hex(self.cmap(norm_duration))
+            return {
+                'style': 'filled',
+                'fillcolor': col
+            }
 
 
 class ShapeByType(NodeFormatter):
-    def format(self, name: NodeKey, data):
-        value = data.get(NodeAttributes.VALUE)
-        if value is None:
-            return
-        if isinstance(value, np.ndarray):
-            return {'shape': 'rect'}
-        elif isinstance(value, pd.DataFrame):
-            return {'shape': 'box3d'}
-        elif np.isscalar(value):
-            return {'shape': 'ellipse'}
-        elif isinstance(value, (list, tuple)):
-            return {'shape': 'ellipse', 'peripheries': 2}
-        elif isinstance(value, dict):
-            return {'shape': 'house', 'peripheries': 2}
-        elif isinstance(value, loman.Computation):
-            return {'shape': 'hexagon'}
-        else:
-            return {'shape': 'diamond'}
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        if len(nodes) == 1:
+            data = nodes[0].data
+            value = data.get(NodeAttributes.VALUE)
+            if value is None:
+                return
+            if isinstance(value, np.ndarray):
+                return {'shape': 'rect'}
+            elif isinstance(value, pd.DataFrame):
+                return {'shape': 'box3d'}
+            elif np.isscalar(value):
+                return {'shape': 'ellipse'}
+            elif isinstance(value, (list, tuple)):
+                return {'shape': 'ellipse', 'peripheries': 2}
+            elif isinstance(value, dict):
+                return {'shape': 'house', 'peripheries': 2}
+            elif isinstance(value, loman.Computation):
+                return {'shape': 'hexagon'}
+            else:
+                return {'shape': 'diamond'}
+
+
+class RectBlocks(NodeFormatter):
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        if len(nodes) > 1:
+            return {'shape': 'rect', 'peripheries': 2}
 
 
 class StandardLabel(NodeFormatter):
@@ -142,36 +174,40 @@ def get_group_path(name: NodeKey, data: dict) -> Path:
 
 
 class StandardGroup(NodeFormatter):
-    def format(self, name: NodeKey, data):
-        group_path = get_group_path(name, data)
-        if group_path.is_root:
-            return None
-        return {'_group': group_path}
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        if len(nodes) == 1:
+            data = nodes[0].data
+            group_path = get_group_path(name, data)
+            if group_path.is_root:
+                return None
+            return {'_group': group_path}
 
 
 class StandardStylingOverrides(NodeFormatter):
-    def format(self, name, data):
-        style = data.get(NodeAttributes.STYLE)
-        if style is None:
-            return
-        if style == 'small':
-            return {'width': 0.3, 'height': 0.2, 'fontsize': 8}
-        elif style == 'dot':
-            return {'shape': 'point', 'width': 0.1, 'peripheries': 1}
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+        if len(nodes) == 1:
+            data = nodes[0].data
+            style = data.get(NodeAttributes.STYLE)
+            if style is None:
+                return
+            if style == 'small':
+                return {'width': 0.3, 'height': 0.2, 'fontsize': 8}
+            elif style == 'dot':
+                return {'shape': 'point', 'width': 0.1, 'peripheries': 1}
 
 
 @dataclass
 class CompositeNodeFormatter(NodeFormatter):
     formatters: List[NodeFormatter] = field(default_factory=list)
 
-    def calibrate(self, nodes):
+    def calibrate(self, nodes: List[Node]) -> None:
         for formatter in self.formatters:
             formatter.calibrate(nodes)
 
-    def format(self, name, data):
+    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
         d = {}
         for formatter in self.formatters:
-            format_attrs = formatter.format(name, data)
+            format_attrs = formatter.format(name, nodes)
             if format_attrs is not None:
                 d.update(format_attrs)
         return d
@@ -182,12 +218,11 @@ class GraphView:
     computation: 'loman.Computation'
     root: Optional[InputName] = None
     node_formatter: Optional[NodeFormatter] = None
+    node_transformations: Optional[dict] = None
 
     graph_attr: Optional[dict] = None
     node_attr: Optional[dict] = None
     edge_attr: Optional[dict] = None
-
-    nodes_to_contract: Optional[list] = None
 
     struct_dag: Optional[nx.DiGraph] = None
     viz_dag: Optional[nx.DiGraph] = None
@@ -197,37 +232,57 @@ class GraphView:
         self.refresh()
 
     @staticmethod
-    def get_sub_block(dag, root):
+    def get_sub_block(dag, root, node_transformations: dict):
+        d_transform_to_nodes = defaultdict(list)
+        for nk, transform in node_transformations.items():
+            d_transform_to_nodes[transform].append(nk)
+
         dag_out = nx.DiGraph()
 
-        nodekey_map = {}
+        d_original_to_mapped = {}
 
-        for nodekey, data in dag.nodes(data=True):
-            new_nodekey = nodekey.drop_root(root)
-            if new_nodekey is None:
+        for nk_original in dag.nodes():
+            nk_mapped = nk_original.drop_root(root)
+            if nk_mapped is None:
                 continue
-            dag_out.add_node(new_nodekey, **data)
-            nodekey_map[nodekey] = new_nodekey
-
-        for nodekey_u, nodekey_v, data in dag.edges(data=True):
-            new_nodekey_u = nodekey_map.get(nodekey_u)
-            new_nodekey_v = nodekey_map.get(nodekey_v)
-            if new_nodekey_u is None or new_nodekey_v is None:
+            nk_highest_collapse = nk_original
+            for nk_collapse in d_transform_to_nodes[NodeTransformations.COLLAPSE]:
+                if nk_highest_collapse.is_descendent_of(nk_collapse):
+                    nk_highest_collapse = nk_collapse
+            nk_mapped = nk_highest_collapse.drop_root(root)
+            if nk_mapped is None:
                 continue
-            dag_out.add_edge(new_nodekey_u, new_nodekey_v, **data)
+            d_original_to_mapped[nk_original] = nk_mapped
 
-        return dag_out
+        for nk_mapped in d_original_to_mapped.values():
+            dag_out.add_node(nk_mapped)
+
+        for nk_u, nk_v in dag.edges():
+            nk_mapped_u = d_original_to_mapped.get(nk_u)
+            nk_mapped_v = d_original_to_mapped.get(nk_v)
+            if nk_mapped_u is None or nk_mapped_v is None or nk_mapped_u == nk_mapped_v:
+                continue
+            dag_out.add_edge(nk_mapped_u, nk_mapped_v)
+
+        for nk in d_transform_to_nodes[NodeTransformations.CONTRACT]:
+            contract_node(dag_out, d_original_to_mapped[nk])
+            del d_original_to_mapped[nk]
+
+        d_mapped_to_original = defaultdict(list)
+        for nk_original, nk_mapped in d_original_to_mapped.items():
+            if nk_mapped in dag_out.nodes:
+                d_mapped_to_original[nk_mapped].append(nk_original)
+
+        return dag_out, d_mapped_to_original
 
     def refresh(self):
-        self.struct_dag = self.get_sub_block(self.computation.dag, self.root)
-        if self.nodes_to_contract is not None:
-            nodes_to_contract = [NodeKey.from_name(node) for node in self.nodes_to_contract]
-            contract_node(self.struct_dag, nodes_to_contract)
+        node_transformations = {NodeKey.from_name(k): v for k, v in self.node_transformations.items()} if self.node_transformations is not None else {}
+        self.struct_dag, original_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
 
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
-        self.viz_dag = create_viz_dag(self.struct_dag, node_formatter)
+        self.viz_dag = create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes)
 
         self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 
@@ -245,32 +300,43 @@ class GraphView:
         return self.svg()
 
 
-def create_viz_dag(comp_dag, node_formatter: Optional[NodeFormatter] = None) -> nx.DiGraph:
+def create_viz_dag(struct_dag, comp_dag, node_formatter: Optional[NodeFormatter] = None, original_nodes: Optional[dict] = None) -> nx.DiGraph:
     if node_formatter is not None:
-        node_formatter.calibrate(comp_dag.nodes(data=True))
+        nodes = []
+        for nodekey in struct_dag.nodes:
+            for original_nodekey in original_nodes[nodekey]:
+                data = comp_dag.nodes[original_nodekey]
+                node = Node(nodekey, original_nodekey, data)
+                nodes.append(node)
+        node_formatter.calibrate(nodes)
 
     viz_dag = nx.DiGraph()
     node_index_map = {}
-    for i, (name, data) in enumerate(comp_dag.nodes(data=True)):
+    for i, nodekey in enumerate(struct_dag.nodes):
         short_name = f'n{i}'
         attr_dict = None
 
         if node_formatter is not None:
-            attr_dict = node_formatter.format(name, data)
+            nodes = []
+            for original_nodekey in original_nodes[nodekey]:
+                data = comp_dag.nodes[original_nodekey]
+                node = Node(nodekey, original_nodekey, data)
+                nodes.append(node)
+            attr_dict = node_formatter.format(nodekey, nodes)
         if attr_dict is None:
             attr_dict = {}
 
         attr_dict = {k: v for k, v in attr_dict.items() if v is not None}
 
         viz_dag.add_node(short_name, **attr_dict)
-        node_index_map[name] = short_name
+        node_index_map[nodekey] = short_name
 
-    for name1, name2 in comp_dag.edges():
+    for name1, name2 in struct_dag.edges():
         short_name_1 = node_index_map[name1]
         short_name_2 = node_index_map[name2]
 
-        group_path1 = get_group_path(name1, comp_dag.nodes[name1])
-        group_path2 = get_group_path(name2, comp_dag.nodes[name2])
+        group_path1 = get_group_path(name1, struct_dag.nodes[name1])
+        group_path2 = get_group_path(name2, struct_dag.nodes[name2])
         group_path = path_common_parent(group_path1, group_path2)
 
         attr_dict = {}

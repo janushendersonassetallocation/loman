@@ -16,7 +16,7 @@ import networkx as nx
 import pandas as pd
 
 from .compat import get_signature
-from .consts import NodeAttributes, EdgeAttributes, SystemTags, States
+from .consts import NodeAttributes, EdgeAttributes, SystemTags, States, NodeTransformations
 from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
     ComputationException
 from .path_parser import to_path, Path, PathType
@@ -1380,7 +1380,11 @@ class Computation:
     def _repr_svg_(self):
         return GraphView(self).svg()
 
-    def draw(self, root: Optional[PathType] = None, *, cmap=None, colors='state', shapes=None, graph_attr=None, node_attr=None, edge_attr=None, show_expansion=False):
+    def draw(self, root: Optional[PathType] = None, *,
+             node_transformations: Optional[dict] = None,
+             cmap=None, colors='state', shapes=None,
+             graph_attr=None, node_attr=None, edge_attr=None,
+             show_expansion=False):
         """
         Draw a computation's current state using the GraphViz utility
 
@@ -1394,10 +1398,13 @@ class Computation:
         :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
-        nodes_to_contract = self.nodes_by_tag(SystemTags.EXPANSION) if not show_expansion else None
+        node_transformations = node_transformations.copy() if node_transformations is not None else {}
+        if not show_expansion:
+            for nodekey in self.nodes_by_tag(SystemTags.EXPANSION):
+                node_transformations[nodekey] = NodeTransformations.CONTRACT
         v = GraphView(self, root=root, node_formatter=node_formatter,
                       graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
-                      nodes_to_contract=nodes_to_contract)
+                      node_transformations=node_transformations)
         return v
 
     def view(self, cmap=None, colors='state', shapes=None):
