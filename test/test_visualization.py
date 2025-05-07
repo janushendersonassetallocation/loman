@@ -7,6 +7,7 @@ from loman import Computation, States
 import loman.computeengine
 from collections import namedtuple
 from loman.consts import SystemTags, NodeTransformations
+from loman.path_parser import Path, to_path
 from loman.structs import NodeKey
 from test.standard_test_computations import create_example_block_computation
 
@@ -103,6 +104,16 @@ def get_label_to_node_mapping(v):
     return node
 
 
+def get_path_to_node_mapping(v):
+    d = {}
+    for name, node_obj in v.viz_dag.nodes(data=True):
+        label = node_obj['label']
+        group = node_obj.get('_group')
+        path = Path((label,), is_absolute_path=False) if group is None else group.join(label)
+        d[path] = node_obj
+    return d
+
+
 def test_with_groups():
     comp = Computation()
     comp.add_node('a', group='foo')
@@ -173,3 +184,23 @@ def test_with_visualization_collapsed_blocks():
     assert node['foo']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
     assert node['foo']['attributes']['shape'] == 'rect'
     assert node['foo']['attributes']['peripheries'] == 2
+
+
+def test_with_visualization_single_element_collapsed_blocks():
+    comp = loman.Computation()
+    comp.add_node('foo1/bar1/baz1/a')
+
+    v = comp.draw(node_transformations={'foo1': NodeTransformations.COLLAPSE})
+    d = get_path_to_node_mapping(v)
+    assert d[to_path('foo1')]['shape'] == 'rect'
+    assert d[to_path('foo1')]['peripheries'] == 2
+
+    v = comp.draw(node_transformations={'foo1/bar1': NodeTransformations.COLLAPSE})
+    d = get_path_to_node_mapping(v)
+    assert d[to_path('foo1/bar1')]['shape'] == 'rect'
+    assert d[to_path('foo1/bar1')]['peripheries'] == 2
+
+    v = comp.draw(node_transformations={'foo1/bar1/baz1': NodeTransformations.COLLAPSE})
+    d = get_path_to_node_mapping(v)
+    assert d[to_path('foo1/bar1/baz1')]['shape'] == 'rect'
+    assert d[to_path('foo1/bar1/baz1')]['peripheries'] == 2

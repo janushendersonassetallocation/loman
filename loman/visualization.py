@@ -31,7 +31,7 @@ class NodeFormatter(ABC):
         pass
 
     @abstractmethod
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         pass
 
     @staticmethod
@@ -78,7 +78,7 @@ class ColorByState(NodeFormatter):
             state_colors = self.DEFAULT_STATE_COLORS.copy()
         self.state_colors = state_colors
 
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
         if len(nodes) == 1:
             state = states[0]
@@ -114,7 +114,7 @@ class ColorByTiming(NodeFormatter):
         self.max_duration = max(durations)
         self.min_duration = min(durations)
 
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         if len(nodes) == 1:
             data = nodes[0].data
             timing_data = data.get(NodeAttributes.TIMING)
@@ -131,7 +131,7 @@ class ColorByTiming(NodeFormatter):
 
 
 class ShapeByType(NodeFormatter):
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         if len(nodes) == 1:
             data = nodes[0].data
             value = data.get(NodeAttributes.VALUE)
@@ -154,13 +154,13 @@ class ShapeByType(NodeFormatter):
 
 
 class RectBlocks(NodeFormatter):
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
-        if len(nodes) > 1:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
+        if is_composite:
             return {'shape': 'rect', 'peripheries': 2}
 
 
 class StandardLabel(NodeFormatter):
-    def format(self, name: NodeKey, data):
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         return {'label': name.label}
 
 
@@ -174,7 +174,7 @@ def get_group_path(name: NodeKey, data: dict) -> Path:
 
 
 class StandardGroup(NodeFormatter):
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         if len(nodes) == 1:
             data = nodes[0].data
             group_path = get_group_path(name, data)
@@ -184,7 +184,7 @@ class StandardGroup(NodeFormatter):
 
 
 class StandardStylingOverrides(NodeFormatter):
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         if len(nodes) == 1:
             data = nodes[0].data
             style = data.get(NodeAttributes.STYLE)
@@ -204,10 +204,10 @@ class CompositeNodeFormatter(NodeFormatter):
         for formatter in self.formatters:
             formatter.calibrate(nodes)
 
-    def format(self, name: NodeKey, nodes: List[Node]) -> Optional[dict]:
+    def format(self, name: NodeKey, nodes: List[Node], is_composite: bool) -> Optional[dict]:
         d = {}
         for formatter in self.formatters:
-            format_attrs = formatter.format(name, nodes)
+            format_attrs = formatter.format(name, nodes, is_composite)
             if format_attrs is not None:
                 d.update(format_attrs)
         return d
@@ -240,19 +240,24 @@ class GraphView:
         dag_out = nx.DiGraph()
 
         d_original_to_mapped = {}
+        s_collapsed = set()
 
         for nk_original in dag.nodes():
             nk_mapped = nk_original.drop_root(root)
             if nk_mapped is None:
                 continue
             nk_highest_collapse = nk_original
+            is_collapsed = False
             for nk_collapse in d_transform_to_nodes[NodeTransformations.COLLAPSE]:
                 if nk_highest_collapse.is_descendent_of(nk_collapse):
                     nk_highest_collapse = nk_collapse
+                    is_collapsed = True
             nk_mapped = nk_highest_collapse.drop_root(root)
             if nk_mapped is None:
                 continue
             d_original_to_mapped[nk_original] = nk_mapped
+            if is_collapsed:
+                s_collapsed.add(nk_mapped)
 
         for nk_mapped in d_original_to_mapped.values():
             dag_out.add_node(nk_mapped)
@@ -273,16 +278,18 @@ class GraphView:
             if nk_mapped in dag_out.nodes:
                 d_mapped_to_original[nk_mapped].append(nk_original)
 
-        return dag_out, d_mapped_to_original
+        s_collapsed.intersection_update(dag_out.nodes)
+
+        return dag_out, d_mapped_to_original, s_collapsed
 
     def refresh(self):
         node_transformations = {NodeKey.from_name(k): v for k, v in self.node_transformations.items()} if self.node_transformations is not None else {}
-        self.struct_dag, original_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
+        self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
 
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
-        self.viz_dag = create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes)
+        self.viz_dag = create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
 
         self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 
@@ -300,7 +307,7 @@ class GraphView:
         return self.svg()
 
 
-def create_viz_dag(struct_dag, comp_dag, node_formatter: Optional[NodeFormatter] = None, original_nodes: Optional[dict] = None) -> nx.DiGraph:
+def create_viz_dag(struct_dag, comp_dag, node_formatter: NodeFormatter, original_nodes: dict, composite_nodes: set) -> nx.DiGraph:
     if node_formatter is not None:
         nodes = []
         for nodekey in struct_dag.nodes:
@@ -322,7 +329,8 @@ def create_viz_dag(struct_dag, comp_dag, node_formatter: Optional[NodeFormatter]
                 data = comp_dag.nodes[original_nodekey]
                 node = Node(nodekey, original_nodekey, data)
                 nodes.append(node)
-            attr_dict = node_formatter.format(nodekey, nodes)
+            is_composite = nodekey in composite_nodes
+            attr_dict = node_formatter.format(nodekey, nodes, is_composite)
         if attr_dict is None:
             attr_dict = {}
 
