@@ -1375,6 +1375,8 @@ class Computation:
                 self.link(base_path.join(target), source)
 
     def link(self, target: InputName, source: InputName):
+        if target == source:
+            return
         self.add_node(target, identity_function, kwds={'x': source})
 
     def _repr_svg_(self):

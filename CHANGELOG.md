@@ -7,6 +7,7 @@
 - Modify add_node so that argument names of supplied function will look up within same block, rather than root block
 - Add links parameter to Computation.add_block
 - Add keep_values parameter to Computation.add_block
+- BUGFIX: Linking a node to itself is a no-op
 
 ## [0.5.0] (2025-04-10)
 

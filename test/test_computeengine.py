@@ -1163,6 +1163,18 @@ def test_link():
     assert comp.v.b == 5
 
 
+def test_self_link():
+    comp = Computation()
+    comp.add_node('a')
+    comp.add_node('b', lambda a: a+1)
+    comp.insert('a', 5)
+    comp.compute_all()
+    assert comp.v.b == 6
+    comp.link('b', 'b')
+    comp.compute_all()
+    assert comp.v.b == 6
+
+
 def test_args_kwds():
     comp = Computation()
     comp.add_node('a', value=1)
