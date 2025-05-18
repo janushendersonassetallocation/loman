@@ -88,6 +88,9 @@ class NodeKey:
             return f'{self.__class__.__name__}({quoted_path_str})'
         return f'{self.__class__.__name__}({quoted_path_str}, {self.obj})'
 
+    def __eq__(self, other):
+        return self.path.parts == other.path.parts and self.obj == other.obj
+
 
 def names_to_node_keys(names: Union[InputName, InputNames]) -> List[NodeKey]:
     return [NodeKey.from_name(name) for name in as_iterable(names)]

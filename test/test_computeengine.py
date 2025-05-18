@@ -10,6 +10,7 @@ import random
 import pytest
 
 from loman.computeengine import NodeData, NodeKey
+from loman.path_parser import Path
 
 
 def test_basic():
@@ -1173,6 +1174,24 @@ def test_self_link():
     comp.link('b', 'b')
     comp.compute_all()
     assert comp.v.b == 6
+
+
+def test_self_link_with_paths():
+    comp = Computation()
+    comp.add_node('foo/a')
+    comp.add_node('foo/b', lambda a: a+1)
+    comp.insert('foo/a', 5)
+    comp.compute_all()
+    assert comp.v['foo/b'] == 6
+    comp.link('foo/b', 'foo/b')
+    comp.compute_all()
+    assert comp.v['foo/b'] == 6
+    comp.link(Path(('foo', 'b')), 'foo/b')
+    comp.compute_all()
+    assert comp.v['foo/b'] == 6
+    comp.link('foo/b', Path(('foo', 'b')))
+    comp.compute_all()
+    assert comp.v['foo/b'] == 6
 
 
 def test_args_kwds():

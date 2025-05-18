@@ -1375,6 +1375,8 @@ class Computation:
                 self.link(base_path.join(target), source)
 
     def link(self, target: InputName, source: InputName):
+        target = NodeKey.from_name(target)
+        source = NodeKey.from_name(source)
         if target == source:
             return
         self.add_node(target, identity_function, kwds={'x': source})
