@@ -229,13 +229,13 @@ class Computation:
         else:
             self.executor_map = executor_map
         self.dag = nx.DiGraph()
-        self.v = AttributeView(self.nodes, self.value, self.value)
-        self.s = AttributeView(self.nodes, self.state, self.state)
-        self.i = AttributeView(self.nodes, self.get_inputs, self.get_inputs)
-        self.o = AttributeView(self.nodes, self.get_outputs, self.get_outputs)
-        self.t = AttributeView(self.nodes, self.tags, self.tags)
-        self.style = AttributeView(self.nodes, self.styles, self.styles)
-        self.tim = AttributeView(self.nodes, self.get_timing, self.get_timing)
+        self.v = AttributeView(self.nodes, self._value_one, self.value)
+        self.s = AttributeView(self.nodes, self._state_one, self.state)
+        self.i = AttributeView(self.nodes, self._get_inputs_one_names, self.get_inputs)
+        self.o = AttributeView(self.nodes, self._get_outputs_one, self.get_outputs)
+        self.t = AttributeView(self.nodes, self._tag_one, self.tags)
+        self.style = AttributeView(self.nodes, self._style_one, self.styles)
+        self.tim = AttributeView(self.nodes, self._get_timing_one, self.get_timing)
         self.x = AttributeView(self.nodes, self.compute_and_get_value)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
