@@ -9,6 +9,7 @@
 - Add keep_values parameter to Computation.add_block
 - BUGFIX: Linking a node to itself is a no-op
 - BUGFIX: Inserting to a placeholder node raises a specific exception
+- BUGFIX: Composite blocks retain sub-block on collapsing
 
 ## [0.5.0] (2025-04-10)
 

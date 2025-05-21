@@ -178,9 +178,11 @@ class StandardGroup(NodeFormatter):
         if len(nodes) == 1:
             data = nodes[0].data
             group_path = get_group_path(name, data)
-            if group_path.is_root:
-                return None
-            return {'_group': group_path}
+        else:
+            group_path = name.group_path
+        if group_path.is_root:
+            return None
+        return {'_group': group_path}
 
 
 class StandardStylingOverrides(NodeFormatter):

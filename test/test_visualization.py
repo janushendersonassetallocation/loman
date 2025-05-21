@@ -204,3 +204,13 @@ def test_with_visualization_single_element_collapsed_blocks():
     d = get_path_to_node_mapping(v)
     assert d[to_path('foo1/bar1/baz1')]['shape'] == 'rect'
     assert d[to_path('foo1/bar1/baz1')]['peripheries'] == 2
+
+
+def test_sub_blocks_collapse_with_group():
+    comp = loman.Computation()
+    comp.add_node('a')
+    comp.add_node('foo/bar/b', lambda a: a + 1, kwds={'a': 'a'})
+    comp.add_node('foo/bar/c', lambda a: a + 1, kwds={'a': 'a'})
+    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
+    d = get_path_to_node_mapping(v)
+    assert d[to_path('foo/bar')]['shape'] == 'rect'
