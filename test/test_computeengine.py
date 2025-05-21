@@ -4,7 +4,8 @@ from time import sleep
 
 import pandas as pd
 
-from loman import Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C
+from loman import (Computation, States, MapException, LoopDetectedException, NonExistentNodeException, node, C,
+                   CannotInsertToPlaceholderNodeException)
 from collections import namedtuple
 import random
 import pytest
@@ -1212,3 +1213,10 @@ def test_args_kwds():
     assert comp.get_definition_args_kwds('c') == ([C(3), 'a'], {})
     assert comp.get_definition_args_kwds('d') == ([], {'x': C(4), 'y': 'a'})
     assert comp.get_definition_args_kwds('e') == ([], {'y': C(5), 'x': 'a'})
+
+
+def test_insert_fails_for_placeholder():
+    comp = Computation()
+    comp.add_node('b', lambda a: a + 1)
+    with pytest.raises(CannotInsertToPlaceholderNodeException):
+        comp.insert('a', value=1)

@@ -18,3 +18,7 @@ class NonExistentNodeException(ComputationException):
 
 class NodeAlreadyExistsException(ComputationException):
     pass
+
+
+class CannotInsertToPlaceholderNodeException(ComputationException):
+    pass

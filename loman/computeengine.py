@@ -18,7 +18,7 @@ import pandas as pd
 from .compat import get_signature
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States, NodeTransformations
 from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
-    ComputationException
+    ComputationException, CannotInsertToPlaceholderNodeException
 from .path_parser import to_path, Path, PathType
 from .structs import node_keys_to_names, InputName, NodeKey, InputNames, Names, Name, names_to_node_keys
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
@@ -523,10 +523,15 @@ class Computation:
         if not self.dag.has_node(node_key):
             raise NonExistentNodeException(f'Node {node_key} does not exist')
 
+        state = self._state_one(name)
+        if state == States.PLACEHOLDER:
+            raise CannotInsertToPlaceholderNodeException("Cannot insert into placeholder node. Use add_node to create the node first")
+
         if not force:
-            node_data = self.__getitem__(node_key)
-            if node_data.state == States.UPTODATE and value_eq(value, node_data.value):
-                return
+            if state == States.UPTODATE:
+                current_value = self._value_one(name)
+                if value_eq(value, current_value):
+                    return
 
         self._set_state_and_value(node_key, States.UPTODATE, value)
         self._set_descendents(node_key, States.STALE)
