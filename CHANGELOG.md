@@ -7,6 +7,7 @@
 - Modify add_node so that argument names of supplied function will look up within same block, rather than root block
 - Add links parameter to Computation.add_block
 - Add keep_values parameter to Computation.add_block
+- Blocks show state if all blocks have same state (or error or stale if any do)
 - BUGFIX: Linking a node to itself is a no-op
 - BUGFIX: Inserting to a placeholder node raises a specific exception
 - BUGFIX: Composite blocks retain sub-block on collapsing

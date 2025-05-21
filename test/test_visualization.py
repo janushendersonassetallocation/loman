@@ -214,3 +214,13 @@ def test_sub_blocks_collapse_with_group():
     v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
     d = get_path_to_node_mapping(v)
     assert d[to_path('foo/bar')]['shape'] == 'rect'
+
+
+def test_with_visualization_collapsed_blocks_uniform_sate():
+    comp = loman.Computation()
+    comp.add_node('a')
+    comp.add_node('foo/bar/b', lambda a: a + 1, kwds={'a': 'a'})
+    comp.add_node('foo/bar/c', lambda a: a + 1, kwds={'a': 'a'})
+    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
+    d = get_path_to_node_mapping(v)
+    assert d[to_path('foo/bar')]['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]

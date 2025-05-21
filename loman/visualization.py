@@ -83,14 +83,16 @@ class ColorByState(NodeFormatter):
         if len(nodes) == 1:
             state = states[0]
         else:
-            if all(state == States.UPTODATE for state in states):
-                state = States.UPTODATE
-            elif any(state == States.ERROR for state in states):
+            if any(state == States.ERROR for state in states):
                 state = States.ERROR
             elif any(state == States.STALE for state in states):
                 state = States.STALE
             else:
-                state = None
+                state0 = states[0]
+                if all(state == state0 for state in states):
+                    state = state0
+                else:
+                    state = None
         return {
             'style': 'filled',
             'fillcolor': self.state_colors[state]
