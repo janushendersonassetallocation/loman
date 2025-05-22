@@ -121,6 +121,18 @@ def test_add_block_with_keep_values_true():
     assert comp.v.output == 22 + 31
 
 
+def test_tree_functions():
+    comp = Computation()
+    comp.add_node('foo1/bar1/baz1/a', value=1)
+
+    assert comp.has_node('foo1/bar1/baz1/a')
+    assert comp.has_path('foo1/bar1/baz1/a')
+    assert not comp.has_node('foo1/bar1/baz1')
+    assert comp.has_path('foo1/bar1/baz1')
+    assert not comp.has_node('foo1/bar1')
+    assert comp.has_path('foo1/bar1')
+
+
 def test_block_accessors():
     comp = Computation()
     comp.add_node('foo1/bar1/baz1/a', value=1)

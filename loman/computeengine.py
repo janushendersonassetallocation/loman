@@ -888,6 +888,19 @@ class Computation:
         """
         return list(n.name for n in self.dag.nodes)
 
+    def has_node(self, name: InputName):
+        node_key = NodeKey.from_name(name)
+        return node_key in self.dag.nodes
+
+    def has_path(self, name: InputName):
+        node_key = NodeKey.from_name(name)
+        if self.has_node(node_key):
+            return True
+        for n in self.dag.nodes:
+            if n.is_descendent_of(node_key):
+                return True
+        return False
+
     def _state_one(self, name: InputName):
         node_key = NodeKey.from_name(name)
         return self.dag.nodes[node_key][NodeAttributes.STATE]
