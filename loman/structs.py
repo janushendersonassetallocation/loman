@@ -85,6 +85,15 @@ class NodeKey:
         else:
             return self.path == other.path
 
+    def parent(self):
+        if self.obj is None:
+            return NodeKey(self.path.parent())
+        else:
+            return NodeKey(self.path)
+
+    def prepend_path(self, path: Path):
+        return NodeKey(path.join(self.path), self.obj)
+
     def __repr__(self):
         path_str = str(self.path)
         quoted_path_str = repr(path_str)
