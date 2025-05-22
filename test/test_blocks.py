@@ -1,3 +1,5 @@
+import pytest
+
 from loman import *
 
 
@@ -117,3 +119,19 @@ def test_add_block_with_keep_values_true():
     assert comp.v['foo/d'] == 22
     assert comp.v['bar/d'] == 31
     assert comp.v.output == 22 + 31
+
+
+def test_block_accessors():
+    comp = Computation()
+    comp.add_node('foo1/bar1/baz1/a', value=1)
+
+    assert comp.v.foo1.bar1.baz1.a == 1
+
+    with pytest.raises(AttributeError):
+        x = comp.v.doesnotexist
+
+    comp.add_node('foo1/bar1/baz1', value=2)
+
+    assert comp.v.foo1.bar1.baz1 == 2
+    with pytest.raises(AttributeError):
+        x = comp.v.foo1.bar1.baz1.a

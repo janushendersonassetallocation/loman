@@ -777,6 +777,7 @@ def test_multiple_values():
     comp.insert('a', 10)
     comp.compute_all()
     assert comp.value(['d', 'b']) == [31, 11]
+    assert comp.v[['d', 'b']] == [31, 11]
 
 
 def test_compute_with_unpicklable_object():

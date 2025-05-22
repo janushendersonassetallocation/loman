@@ -15,6 +15,10 @@ class NodeKey:
     path: Path
     obj: object = None
 
+    def __post_init__(self):
+        if self.path.is_absolute_path:
+            object.__setattr__(self, 'path', Path(self.path.parts, False))  # Bypass immutability
+
     @classmethod
     def from_name(cls, name: InputName):
         if isinstance(name, str):
@@ -80,6 +84,15 @@ class NodeKey:
             return self.path.is_descendent_of(other.path)
         else:
             return self.path == other.path
+
+    def parent(self):
+        if self.obj is None:
+            return NodeKey(self.path.parent())
+        else:
+            return NodeKey(self.path)
+
+    def prepend_path(self, path: Path):
+        return NodeKey(path.join(self.path), self.obj)
 
     def __repr__(self):
         path_str = str(self.path)
