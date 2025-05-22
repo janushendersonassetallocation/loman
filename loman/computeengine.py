@@ -229,16 +229,32 @@ class Computation:
         else:
             self.executor_map = executor_map
         self.dag = nx.DiGraph()
-        self.v = AttributeView(self.nodes, self._value_one, self.value)
-        self.s = AttributeView(self.nodes, self._state_one, self.state)
-        self.i = AttributeView(self.nodes, self._get_inputs_one_names, self.get_inputs)
-        self.o = AttributeView(self.nodes, self._get_outputs_one, self.get_outputs)
-        self.t = AttributeView(self.nodes, self._tag_one, self.tags)
-        self.style = AttributeView(self.nodes, self._style_one, self.styles)
-        self.tim = AttributeView(self.nodes, self._get_timing_one, self.get_timing)
-        self.x = AttributeView(self.nodes, self.compute_and_get_value)
+        self.v = self.get_attribute_view_for_path(Path.root(), self._value_one, self.value)
+        self.s = self.get_attribute_view_for_path(Path.root(), self._state_one, self.state)
+        self.i = self.get_attribute_view_for_path(Path.root(), self._get_inputs_one_names, self.get_inputs)
+        self.o = self.get_attribute_view_for_path(Path.root(), self._get_outputs_one, self.get_outputs)
+        self.t = self.get_attribute_view_for_path(Path.root(), self._tag_one, self.tags)
+        self.style = self.get_attribute_view_for_path(Path.root(), self._style_one, self.styles)
+        self.tim = self.get_attribute_view_for_path(Path.root(), self._get_timing_one, self.get_timing)
+        self.x = self.get_attribute_view_for_path(Path.root(), self.compute_and_get_value, self.compute_and_get_value)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
+
+    def get_attribute_view_for_path(self, path: Path, get_one_func: callable, get_many_func: callable):
+        def node_func():
+            return self.list_children(path)
+
+        def get_one_func_for_path(name: InputName):
+            nk = NodeKey.from_name(name)
+            new_nk = nk.prepend_path(path)
+            if self.has_node(new_nk):
+                return get_one_func(new_nk)
+            elif new_nk.obj is None and self.has_path(new_nk):
+                return self.get_attribute_view_for_path(new_nk.path, get_one_func, get_many_func)
+            else:
+                raise KeyError(f"Path {new_nk} does not exist")
+
+        return AttributeView(node_func, get_one_func_for_path, get_many_func)
 
     def _get_names_for_state(self, state: States):
         return set(node_keys_to_names(self._state_map[state]))
@@ -887,6 +903,19 @@ class Computation:
         :return: List of nodes
         """
         return list(n.name for n in self.dag.nodes)
+
+    def list_children(self, name: InputName) -> Set[Name]:
+        """
+        Get a list of nodes in this computation
+        :return: List of nodes
+        """
+        node_key = NodeKey.from_name(name)
+        idx = len(node_key.path.parts)
+        result = set()
+        for n in self.dag.nodes:
+            if n.is_descendent_of(node_key):
+                result.add(n.path.parts[idx])
+        return result
 
     def has_node(self, name: InputName):
         node_key = NodeKey.from_name(name)
