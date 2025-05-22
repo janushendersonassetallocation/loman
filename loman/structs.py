@@ -15,6 +15,10 @@ class NodeKey:
     path: Path
     obj: object = None
 
+    def __post_init__(self):
+        if self.path.is_absolute_path:
+            object.__setattr__(self, 'path', Path(self.path.parts, False))  # Bypass immutability
+
     @classmethod
     def from_name(cls, name: InputName):
         if isinstance(name, str):
