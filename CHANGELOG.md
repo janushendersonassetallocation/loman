@@ -1,6 +1,10 @@
 # Change Log
 
-## [0.5.1] (TBD)
+## [0.5.2] (TBD)
+
+- Add nested attribute views, so comp.v.foo.bar.baz is equivalent to comp.v['foo/bar/baz']
+
+## [0.5.1] (2025-05-21)
 
 - Add root parameter to Computation.draw to support viewing sub-blocks.
 - Add NodeTransformations, including a new COLLAPSE node transformation
