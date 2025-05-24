@@ -286,7 +286,15 @@ class GraphView:
         return dag_out, d_mapped_to_original, s_collapsed
 
     def refresh(self):
-        node_transformations = {to_nodekey(k): v for k, v in self.node_transformations.items()} if self.node_transformations is not None else {}
+        node_transformations = {}
+        for n in self.computation.get_tree_descendents():
+            nk = to_nodekey(n)
+            if not self.computation.has_node(nk):
+                node_transformations[nk] = NodeTransformations.COLLAPSE
+        if self.node_transformations is not None:
+            for k, v in self.node_transformations.items():
+                nk = to_nodekey(k)
+                node_transformations[nk] = v
         self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
 
         node_formatter = self.node_formatter

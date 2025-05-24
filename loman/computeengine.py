@@ -17,8 +17,8 @@ import pandas as pd
 
 from .compat import get_signature
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States, NodeTransformations
-from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
-    ComputationException, CannotInsertToPlaceholderNodeException
+from .exception import (MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException,
+                        ComputationException, CannotInsertToPlaceholderNodeException)
 from .nodekey import node_keys_to_names, NodeKey, Names, Name, names_to_node_keys, to_nodekey
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 from .visualization import NodeFormatter, GraphView
@@ -241,14 +241,14 @@ class Computation:
 
     def get_attribute_view_for_path(self, nodekey: NodeKey, get_one_func: callable, get_many_func: callable):
         def node_func():
-            return self.list_children(nodekey)
+            return self.get_tree_list_children(nodekey)
 
         def get_one_func_for_path(name: Name):
             nk = to_nodekey(name)
             new_nk = nk.prepend(nodekey)
             if self.has_node(new_nk):
                 return get_one_func(new_nk)
-            elif self.has_path(new_nk):
+            elif self.tree_has_path(new_nk):
                 return self.get_attribute_view_for_path(new_nk, get_one_func, get_many_func)
             else:
                 raise KeyError(f"Path {new_nk} does not exist")
@@ -909,7 +909,7 @@ class Computation:
         """
         return list(n.name for n in self.dag.nodes)
 
-    def list_children(self, name: Name) -> Set[Name]:
+    def get_tree_list_children(self, name: Name) -> Set[Name]:
         """
         Get a list of nodes in this computation
         :return: List of nodes
@@ -926,7 +926,7 @@ class Computation:
         node_key = to_nodekey(name)
         return node_key in self.dag.nodes
 
-    def has_path(self, name: Name):
+    def tree_has_path(self, name: Name):
         node_key = to_nodekey(name)
         if self.has_node(node_key):
             return True
@@ -934,6 +934,25 @@ class Computation:
             if n.is_descendent_of(node_key):
                 return True
         return False
+
+    def get_tree_descendents(self, name: Optional[Name] = None) -> Set[Name]:
+        """
+        Get a list of descendent blocks and nodes.
+
+        Returns blocks and nodes that are descendents of the input node,
+        e.g. for node 'foo', might return ['foo/bar', 'foo/baz'].
+
+        :param name: Name of node to get descendents for
+        :return: List of descendent node names
+        """
+        node_key = NodeKey.root() if name is None else to_nodekey(name)
+        result = set()
+        for n in self.dag.nodes:
+            if n.is_descendent_of(node_key):
+                for n2 in n.ancestors():
+                    if n2.is_descendent_of(node_key):
+                        result.add(n2.name)
+        return result
 
     def _state_one(self, name: Name):
         node_key = to_nodekey(name)

@@ -30,7 +30,7 @@ class NodeKey:
     @property
     def name(self) -> Name:
         if len(self.parts) == 0:
-            return 0
+            return ''
         elif len(self.parts) == 1:
             return self.parts[0]
         elif all(isinstance(part, str) for part in self.parts):
@@ -113,6 +113,16 @@ class NodeKey:
                 break
             parts.append(p1)
         return NodeKey(tuple(parts))
+
+    def ancestors(self) -> List['NodeKey']:
+        result = []
+        x = self
+        while True:
+            result.append(x)
+            if x.is_root:
+                break
+            x = x.parent
+        return result
 
 
 def names_to_node_keys(names: Union[Name, Names]) -> List[NodeKey]:
