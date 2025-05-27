@@ -11,7 +11,7 @@ import random
 import pytest
 
 from loman.computeengine import NodeData, NodeKey
-from loman.path_parser import Path
+from loman.nodekey import to_nodekey
 
 
 def test_basic():
@@ -800,7 +800,7 @@ def test_compute_with_args():
     comp.add_node('b', f, args=['a'])
 
     assert set(comp.nodes()) == {'a', 'b'}
-    assert set(comp.dag.edges()) == {(NodeKey.from_name('a'), NodeKey.from_name('b'))}
+    assert set(comp.dag.edges()) == {(to_nodekey('a'), to_nodekey('b'))}
 
     comp.compute_all()
     assert comp['b'] == NodeData(States.UPTODATE, 2)
@@ -943,7 +943,7 @@ def test_with_uptodate_predecessors_but_stale_ancestors():
     comp.add_node('b', lambda a: a + 1)
     comp.compute_all()
     assert comp['b'] == NodeData(States.UPTODATE, 2)
-    comp.dag.nodes[NodeKey.from_name('a')]['state'] = States.UNINITIALIZED # This can happen due to serialization
+    comp.dag.nodes[to_nodekey('a')]['state'] = States.UNINITIALIZED # This can happen due to serialization
     comp.add_node('c', lambda b: b + 1)
     comp.compute('c')
     assert comp['b'] == NodeData(States.UPTODATE, 2)
@@ -964,7 +964,7 @@ def test_constant_values():
 
     comp.compute_all()
 
-    assert comp.dag.nodes[NodeKey.from_name('b')]['args'] == {1: 2}
+    assert comp.dag.nodes[to_nodekey('b')]['args'] == {1: 2}
 
     assert comp['b'] == NodeData(States.UPTODATE, 3)
     assert comp['c'] == NodeData(States.UPTODATE, 4)
@@ -1188,10 +1188,10 @@ def test_self_link_with_paths():
     comp.link('foo/b', 'foo/b')
     comp.compute_all()
     assert comp.v['foo/b'] == 6
-    comp.link(Path(('foo', 'b')), 'foo/b')
+    comp.link(NodeKey(('foo', 'b')), 'foo/b')
     comp.compute_all()
     assert comp.v['foo/b'] == 6
-    comp.link('foo/b', Path(('foo', 'b')))
+    comp.link('foo/b', NodeKey(('foo', 'b')))
     comp.compute_all()
     assert comp.v['foo/b'] == 6
 

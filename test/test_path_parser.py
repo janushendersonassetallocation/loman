@@ -1,27 +1,27 @@
 import pytest
-from loman.path_parser import to_path, Path, path_join, path_common_parent
+from loman.nodekey import to_nodekey, NodeKey, nodekey_join
 
 TEST_DATA = [
-    ('/A', Path(('A', ), is_absolute_path=True)),
-    ('A', Path(('A', ), is_absolute_path=False)),
-    ('/foo/bar', Path(('foo', 'bar'), is_absolute_path=True)),
-    ('foo/bar', Path(('foo', 'bar'), is_absolute_path=False)),
-    ('/foo/"bar"', Path(('foo', 'bar'), is_absolute_path=True)),
-    ('foo/"bar"', Path(('foo', 'bar'), is_absolute_path=False)),
-    ('/foo/"bar"/baz', Path(('foo', 'bar', 'baz'), is_absolute_path=True)),
-    ('foo/"bar"/baz', Path(('foo', 'bar', 'baz'), is_absolute_path=False)),
+    ('/A', NodeKey(('A', ))),
+    ('A', NodeKey(('A', ))),
+    ('/foo/bar', NodeKey(('foo', 'bar'))),
+    ('foo/bar', NodeKey(('foo', 'bar'))),
+    ('/foo/"bar"', NodeKey(('foo', 'bar'))),
+    ('foo/"bar"', NodeKey(('foo', 'bar'))),
+    ('/foo/"bar"/baz', NodeKey(('foo', 'bar', 'baz'))),
+    ('foo/"bar"/baz', NodeKey(('foo', 'bar', 'baz'))),
 ]
 
 
 @pytest.mark.parametrize("test_str,expected_path", TEST_DATA)
 def test_simple_path_parser(test_str, expected_path):
-    assert to_path(test_str) == expected_path
+    assert to_nodekey(test_str) == expected_path
 
 
 TEST_JOIN_DATA = [
-    (to_path('/A'), ['B'], to_path('/A/B')),
-    (to_path('/A'), ['B', 'C'], to_path('/A/B/C')),
-    (to_path('/A'), [to_path('B/C')], to_path('/A/B/C')),
+    (to_nodekey('/A'), ['B'], to_nodekey('/A/B')),
+    (to_nodekey('/A'), ['B', 'C'], to_nodekey('/A/B/C')),
+    (to_nodekey('/A'), [to_nodekey('B/C')], to_nodekey('/A/B/C')),
 ]
 
 @pytest.mark.parametrize("base_path,join_parts,expected_path", TEST_JOIN_DATA)
@@ -41,8 +41,8 @@ TEST_JOIN_DATA_2 = [
 ]
 @pytest.mark.parametrize("paths,expected_path", TEST_JOIN_DATA_2)
 def test_join_paths_2(paths, expected_path):
-    result = path_join(*paths)
-    assert result == to_path(expected_path)
+    result = nodekey_join(*paths)
+    assert result == to_nodekey(expected_path)
 
 TEST_COMMON_PARENT_DATA = [
     ('A', 'B', ''),
@@ -51,5 +51,5 @@ TEST_COMMON_PARENT_DATA = [
 ]
 @pytest.mark.parametrize("path1,path2,expected_path", TEST_COMMON_PARENT_DATA)
 def test_common_parent(path1, path2, expected_path):
-    result = path_common_parent(path1, path2)
-    assert result == to_path(expected_path)
+    result = NodeKey.common_parent(path1, path2)
+    assert result == to_nodekey(expected_path)

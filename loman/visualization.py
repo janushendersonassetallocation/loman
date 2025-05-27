@@ -14,8 +14,7 @@ import pydotplus
 from matplotlib.colors import Colormap
 
 import loman
-from .path_parser import path_join, Path, path_common_parent
-from .structs import NodeKey, InputName
+from .nodekey import NodeKey, Name, to_nodekey
 from .consts import NodeAttributes, States, NodeTransformations
 from .graph_utils import contract_node
 
@@ -166,12 +165,12 @@ class StandardLabel(NodeFormatter):
         return {'label': name.label}
 
 
-def get_group_path(name: NodeKey, data: dict) -> Path:
-    name_group_path = name.group_path
+def get_group_path(name: NodeKey, data: dict) -> NodeKey:
+    name_group_path = name.parent
     attribute_group = data.get(NodeAttributes.GROUP)
-    attribute_group_path = None if attribute_group is None else Path((attribute_group,))
+    attribute_group_path = None if attribute_group is None else NodeKey((attribute_group,))
 
-    group_path = path_join(name_group_path, attribute_group_path)
+    group_path = name_group_path.join(attribute_group_path)
     return group_path
 
 
@@ -181,7 +180,7 @@ class StandardGroup(NodeFormatter):
             data = nodes[0].data
             group_path = get_group_path(name, data)
         else:
-            group_path = name.group_path
+            group_path = name.parent
         if group_path.is_root:
             return None
         return {'_group': group_path}
@@ -220,7 +219,7 @@ class CompositeNodeFormatter(NodeFormatter):
 @dataclass
 class GraphView:
     computation: 'loman.Computation'
-    root: Optional[InputName] = None
+    root: Optional[Name] = None
     node_formatter: Optional[NodeFormatter] = None
     node_transformations: Optional[dict] = None
 
@@ -287,7 +286,7 @@ class GraphView:
         return dag_out, d_mapped_to_original, s_collapsed
 
     def refresh(self):
-        node_transformations = {NodeKey.from_name(k): v for k, v in self.node_transformations.items()} if self.node_transformations is not None else {}
+        node_transformations = {to_nodekey(k): v for k, v in self.node_transformations.items()} if self.node_transformations is not None else {}
         self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
 
         node_formatter = self.node_formatter
@@ -349,7 +348,7 @@ def create_viz_dag(struct_dag, comp_dag, node_formatter: NodeFormatter, original
 
         group_path1 = get_group_path(name1, struct_dag.nodes[name1])
         group_path2 = get_group_path(name2, struct_dag.nodes[name2])
-        group_path = path_common_parent(group_path1, group_path2)
+        group_path = NodeKey.common_parent(group_path1, group_path2)
 
         attr_dict = {}
         if not group_path.is_root:
@@ -362,7 +361,7 @@ def create_viz_dag(struct_dag, comp_dag, node_formatter: NodeFormatter, original
 
 
 def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
-    root = Path(tuple(), False)
+    root = NodeKey.root()
 
     node_groups = {}
     for name, data in viz_dag.nodes(data=True):
@@ -394,7 +393,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
         while True:
             if group1.is_root:
                 break
-            group1 = group1.parent()
+            group1 = group1.parent
             if group1 in subgraphs:
                 break
             subgraphs[group1] = create_subgraph(group1)
@@ -404,7 +403,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
             continue
         parent = group
         while True:
-            parent = parent.parent()
+            parent = parent.parent
             if parent in subgraphs or parent.is_root:
                 break
         subgraphs[parent].add_subgraph(subgraph)
@@ -429,7 +428,7 @@ def create_root_graph(graph_attr, node_attr, edge_attr):
         root_graph.set_edge_defaults(**edge_attr)
     return root_graph
 
-def create_subgraph(group: Path):
+def create_subgraph(group: NodeKey):
     c = pydotplus.Subgraph('cluster_' + str(group))
     c.obj_dict['attributes']['label'] = str(group)
     return c
