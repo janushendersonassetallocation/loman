@@ -222,6 +222,7 @@ class GraphView:
     root: Optional[Name] = None
     node_formatter: Optional[NodeFormatter] = None
     node_transformations: Optional[dict] = None
+    collapse_all: bool = True
 
     graph_attr: Optional[dict] = None
     node_attr: Optional[dict] = None
@@ -287,10 +288,11 @@ class GraphView:
 
     def refresh(self):
         node_transformations = {}
-        for n in self.computation.get_tree_descendents():
-            nk = to_nodekey(n)
-            if not self.computation.has_node(nk):
-                node_transformations[nk] = NodeTransformations.COLLAPSE
+        if self.collapse_all:
+            for n in self.computation.get_tree_descendents():
+                nk = to_nodekey(n)
+                if not self.computation.has_node(nk):
+                    node_transformations[nk] = NodeTransformations.COLLAPSE
         if self.node_transformations is not None:
             for k, v in self.node_transformations.items():
                 nk = to_nodekey(k)

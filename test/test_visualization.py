@@ -57,7 +57,7 @@ def test_simple():
     comp.add_node('c', lambda a: 2 * a)
     comp.add_node('d', lambda b, c: b + c)
 
-    v = loman.visualization.GraphView(comp)
+    v = loman.visualization.GraphView(comp, collapse_all=False)
 
     node = get_label_to_node_mapping(v)
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
@@ -119,7 +119,7 @@ def test_with_groups():
     comp.add_node('b', lambda a: a + 1, group='foo')
     comp.add_node('c', lambda a: 2 * a, group='bar')
     comp.add_node('d', lambda b, c: b + c, group='bar')
-    v = loman.visualization.GraphView(comp)
+    v = loman.visualization.GraphView(comp, collapse_all=False)
 
 
 def test_show_expansion():
@@ -130,12 +130,12 @@ def test_show_expansion():
     comp.add_named_tuple_expansion('c', Coordinate)
     comp.compute_all()
 
-    view_uncontracted = comp.draw(show_expansion=True)
+    view_uncontracted = comp.draw(show_expansion=True, collapse_all=False)
     view_uncontracted.refresh()
     labels = nx.get_node_attributes(view_uncontracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'c.x', 'c.y', 'foo'}
 
-    view_contracted = comp.draw(show_expansion=False)
+    view_contracted = comp.draw(show_expansion=False, collapse_all=False)
     view_contracted.refresh()
     labels = nx.get_node_attributes(view_contracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'foo'}
@@ -146,7 +146,7 @@ def test_with_visualization_blocks():
 
     comp.compute_all()
 
-    v = comp.draw()
+    v = comp.draw(collapse_all=False)
     check_graph(v.struct_dag, [
         ('input_foo', 'foo/a', 'foo/b', 'foo/d', 'output'),
         ('foo/a', 'foo/c', 'foo/d'),
@@ -160,10 +160,10 @@ def test_with_visualization_view_subblocks():
 
     comp.compute_all()
 
-    v_foo = comp.draw('/foo')
+    v_foo = comp.draw('/foo', collapse_all=False)
     check_graph(v_foo.struct_dag,[('a', 'b', 'd'), ('a', 'c', 'd')])
 
-    v_bar = comp.draw('/bar')
+    v_bar = comp.draw('/bar', collapse_all=False)
     check_graph(v_bar.struct_dag, [('a', 'b', 'd'), ('a', 'c', 'd')])
 
 
@@ -174,7 +174,7 @@ def test_with_visualization_collapsed_blocks():
 
     node_transformations = {'foo': NodeTransformations.COLLAPSE, 'bar': NodeTransformations.COLLAPSE}
 
-    v = comp.draw(node_transformations=node_transformations)
+    v = comp.draw(node_transformations=node_transformations, collapse_all=False)
     check_graph(v.struct_dag, [
         ('input_foo', 'foo', 'output'),
         ('input_bar', 'bar', 'output')
@@ -189,17 +189,17 @@ def test_with_visualization_single_element_collapsed_blocks():
     comp = loman.Computation()
     comp.add_node('foo1/bar1/baz1/a')
 
-    v = comp.draw(node_transformations={'foo1': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo1': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo1')]['shape'] == 'rect'
     assert d[to_nodekey('foo1')]['peripheries'] == 2
 
-    v = comp.draw(node_transformations={'foo1/bar1': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo1/bar1': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo1/bar1')]['shape'] == 'rect'
     assert d[to_nodekey('foo1/bar1')]['peripheries'] == 2
 
-    v = comp.draw(node_transformations={'foo1/bar1/baz1': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo1/bar1/baz1': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo1/bar1/baz1')]['shape'] == 'rect'
     assert d[to_nodekey('foo1/bar1/baz1')]['peripheries'] == 2
@@ -210,7 +210,7 @@ def test_sub_blocks_collapse_with_group():
     comp.add_node('a')
     comp.add_node('foo/bar/b', lambda a: a + 1, kwds={'a': 'a'})
     comp.add_node('foo/bar/c', lambda a: a + 1, kwds={'a': 'a'})
-    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo/bar')]['shape'] == 'rect'
 
@@ -220,6 +220,6 @@ def test_with_visualization_collapsed_blocks_uniform_sate():
     comp.add_node('a')
     comp.add_node('foo/bar/b', lambda a: a + 1, kwds={'a': 'a'})
     comp.add_node('foo/bar/c', lambda a: a + 1, kwds={'a': 'a'})
-    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo/bar')]['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]

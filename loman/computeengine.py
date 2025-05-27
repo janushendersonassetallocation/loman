@@ -1459,7 +1459,7 @@ class Computation:
              node_transformations: Optional[dict] = None,
              cmap=None, colors='state', shapes=None,
              graph_attr=None, node_attr=None, edge_attr=None,
-             show_expansion=False):
+             show_expansion=False, collapse_all=True):
         """
         Draw a computation's current state using the GraphViz utility
 
@@ -1470,7 +1470,7 @@ class Computation:
         :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
         :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
-        :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
+        :param collapse_all: Whether to collapse all blocks that aren't explicitly expanded.
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
         node_transformations = node_transformations.copy() if node_transformations is not None else {}
@@ -1479,7 +1479,7 @@ class Computation:
                 node_transformations[nodekey] = NodeTransformations.CONTRACT
         v = GraphView(self, root=root, node_formatter=node_formatter,
                       graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
-                      node_transformations=node_transformations)
+                      node_transformations=node_transformations, collapse_all=collapse_all)
         return v
 
     def view(self, cmap=None, colors='state', shapes=None):
