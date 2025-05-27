@@ -223,3 +223,12 @@ def test_with_visualization_collapsed_blocks_uniform_sate():
     v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo/bar')]['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
+
+
+def test_with_visualization_view_subblocks_default_collapsing():
+    comp = create_example_block_computation()
+
+    comp.compute_all()
+
+    v_foo = comp.draw()
+    check_graph(v_foo.struct_dag,[('input_foo', 'foo', 'output'), ('input_bar', 'bar', 'output')])
