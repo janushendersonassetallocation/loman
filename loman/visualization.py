@@ -289,7 +289,7 @@ class GraphView:
     def refresh(self):
         node_transformations = {}
         if self.collapse_all:
-            for n in self.computation.get_tree_descendents():
+            for n in self.computation.get_tree_descendents(self.root):
                 nk = to_nodekey(n)
                 if not self.computation.has_node(nk):
                     node_transformations[nk] = NodeTransformations.COLLAPSE
