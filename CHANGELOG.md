@@ -2,7 +2,12 @@
 
 ## [0.5.2] (TBD)
 
+- Added support for pattern matching in node transformations, including wildcard patterns
 - Add nested attribute views, so comp.v.foo.bar.baz is equivalent to comp.v['foo/bar/baz']
+- Set COLLAPSE as default node transformation, and added EXPANDED NodeTransformation type (ancestors of expanded nodes are automatically expanded)
+- Added `collapse_all` flag to GraphView to support backward compatibility
+- Cleaned up GraphView.refresh implementation
+- Moved Path functionality to NodeKey
 
 ## [0.5.1] (2025-05-21)
 
