@@ -14,7 +14,7 @@ TEST_DATA = [
 
 
 @pytest.mark.parametrize("test_str,expected_path", TEST_DATA)
-def test_simple_path_parser(test_str, expected_path):
+def test_simple_nodekey_parser(test_str, expected_path):
     assert to_nodekey(test_str) == expected_path
 
 
@@ -25,7 +25,7 @@ TEST_JOIN_DATA = [
 ]
 
 @pytest.mark.parametrize("base_path,join_parts,expected_path", TEST_JOIN_DATA)
-def test_join_paths(base_path, join_parts, expected_path):
+def test_join_nodekeys(base_path, join_parts, expected_path):
     result = base_path.join(*join_parts)
     assert result == expected_path
 
@@ -40,7 +40,7 @@ TEST_JOIN_DATA_2 = [
     (['A', None, 'B'], 'A/B'),
 ]
 @pytest.mark.parametrize("paths,expected_path", TEST_JOIN_DATA_2)
-def test_join_paths_2(paths, expected_path):
+def test_join_nodekeys_2(paths, expected_path):
     result = nodekey_join(*paths)
     assert result == to_nodekey(expected_path)
 
