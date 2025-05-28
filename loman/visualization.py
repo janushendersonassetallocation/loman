@@ -14,7 +14,7 @@ import pydotplus
 from matplotlib.colors import Colormap
 
 import loman
-from .nodekey import NodeKey, Name, to_nodekey
+from .nodekey import NodeKey, Name, to_nodekey, match_pattern, is_pattern
 from .consts import NodeAttributes, States, NodeTransformations
 from .graph_utils import contract_node
 
@@ -301,16 +301,22 @@ class GraphView:
 
     def _apply_custom_transforms(self, node_transformations):
         if self.node_transformations is not None:
-            for name, transform in self.node_transformations.items():
-                nk = to_nodekey(name)
-                node_transformations[nk] = transform
-                if transform == NodeTransformations.EXPAND:
-                    while True:
-                        nk_parent = nk.parent
-                        if nk_parent.is_root or nk_parent == self.root:
-                            break
-                        node_transformations[nk_parent] = NodeTransformations.EXPAND
-                        nk = nk_parent
+            for rule_name, transform in self.node_transformations.items():
+                include_ancestors = transform == NodeTransformations.EXPAND
+                rule_nk = to_nodekey(rule_name)
+                if is_pattern(rule_nk):
+                    apply_nodes = set(nk for nk in self.computation._node_keys() if match_pattern(rule_nk, nk))
+                else:
+                    apply_nodes = {rule_nk}
+                    node_transformations[rule_nk] = transform
+                if include_ancestors:
+                    for nk in apply_nodes:
+                        for nk1 in nk.ancestors():
+                            if nk1.is_root or nk1 == self.root:
+                                break
+                            node_transformations[nk1] = NodeTransformations.EXPAND
+                for rule_nk in apply_nodes:
+                    node_transformations[rule_nk] = transform
         return node_transformations
 
     def _create_visualization_dag(self, original_nodes, composite_nodes):

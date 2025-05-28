@@ -1,3 +1,4 @@
+import itertools
 from itertools import tee
 
 import networkx as nx
@@ -8,7 +9,7 @@ import loman.computeengine
 from collections import namedtuple
 from loman.consts import NodeTransformations
 from loman.nodekey import NodeKey, to_nodekey
-from test.standard_test_computations import create_example_block_computation
+from test.standard_test_computations import create_example_block_computation, BasicFourNodeComputation
 
 
 def node_set(nodes):
@@ -258,3 +259,53 @@ def test_draw_expanded_block():
     assert to_nodekey('foo/bar/baz/b') in nodes
     assert to_nodekey('foo/bar/baz/c') in nodes
     assert to_nodekey('foo/bar/baz/d') in nodes
+
+
+def test_draw_expanded_block_with_wildcard():
+    comp = Computation()
+    comp.add_node('foo/bar/baz/a')
+    comp.add_node('foo/bar/baz/b', lambda a: a + 1)
+    comp.add_node('foo/bar/baz/c', lambda a: 2 * a)
+    comp.add_node('foo/bar/baz/d', lambda b, c: b + c)
+
+    v = comp.draw(node_transformations={'**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo/bar/baz/a') in nodes
+    assert to_nodekey('foo/bar/baz/b') in nodes
+    assert to_nodekey('foo/bar/baz/c') in nodes
+    assert to_nodekey('foo/bar/baz/d') in nodes
+
+
+def test_draw_expanded_block_with_wildcard_2():
+    comp_inner = BasicFourNodeComputation()
+    comp = Computation()
+    for x, y, z in itertools.product(range(1, 3), range(1, 3), range(1, 3)):
+        comp.add_block(f'foo{x}/bar{y}/baz{z}', comp_inner, keep_values=False, links={'a': 'input_a'})
+    comp.add_node('input_a', value=7)
+    comp.compute_all()
+
+    v = comp.draw(node_transformations={'**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo1/bar1/baz1/a') in nodes
+    assert to_nodekey('foo1/bar1/baz1/b') in nodes
+    assert to_nodekey('foo1/bar1/baz1/c') in nodes
+    assert to_nodekey('foo1/bar1/baz1/d') in nodes
+
+    v = comp.draw(node_transformations={'foo1/bar1/**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo1/bar1/baz1/a') in nodes
+    assert to_nodekey('foo1/bar1/baz1/b') in nodes
+    assert to_nodekey('foo1/bar1/baz1/c') in nodes
+    assert to_nodekey('foo1/bar1/baz1/d') in nodes
+
+
+    v = comp.draw(node_transformations={'foo2/bar2/**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo1/bar1/baz1/a') not in nodes
+    assert to_nodekey('foo1/bar1/baz1/b') not in nodes
+    assert to_nodekey('foo1/bar1/baz1/c') not in nodes
+    assert to_nodekey('foo1/bar1/baz1/d') not in nodes
