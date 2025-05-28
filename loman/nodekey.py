@@ -30,7 +30,7 @@ class NodeKey:
     @property
     def name(self) -> Name:
         if len(self.parts) == 0:
-            return 0
+            return ''
         elif len(self.parts) == 1:
             return self.parts[0]
         elif all(isinstance(part, str) for part in self.parts):
@@ -89,6 +89,10 @@ class NodeKey:
         return f'{self.__class__.__name__}({quoted_path_str})'
 
     def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        if not isinstance(other, NodeKey):
+            return NotImplemented
         return self.parts == other.parts
 
     _ROOT = None
@@ -113,6 +117,16 @@ class NodeKey:
                 break
             parts.append(p1)
         return NodeKey(tuple(parts))
+
+    def ancestors(self) -> List['NodeKey']:
+        result = []
+        x = self
+        while True:
+            result.append(x)
+            if x.is_root:
+                break
+            x = x.parent
+        return result
 
 
 def names_to_node_keys(names: Union[Name, Names]) -> List[NodeKey]:
@@ -172,3 +186,53 @@ def to_nodekey(name: Name) -> NodeKey:
 
 def nodekey_join(*names: Name) -> NodeKey:
     return NodeKey.root().join(*names)
+
+def _match_pattern_recursive(pattern: NodeKey, target: NodeKey, p_idx: int, t_idx: int) -> bool:
+    """Recursively match pattern parts against target parts.
+
+    Args:
+        pattern: The pattern NodeKey to match against
+        target: The target NodeKey to match
+        p_idx: Current index in pattern parts
+        t_idx: Current index in target parts
+
+    Returns:
+        bool: True if pattern matches target, False otherwise
+    """
+    if p_idx == len(pattern.parts) and t_idx == len(target.parts):
+        return True
+    if p_idx == len(pattern.parts):
+        return False
+    if t_idx == len(target.parts):
+        return all(p == '**' for p in pattern.parts[p_idx:])
+
+    if pattern.parts[p_idx] == '**':
+        return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx) or \
+               _match_pattern_recursive(pattern, target, p_idx, t_idx + 1)
+    elif pattern.parts[p_idx] == '*':
+        return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx + 1)
+    else:
+        if pattern.parts[p_idx] == target.parts[t_idx]:
+            return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx + 1)
+        return False
+
+
+def is_pattern(nodekey: NodeKey) -> bool:
+    return any('*' in part or '**' in part for part in nodekey.parts)
+
+
+def match_pattern(pattern: NodeKey, target: NodeKey) -> bool:
+    """Match a pattern against a target NodeKey.
+
+    Supports wildcards:
+    * - matches exactly one part
+    ** - matches zero or more parts
+
+    Args:
+        pattern: The pattern to match against
+        target: The target to match
+
+    Returns:
+        bool: True if pattern matches target, False otherwise
+    """
+    return _match_pattern_recursive(pattern, target, 0, 0)

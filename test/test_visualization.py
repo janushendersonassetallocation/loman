@@ -1,3 +1,4 @@
+import itertools
 from itertools import tee
 
 import networkx as nx
@@ -8,7 +9,7 @@ import loman.computeengine
 from collections import namedtuple
 from loman.consts import NodeTransformations
 from loman.nodekey import NodeKey, to_nodekey
-from test.standard_test_computations import create_example_block_computation
+from test.standard_test_computations import create_example_block_computation, BasicFourNodeComputation
 
 
 def node_set(nodes):
@@ -50,6 +51,23 @@ def check_graph(g, expected_chains):
     assert edges_set(expected_edges) == edges_set(g.edges)
 
 
+def get_label_to_node_mapping(v):
+    nodes = v.viz_dot.obj_dict['nodes']
+    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
+    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
+    return node
+
+
+def get_path_to_node_mapping(v):
+    d = {}
+    for name, node_obj in v.viz_dag.nodes(data=True):
+        label = node_obj['label']
+        group = node_obj.get('_group')
+        path = NodeKey((label,)) if group is None else group.join_parts(label)
+        d[path] = node_obj
+    return d
+
+
 def test_simple():
     comp = Computation()
     comp.add_node('a')
@@ -57,7 +75,7 @@ def test_simple():
     comp.add_node('c', lambda a: 2 * a)
     comp.add_node('d', lambda b, c: b + c)
 
-    v = loman.visualization.GraphView(comp)
+    v = loman.visualization.GraphView(comp, collapse_all=False)
 
     node = get_label_to_node_mapping(v)
     assert node['a']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
@@ -96,30 +114,13 @@ def test_simple():
     assert node['d']['attributes']['style'] == 'filled'
 
 
-def get_label_to_node_mapping(v):
-    nodes = v.viz_dot.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
-    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
-    return node
-
-
-def get_path_to_node_mapping(v):
-    d = {}
-    for name, node_obj in v.viz_dag.nodes(data=True):
-        label = node_obj['label']
-        group = node_obj.get('_group')
-        path = NodeKey((label,)) if group is None else group.join_parts(label)
-        d[path] = node_obj
-    return d
-
-
 def test_with_groups():
     comp = Computation()
     comp.add_node('a', group='foo')
     comp.add_node('b', lambda a: a + 1, group='foo')
     comp.add_node('c', lambda a: 2 * a, group='bar')
     comp.add_node('d', lambda b, c: b + c, group='bar')
-    v = loman.visualization.GraphView(comp)
+    v = loman.visualization.GraphView(comp, collapse_all=False)
 
 
 def test_show_expansion():
@@ -130,12 +131,12 @@ def test_show_expansion():
     comp.add_named_tuple_expansion('c', Coordinate)
     comp.compute_all()
 
-    view_uncontracted = comp.draw(show_expansion=True)
+    view_uncontracted = comp.draw(show_expansion=True, collapse_all=False)
     view_uncontracted.refresh()
     labels = nx.get_node_attributes(view_uncontracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'c.x', 'c.y', 'foo'}
 
-    view_contracted = comp.draw(show_expansion=False)
+    view_contracted = comp.draw(show_expansion=False, collapse_all=False)
     view_contracted.refresh()
     labels = nx.get_node_attributes(view_contracted.viz_dag, 'label')
     assert set(labels.values()) == {'c', 'foo'}
@@ -146,7 +147,7 @@ def test_with_visualization_blocks():
 
     comp.compute_all()
 
-    v = comp.draw()
+    v = comp.draw(collapse_all=False)
     check_graph(v.struct_dag, [
         ('input_foo', 'foo/a', 'foo/b', 'foo/d', 'output'),
         ('foo/a', 'foo/c', 'foo/d'),
@@ -160,10 +161,10 @@ def test_with_visualization_view_subblocks():
 
     comp.compute_all()
 
-    v_foo = comp.draw('/foo')
+    v_foo = comp.draw('/foo', collapse_all=False)
     check_graph(v_foo.struct_dag,[('a', 'b', 'd'), ('a', 'c', 'd')])
 
-    v_bar = comp.draw('/bar')
+    v_bar = comp.draw('/bar', collapse_all=False)
     check_graph(v_bar.struct_dag, [('a', 'b', 'd'), ('a', 'c', 'd')])
 
 
@@ -174,7 +175,7 @@ def test_with_visualization_collapsed_blocks():
 
     node_transformations = {'foo': NodeTransformations.COLLAPSE, 'bar': NodeTransformations.COLLAPSE}
 
-    v = comp.draw(node_transformations=node_transformations)
+    v = comp.draw(node_transformations=node_transformations, collapse_all=False)
     check_graph(v.struct_dag, [
         ('input_foo', 'foo', 'output'),
         ('input_bar', 'bar', 'output')
@@ -189,17 +190,17 @@ def test_with_visualization_single_element_collapsed_blocks():
     comp = loman.Computation()
     comp.add_node('foo1/bar1/baz1/a')
 
-    v = comp.draw(node_transformations={'foo1': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo1': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo1')]['shape'] == 'rect'
     assert d[to_nodekey('foo1')]['peripheries'] == 2
 
-    v = comp.draw(node_transformations={'foo1/bar1': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo1/bar1': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo1/bar1')]['shape'] == 'rect'
     assert d[to_nodekey('foo1/bar1')]['peripheries'] == 2
 
-    v = comp.draw(node_transformations={'foo1/bar1/baz1': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo1/bar1/baz1': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo1/bar1/baz1')]['shape'] == 'rect'
     assert d[to_nodekey('foo1/bar1/baz1')]['peripheries'] == 2
@@ -210,7 +211,7 @@ def test_sub_blocks_collapse_with_group():
     comp.add_node('a')
     comp.add_node('foo/bar/b', lambda a: a + 1, kwds={'a': 'a'})
     comp.add_node('foo/bar/c', lambda a: a + 1, kwds={'a': 'a'})
-    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo/bar')]['shape'] == 'rect'
 
@@ -220,6 +221,91 @@ def test_with_visualization_collapsed_blocks_uniform_sate():
     comp.add_node('a')
     comp.add_node('foo/bar/b', lambda a: a + 1, kwds={'a': 'a'})
     comp.add_node('foo/bar/c', lambda a: a + 1, kwds={'a': 'a'})
-    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE})
+    v = comp.draw(node_transformations={'foo/bar': NodeTransformations.COLLAPSE}, collapse_all=False)
     d = get_path_to_node_mapping(v)
     assert d[to_nodekey('foo/bar')]['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UNINITIALIZED]
+
+
+def test_with_visualization_view_default_collapsing():
+    comp = create_example_block_computation()
+
+    comp.compute_all()
+
+    v_foo = comp.draw()
+    check_graph(v_foo.struct_dag,[('input_foo', 'foo', 'output'), ('input_bar', 'bar', 'output')])
+
+
+def test_with_visualization_view_subblocks_default_collapsing():
+    comp = Computation()
+    comp.add_node('foo/a')
+    comp.add_node('foo/b', lambda a: a + 1)
+    comp.add_node('foo/c', lambda a: 2 * a)
+    comp.add_node('foo/d', lambda b, c: b + c)
+    v = comp.draw('foo')
+    check_graph(v.struct_dag, [('a', 'b', 'd'), ('a', 'c', 'd')])
+
+
+def test_draw_expanded_block():
+    comp = Computation()
+    comp.add_node('foo/bar/baz/a')
+    comp.add_node('foo/bar/baz/b', lambda a: a + 1)
+    comp.add_node('foo/bar/baz/c', lambda a: 2 * a)
+    comp.add_node('foo/bar/baz/d', lambda b, c: b + c)
+
+    v = comp.draw(node_transformations={'foo/bar/baz': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo/bar/baz/a') in nodes
+    assert to_nodekey('foo/bar/baz/b') in nodes
+    assert to_nodekey('foo/bar/baz/c') in nodes
+    assert to_nodekey('foo/bar/baz/d') in nodes
+
+
+def test_draw_expanded_block_with_wildcard():
+    comp = Computation()
+    comp.add_node('foo/bar/baz/a')
+    comp.add_node('foo/bar/baz/b', lambda a: a + 1)
+    comp.add_node('foo/bar/baz/c', lambda a: 2 * a)
+    comp.add_node('foo/bar/baz/d', lambda b, c: b + c)
+
+    v = comp.draw(node_transformations={'**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo/bar/baz/a') in nodes
+    assert to_nodekey('foo/bar/baz/b') in nodes
+    assert to_nodekey('foo/bar/baz/c') in nodes
+    assert to_nodekey('foo/bar/baz/d') in nodes
+
+
+def test_draw_expanded_block_with_wildcard_2():
+    comp_inner = BasicFourNodeComputation()
+    comp = Computation()
+    for x, y, z in itertools.product(range(1, 3), range(1, 3), range(1, 3)):
+        comp.add_block(f'foo{x}/bar{y}/baz{z}', comp_inner, keep_values=False, links={'a': 'input_a'})
+    comp.add_node('input_a', value=7)
+    comp.compute_all()
+
+    v = comp.draw(node_transformations={'**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo1/bar1/baz1/a') in nodes
+    assert to_nodekey('foo1/bar1/baz1/b') in nodes
+    assert to_nodekey('foo1/bar1/baz1/c') in nodes
+    assert to_nodekey('foo1/bar1/baz1/d') in nodes
+
+    v = comp.draw(node_transformations={'foo1/bar1/**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo1/bar1/baz1/a') in nodes
+    assert to_nodekey('foo1/bar1/baz1/b') in nodes
+    assert to_nodekey('foo1/bar1/baz1/c') in nodes
+    assert to_nodekey('foo1/bar1/baz1/d') in nodes
+
+
+    v = comp.draw(node_transformations={'foo2/bar2/**': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo1/bar1/baz1/a') not in nodes
+    assert to_nodekey('foo1/bar1/baz1/b') not in nodes
+    assert to_nodekey('foo1/bar1/baz1/c') not in nodes
+    assert to_nodekey('foo1/bar1/baz1/d') not in nodes

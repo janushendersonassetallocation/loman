@@ -17,8 +17,8 @@ import pandas as pd
 
 from .compat import get_signature
 from .consts import NodeAttributes, EdgeAttributes, SystemTags, States, NodeTransformations
-from .exception import MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException, \
-    ComputationException, CannotInsertToPlaceholderNodeException
+from .exception import (MapException, LoopDetectedException, NonExistentNodeException, NodeAlreadyExistsException,
+                        ComputationException, CannotInsertToPlaceholderNodeException)
 from .nodekey import node_keys_to_names, NodeKey, Names, Name, names_to_node_keys, to_nodekey
 from .util import AttributeView, apply_n, apply1, as_iterable, value_eq
 from .visualization import NodeFormatter, GraphView
@@ -241,14 +241,14 @@ class Computation:
 
     def get_attribute_view_for_path(self, nodekey: NodeKey, get_one_func: callable, get_many_func: callable):
         def node_func():
-            return self.list_children(nodekey)
+            return self.get_tree_list_children(nodekey)
 
         def get_one_func_for_path(name: Name):
             nk = to_nodekey(name)
             new_nk = nk.prepend(nodekey)
             if self.has_node(new_nk):
                 return get_one_func(new_nk)
-            elif self.has_path(new_nk):
+            elif self.tree_has_path(new_nk):
                 return self.get_attribute_view_for_path(new_nk, get_one_func, get_many_func)
             else:
                 raise KeyError(f"Path {new_nk} does not exist")
@@ -909,7 +909,7 @@ class Computation:
         """
         return list(n.name for n in self.dag.nodes)
 
-    def list_children(self, name: Name) -> Set[Name]:
+    def get_tree_list_children(self, name: Name) -> Set[Name]:
         """
         Get a list of nodes in this computation
         :return: List of nodes
@@ -926,7 +926,7 @@ class Computation:
         node_key = to_nodekey(name)
         return node_key in self.dag.nodes
 
-    def has_path(self, name: Name):
+    def tree_has_path(self, name: Name):
         node_key = to_nodekey(name)
         if self.has_node(node_key):
             return True
@@ -934,6 +934,25 @@ class Computation:
             if n.is_descendent_of(node_key):
                 return True
         return False
+
+    def get_tree_descendents(self, name: Optional[Name] = None) -> Set[Name]:
+        """
+        Get a list of descendent blocks and nodes.
+
+        Returns blocks and nodes that are descendents of the input node,
+        e.g. for node 'foo', might return ['foo/bar', 'foo/baz'].
+
+        :param name: Name of node to get descendents for
+        :return: List of descendent node names
+        """
+        node_key = NodeKey.root() if name is None else to_nodekey(name)
+        result = set()
+        for n in self.dag.nodes:
+            if n.is_descendent_of(node_key):
+                for n2 in n.ancestors():
+                    if n2.is_descendent_of(node_key):
+                        result.add(n2.name)
+        return result
 
     def _state_one(self, name: Name):
         node_key = to_nodekey(name)
@@ -1440,7 +1459,7 @@ class Computation:
              node_transformations: Optional[dict] = None,
              cmap=None, colors='state', shapes=None,
              graph_attr=None, node_attr=None, edge_attr=None,
-             show_expansion=False):
+             show_expansion=False, collapse_all=True):
         """
         Draw a computation's current state using the GraphViz utility
 
@@ -1451,7 +1470,7 @@ class Computation:
         :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
         :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
-        :param show_expansion: Whether to show expansion nodes (i.e. named tuple expansion nodes) if they are not referenced by other nodes
+        :param collapse_all: Whether to collapse all blocks that aren't explicitly expanded.
         """
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
         node_transformations = node_transformations.copy() if node_transformations is not None else {}
@@ -1460,7 +1479,7 @@ class Computation:
                 node_transformations[nodekey] = NodeTransformations.CONTRACT
         v = GraphView(self, root=root, node_formatter=node_formatter,
                       graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr,
-                      node_transformations=node_transformations)
+                      node_transformations=node_transformations, collapse_all=collapse_all)
         return v
 
     def view(self, cmap=None, colors='state', shapes=None):
