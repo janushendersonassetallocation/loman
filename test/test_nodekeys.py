@@ -1,5 +1,5 @@
 import pytest
-from loman.nodekey import to_nodekey, NodeKey, nodekey_join, match_pattern
+from loman.nodekey import to_nodekey, NodeKey, nodekey_join, match_pattern, is_pattern
 
 TEST_DATA = [
     ('/A', NodeKey(('A', ))),
@@ -73,3 +73,25 @@ def test_pattern_matching(pattern, target, expected):
     pattern_key = NodeKey(pattern)
     target_key = NodeKey(target)
     assert match_pattern(pattern_key, target_key) == expected
+
+
+def test_is_pattern():
+    # Test single asterisk patterns
+    assert is_pattern(NodeKey(('*',)))
+    assert is_pattern(NodeKey(('abc', '*')))
+    assert is_pattern(NodeKey(('*', 'def')))
+
+    # Test double asterisk patterns
+    assert is_pattern(NodeKey(('**',)))
+    assert is_pattern(NodeKey(('abc', '**')))
+    assert is_pattern(NodeKey(('**', 'def')))
+
+    # Test non-patterns
+    assert not is_pattern(NodeKey(()))
+    assert not is_pattern(NodeKey(('abc',)))
+    assert not is_pattern(NodeKey(('abc', 'def')))
+
+    # Test complex patterns
+    assert is_pattern(NodeKey(('abc', '*', '**', 'def')))
+    assert is_pattern(NodeKey(('**', '*', 'def')))
+    assert is_pattern(NodeKey(('abc', '**', '*')))

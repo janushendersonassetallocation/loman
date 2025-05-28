@@ -216,6 +216,11 @@ def _match_pattern_recursive(pattern: NodeKey, target: NodeKey, p_idx: int, t_id
             return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx + 1)
         return False
 
+
+def is_pattern(nodekey: NodeKey) -> bool:
+    return any('*' in part or '**' in part for part in nodekey.parts)
+
+
 def match_pattern(pattern: NodeKey, target: NodeKey) -> bool:
     """Match a pattern against a target NodeKey.
 
