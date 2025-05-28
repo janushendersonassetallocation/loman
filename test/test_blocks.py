@@ -126,6 +126,9 @@ def test_block_accessors():
     comp.add_node('foo1/bar1/baz1/a', value=1)
 
     assert comp.v.foo1.bar1.baz1.a == 1
+    assert comp.v['foo1/bar1/baz1/a'] == 1
+    assert comp.v['foo1'].bar1.baz1.a == 1
+    assert comp.v.foo1['bar1'].baz1.a == 1
 
     with pytest.raises(AttributeError):
         x = comp.v.doesnotexist

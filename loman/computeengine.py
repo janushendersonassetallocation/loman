@@ -253,7 +253,13 @@ class Computation:
             else:
                 raise KeyError(f"Path {new_nk} does not exist")
 
-        return AttributeView(node_func, get_one_func_for_path, get_many_func)
+        def get_many_func_for_path(name: Union[Name, Names]):
+            if isinstance(name, list):
+                return [get_one_func_for_path(n) for n in name]
+            else:
+                return get_one_func_for_path(name)
+
+        return AttributeView(node_func, get_one_func_for_path, get_many_func_for_path)
 
     def _get_names_for_state(self, state: States):
         return set(node_keys_to_names(self._state_map[state]))
