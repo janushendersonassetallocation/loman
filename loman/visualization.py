@@ -301,9 +301,16 @@ class GraphView:
 
     def _apply_custom_transforms(self, node_transformations):
         if self.node_transformations is not None:
-            for k, v in self.node_transformations.items():
-                nk = to_nodekey(k)
-                node_transformations[nk] = v
+            for name, transform in self.node_transformations.items():
+                nk = to_nodekey(name)
+                node_transformations[nk] = transform
+                if transform == NodeTransformations.EXPAND:
+                    while True:
+                        nk_parent = nk.parent
+                        if nk_parent.is_root or nk_parent == self.root:
+                            break
+                        node_transformations[nk_parent] = NodeTransformations.EXPAND
+                        nk = nk_parent
         return node_transformations
 
     def _create_visualization_dag(self, original_nodes, composite_nodes):

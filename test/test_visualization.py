@@ -50,6 +50,23 @@ def check_graph(g, expected_chains):
     assert edges_set(expected_edges) == edges_set(g.edges)
 
 
+def get_label_to_node_mapping(v):
+    nodes = v.viz_dot.obj_dict['nodes']
+    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
+    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
+    return node
+
+
+def get_path_to_node_mapping(v):
+    d = {}
+    for name, node_obj in v.viz_dag.nodes(data=True):
+        label = node_obj['label']
+        group = node_obj.get('_group')
+        path = NodeKey((label,)) if group is None else group.join_parts(label)
+        d[path] = node_obj
+    return d
+
+
 def test_simple():
     comp = Computation()
     comp.add_node('a')
@@ -94,23 +111,6 @@ def test_simple():
     assert node['c']['attributes']['style'] == 'filled'
     assert node['d']['attributes']['fillcolor'] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
     assert node['d']['attributes']['style'] == 'filled'
-
-
-def get_label_to_node_mapping(v):
-    nodes = v.viz_dot.obj_dict['nodes']
-    label_to_name_mapping = {v[0]['attributes']['label']: k for k, v in nodes.items()}
-    node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
-    return node
-
-
-def get_path_to_node_mapping(v):
-    d = {}
-    for name, node_obj in v.viz_dag.nodes(data=True):
-        label = node_obj['label']
-        group = node_obj.get('_group')
-        path = NodeKey((label,)) if group is None else group.join_parts(label)
-        d[path] = node_obj
-    return d
 
 
 def test_with_groups():
@@ -242,3 +242,19 @@ def test_with_visualization_view_subblocks_default_collapsing():
     comp.add_node('foo/d', lambda b, c: b + c)
     v = comp.draw('foo')
     check_graph(v.struct_dag, [('a', 'b', 'd'), ('a', 'c', 'd')])
+
+
+def test_draw_expanded_block():
+    comp = Computation()
+    comp.add_node('foo/bar/baz/a')
+    comp.add_node('foo/bar/baz/b', lambda a: a + 1)
+    comp.add_node('foo/bar/baz/c', lambda a: 2 * a)
+    comp.add_node('foo/bar/baz/d', lambda b, c: b + c)
+
+    v = comp.draw(node_transformations={'foo/bar/baz': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+
+    assert to_nodekey('foo/bar/baz/a') in nodes
+    assert to_nodekey('foo/bar/baz/b') in nodes
+    assert to_nodekey('foo/bar/baz/c') in nodes
+    assert to_nodekey('foo/bar/baz/d') in nodes

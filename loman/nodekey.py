@@ -89,6 +89,10 @@ class NodeKey:
         return f'{self.__class__.__name__}({quoted_path_str})'
 
     def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        if not isinstance(other, NodeKey):
+            return NotImplemented
         return self.parts == other.parts
 
     _ROOT = None
