@@ -186,3 +186,48 @@ def to_nodekey(name: Name) -> NodeKey:
 
 def nodekey_join(*names: Name) -> NodeKey:
     return NodeKey.root().join(*names)
+
+def _match_pattern_recursive(pattern: NodeKey, target: NodeKey, p_idx: int, t_idx: int) -> bool:
+    """Recursively match pattern parts against target parts.
+
+    Args:
+        pattern: The pattern NodeKey to match against
+        target: The target NodeKey to match
+        p_idx: Current index in pattern parts
+        t_idx: Current index in target parts
+
+    Returns:
+        bool: True if pattern matches target, False otherwise
+    """
+    if p_idx == len(pattern.parts) and t_idx == len(target.parts):
+        return True
+    if p_idx == len(pattern.parts):
+        return False
+    if t_idx == len(target.parts):
+        return all(p == '**' for p in pattern.parts[p_idx:])
+
+    if pattern.parts[p_idx] == '**':
+        return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx) or \
+               _match_pattern_recursive(pattern, target, p_idx, t_idx + 1)
+    elif pattern.parts[p_idx] == '*':
+        return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx + 1)
+    else:
+        if pattern.parts[p_idx] == target.parts[t_idx]:
+            return _match_pattern_recursive(pattern, target, p_idx + 1, t_idx + 1)
+        return False
+
+def match_pattern(pattern: NodeKey, target: NodeKey) -> bool:
+    """Match a pattern against a target NodeKey.
+
+    Supports wildcards:
+    * - matches exactly one part
+    ** - matches zero or more parts
+
+    Args:
+        pattern: The pattern to match against
+        target: The target to match
+
+    Returns:
+        bool: True if pattern matches target, False otherwise
+    """
+    return _match_pattern_recursive(pattern, target, 0, 0)

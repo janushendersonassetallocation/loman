@@ -1,5 +1,5 @@
 import pytest
-from loman.nodekey import to_nodekey, NodeKey, nodekey_join
+from loman.nodekey import to_nodekey, NodeKey, nodekey_join, match_pattern
 
 TEST_DATA = [
     ('/A', NodeKey(('A', ))),
@@ -53,3 +53,23 @@ TEST_COMMON_PARENT_DATA = [
 def test_common_parent(path1, path2, expected_path):
     result = NodeKey.common_parent(path1, path2)
     assert result == to_nodekey(expected_path)
+
+
+TEST_PATTERN_MATCH_DATA = [
+    (('a', '*', 'c'), ('a', 'b', 'c'), True),
+    (('a', '**', 'd'), ('a', 'b', 'c', 'd'), True),
+    (('a', '**', 'd'), ('a', 'd'), True),
+    (('**',), ('a', 'b', 'c'), True),
+    (('a', '**'), ('a',), True),
+    (('a', '*', '**'), ('a', 'x', 'y', 'z'), True),
+    (('a', '*', 'c'), ('a', 'b', 'd'), False),
+    (('a', '**', 'd'), ('a', 'b', 'c'), False),
+    (('a', '*'), ('a', 'b', 'c'), False),
+]
+
+
+@pytest.mark.parametrize("pattern,target,expected", TEST_PATTERN_MATCH_DATA)
+def test_pattern_matching(pattern, target, expected):
+    pattern_key = NodeKey(pattern)
+    target_key = NodeKey(target)
+    assert match_pattern(pattern_key, target_key) == expected
