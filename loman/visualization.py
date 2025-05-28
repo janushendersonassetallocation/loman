@@ -286,25 +286,40 @@ class GraphView:
 
         return dag_out, d_mapped_to_original, s_collapsed
 
-    def refresh(self):
+    def _initialize_transforms(self):
         node_transformations = {}
         if self.collapse_all:
-            for n in self.computation.get_tree_descendents(self.root):
-                nk = to_nodekey(n)
-                if not self.computation.has_node(nk):
-                    node_transformations[nk] = NodeTransformations.COLLAPSE
+            self._apply_default_collapse_transforms(node_transformations)
+        self._apply_custom_transforms(node_transformations)
+        return node_transformations
+
+    def _apply_default_collapse_transforms(self, node_transformations):
+        for n in self.computation.get_tree_descendents(self.root):
+            nk = to_nodekey(n)
+            if not self.computation.has_node(nk):
+                node_transformations[nk] = NodeTransformations.COLLAPSE
+
+    def _apply_custom_transforms(self, node_transformations):
         if self.node_transformations is not None:
             for k, v in self.node_transformations.items():
                 nk = to_nodekey(k)
                 node_transformations[nk] = v
-        self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
+        return node_transformations
 
+    def _create_visualization_dag(self, original_nodes, composite_nodes):
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
-        self.viz_dag = create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
+        return create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
 
-        self.viz_dot = to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
+    def _create_dot_graph(self):
+        return to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
+
+    def refresh(self):
+        node_transformations = self._initialize_transforms()
+        self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(self.computation.dag, self.root, node_transformations)
+        self.viz_dag = self._create_visualization_dag(original_nodes, composite_nodes)
+        self.viz_dot = self._create_dot_graph()
 
     def svg(self) -> Optional[str]:
         if self.viz_dot is None:
