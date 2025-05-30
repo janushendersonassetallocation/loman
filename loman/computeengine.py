@@ -1438,7 +1438,7 @@ class Computation:
             converter = node_data.get(NodeAttributes.CONVERTER, None)
             new_node_name = self.prepend_path(node_name, base_path)
             self.add_node(new_node_name, func, args=args, kwds=kwds, converter=converter, serialize=False, inspect=False, group=group, tags=tags, style=style, executor=executor)
-            if keep_values:
+            if keep_values and NodeAttributes.VALUE in node_data:
                 new_node_key = to_nodekey(new_node_name)
                 self._set_state_and_literal_value(new_node_key, node_data[NodeAttributes.STATE], node_data[NodeAttributes.VALUE])
         if links is not None:
