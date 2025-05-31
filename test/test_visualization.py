@@ -287,25 +287,39 @@ def test_draw_expanded_block_with_wildcard_2():
 
     v = comp.draw(node_transformations={'**': 'expand'})
     nodes = get_path_to_node_mapping(v)
-
-    assert to_nodekey('foo1/bar1/baz1/a') in nodes
-    assert to_nodekey('foo1/bar1/baz1/b') in nodes
-    assert to_nodekey('foo1/bar1/baz1/c') in nodes
-    assert to_nodekey('foo1/bar1/baz1/d') in nodes
+    expected = ['input_a',
+                'foo1/bar1/baz1/a', 'foo1/bar1/baz1/b', 'foo1/bar1/baz1/c', 'foo1/bar1/baz1/d',
+                'foo1/bar1/baz2/a', 'foo1/bar1/baz2/b', 'foo1/bar1/baz2/c', 'foo1/bar1/baz2/d',
+                'foo1/bar2/baz1/a', 'foo1/bar2/baz1/b', 'foo1/bar2/baz1/c', 'foo1/bar2/baz1/d',
+                'foo1/bar2/baz2/a', 'foo1/bar2/baz2/b', 'foo1/bar2/baz2/c', 'foo1/bar2/baz2/d',
+                'foo2/bar1/baz1/a', 'foo2/bar1/baz1/b', 'foo2/bar1/baz1/c', 'foo2/bar1/baz1/d',
+                'foo2/bar1/baz2/a', 'foo2/bar1/baz2/b', 'foo2/bar1/baz2/c', 'foo2/bar1/baz2/d',
+                'foo2/bar2/baz1/a', 'foo2/bar2/baz1/b', 'foo2/bar2/baz1/c', 'foo2/bar2/baz1/d',
+                'foo2/bar2/baz2/a', 'foo2/bar2/baz2/b', 'foo2/bar2/baz2/c', 'foo2/bar2/baz2/d']
+    assert nodes.keys() == {to_nodekey(n) for n in expected}
 
     v = comp.draw(node_transformations={'foo1/bar1/**': 'expand'})
     nodes = get_path_to_node_mapping(v)
-
-    assert to_nodekey('foo1/bar1/baz1/a') in nodes
-    assert to_nodekey('foo1/bar1/baz1/b') in nodes
-    assert to_nodekey('foo1/bar1/baz1/c') in nodes
-    assert to_nodekey('foo1/bar1/baz1/d') in nodes
-
+    expected = ['input_a',
+                'foo1/bar1/baz1/a', 'foo1/bar1/baz1/b', 'foo1/bar1/baz1/c', 'foo1/bar1/baz1/d',
+                'foo1/bar1/baz2/a', 'foo1/bar1/baz2/b', 'foo1/bar1/baz2/c', 'foo1/bar1/baz2/d',
+                'foo1/bar2', 'foo2']
+    assert nodes.keys() == {to_nodekey(n) for n in expected}
 
     v = comp.draw(node_transformations={'foo2/bar2/**': 'expand'})
     nodes = get_path_to_node_mapping(v)
+    expected = ['input_a',
+                'foo1', 'foo2/bar1',
+                'foo2/bar2/baz1/a', 'foo2/bar2/baz1/b', 'foo2/bar2/baz1/c', 'foo2/bar2/baz1/d',
+                'foo2/bar2/baz2/a', 'foo2/bar2/baz2/b', 'foo2/bar2/baz2/c', 'foo2/bar2/baz2/d']
+    assert nodes.keys() == {to_nodekey(n) for n in expected}
 
-    assert to_nodekey('foo1/bar1/baz1/a') not in nodes
-    assert to_nodekey('foo1/bar1/baz1/b') not in nodes
-    assert to_nodekey('foo1/bar1/baz1/c') not in nodes
-    assert to_nodekey('foo1/bar1/baz1/d') not in nodes
+    v = comp.draw(node_transformations={'*': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+    assert nodes.keys() == {to_nodekey(n) for n in ['input_a', 'foo1/bar1', 'foo1/bar2', 'foo2/bar1', 'foo2/bar2']}
+
+    v = comp.draw(node_transformations={'*/*': 'expand'})
+    nodes = get_path_to_node_mapping(v)
+    assert nodes.keys() == {to_nodekey(n) for n in ['input_a',
+                                                    'foo1/bar1/baz1', 'foo1/bar1/baz2', 'foo1/bar2/baz1', 'foo1/bar2/baz2',
+                                                    'foo2/bar1/baz1', 'foo2/bar1/baz2', 'foo2/bar2/baz1', 'foo2/bar2/baz2']}
