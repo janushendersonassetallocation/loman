@@ -935,7 +935,7 @@ class Computation:
                 return True
         return False
 
-    def get_tree_descendents(self, name: Optional[Name] = None) -> Set[Name]:
+    def get_tree_descendents(self, name: Optional[Name] = None, *,  include_stem: bool = True, graph_nodes_only: bool = False) -> Set[Name]:
         """
         Get a list of descendent blocks and nodes.
 
@@ -946,12 +946,21 @@ class Computation:
         :return: List of descendent node names
         """
         node_key = NodeKey.root() if name is None else to_nodekey(name)
+        stemsize = len(node_key.parts)
         result = set()
         for n in self.dag.nodes:
             if n.is_descendent_of(node_key):
-                for n2 in n.ancestors():
+                if graph_nodes_only:
+                    nodes = [n]
+                else:
+                    nodes = n.ancestors()
+                for n2 in nodes:
                     if n2.is_descendent_of(node_key):
-                        result.add(n2.name)
+                        if include_stem:
+                            nm = n2.name
+                        else:
+                            nm = NodeKey(tuple(n2.parts[stemsize:])).name
+                        result.add(nm)
         return result
 
     def _state_one(self, name: Name):
