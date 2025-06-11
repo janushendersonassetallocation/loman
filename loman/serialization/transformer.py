@@ -4,6 +4,13 @@ from typing import Iterable, Optional, Type, Union
 
 import numpy as np
 
+try:
+    import attrs
+
+    HAS_ATTRS = True
+except ImportError:
+    HAS_ATTRS = False
+
 KEY_TYPE = 'type'
 KEY_CLASS = 'class'
 KEY_VALUES = 'values'
@@ -88,8 +95,8 @@ class Transformer:
             self.register_transformer(t)
         elif issubclass(t, Transformable):
             self.register_transformable(t)
-        # elif attrs.has(t):
-        #     self.register_attrs(t)
+        elif HAS_ATTRS and attrs.has(t):
+            self.register_attrs(t)
         else:
             raise ValueError(f"Unable to register {t}")
 
@@ -117,10 +124,10 @@ class Transformer:
         assert name not in self._transformable_types
         self._transformable_types[name] = transformable_type
 
-    # def register_attrs(self, attrs_type: Type):
-    #     name = attrs_type.__name__
-    #     assert name not in self._attrs_types
-    #     self._attrs_types[name] = attrs_type
+    def register_attrs(self, attrs_type: Type):
+        name = attrs_type.__name__
+        assert name not in self._attrs_types
+        self._attrs_types[name] = attrs_type
 
     def get_transformer_for_obj(self, obj) -> Optional[CustomTransformer]:
         transformer = self._direct_type_map.get(type(obj))
@@ -145,8 +152,8 @@ class Transformer:
             return self._dict_to_dict(o)
         elif isinstance(o, Transformable):
             return {KEY_TYPE: TYPENAME_TRANSFORMABLE, KEY_CLASS: type(o).__name__, KEY_DATA: o.to_dict(self)}
-        # elif attrs.has(o):
-        #     return self._attrs_to_dict(o)
+        elif HAS_ATTRS and attrs.has(o):
+            return self._attrs_to_dict(o)
         else:
             return self._to_dict_transformer(o)
 
@@ -157,14 +164,14 @@ class Transformer:
         else:
             return d
 
-    # def _attrs_to_dict(self, o):
-    #     data = {}
-    #     for a in o.__attrs_attrs__:
-    #         data[a.name] = self.to_dict(o.__getattribute__(a.name))
-    #     res = {KEY_TYPE: TYPENAME_ATTRS, KEY_CLASS: type(o).__name__}
-    #     if len(data) > 0:
-    #         res[KEY_DATA] = data
-    #     return res
+    def _attrs_to_dict(self, o):
+        data = {}
+        for a in o.__attrs_attrs__:
+            data[a.name] = self.to_dict(o.__getattribute__(a.name))
+        res = {KEY_TYPE: TYPENAME_ATTRS, KEY_CLASS: type(o).__name__}
+        if len(data) > 0:
+            res[KEY_DATA] = data
+        return res
 
     def _to_dict_transformer(self, o):
         transformer = self.get_transformer_for_obj(o)
@@ -210,19 +217,23 @@ class Transformer:
         else:
             return cls.from_dict(self, d[KEY_DATA])
 
-    # def _from_attrs(self, d):
-    #     cls = self._attrs_types.get(d[KEY_CLASS])
-    #     if cls is None:
-    #         if self.strict:
-    #             raise UnrecognizedTypeException(f"Unable to create attrs object of type {cls}")
-    #         else:
-    #             return MissingObject()
-    #     else:
-    #         kwargs = {}
-    #         if KEY_DATA in d:
-    #             for key, value in d[KEY_DATA].items():
-    #                 kwargs[key] = self.from_dict(value)
-    #         return cls(**kwargs)
+    def _from_attrs(self, d):
+        if not HAS_ATTRS:
+            if self.strict:
+                raise UnrecognizedTypeException("attrs package not installed")
+            return MissingObject()
+        cls = self._attrs_types.get(d[KEY_CLASS])
+        if cls is None:
+            if self.strict:
+                raise UnrecognizedTypeException(f"Unable to create attrs object of type {cls}")
+            else:
+                return MissingObject()
+        else:
+            kwargs = {}
+            if KEY_DATA in d:
+                for key, value in d[KEY_DATA].items():
+                    kwargs[key] = self.from_dict(value)
+            return cls(**kwargs)
 
     def _from_dict_transformer(self, type_, d):
         transformer = self.get_transformer_for_name(type_)

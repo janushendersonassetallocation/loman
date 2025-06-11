@@ -2,7 +2,7 @@ from typing import List, Iterable
 
 import numpy as np
 import pytest
-from dataclasses import dataclass
+import attrs
 
 from loman.serialization import (CustomTransformer, Transformer, Transformable,
     UntransformableTypeException, UnrecognizedTypeException, MissingObject, NdArrayTransformer)
@@ -112,38 +112,38 @@ def test_serialization_roundtrip_transformable(obj):
     assert obj_roundtrip == obj
 
 
-# @dataclass
-# class TestAttrs:
-#     a: int
-#     b: str
-#
-#
-# TEST_OBJS_ATTRS: List[object] = [
-#     TestAttrs(42, "Lorem ipsum.."),
-# ]
-#
-#
-# @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_ATTRS)
-# def test_serialization_roundtrip_attrs(obj):
-#     u = Transformer()
-#     u.register(TestAttrs)
-#     obj_dict = u.to_dict(obj)
-#     obj_roundtrip = u.from_dict(obj_dict)
-#     assert obj_roundtrip == obj
-#
-#
-# @dataclass
-# class TestAttrsRecursive:
-#     a: object
-#
-#
-# def test_serialization_roundtrip_attrs_recursive():
-#     u = Transformer()
-#     u.register(TestAttrsRecursive)
-#     obj = TestAttrsRecursive(TestAttrsRecursive(TestAttrsRecursive(3)))
-#     obj_dict = u.to_dict(obj)
-#     obj_roundtrip = u.from_dict(obj_dict)
-#     assert obj_roundtrip == obj
+@attrs.define
+class TestAttrs:
+    a: int
+    b: str
+
+
+TEST_OBJS_ATTRS: List[object] = [
+    TestAttrs(42, "Lorem ipsum.."),
+]
+
+
+@pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_ATTRS)
+def test_serialization_roundtrip_attrs(obj):
+    u = Transformer()
+    u.register(TestAttrs)
+    obj_dict = u.to_dict(obj)
+    obj_roundtrip = u.from_dict(obj_dict)
+    assert obj_roundtrip == obj
+
+
+@attrs.define
+class TestAttrsRecursive:
+    a: object
+
+
+def test_serialization_roundtrip_attrs_recursive():
+    u = Transformer()
+    u.register(TestAttrsRecursive)
+    obj = TestAttrsRecursive(TestAttrsRecursive(TestAttrsRecursive(3)))
+    obj_dict = u.to_dict(obj)
+    obj_roundtrip = u.from_dict(obj_dict)
+    assert obj_roundtrip == obj
 
 
 def test_serialization_strictness():

@@ -24,11 +24,17 @@ dependencies = [
     "decorator",
     "matplotlib",
     "pydotplus",
-    "pytest",
     "dill >= 0.2.5",
     "networkx >= 2.0",
     "pandas >= 0.19.2"
 ]
+
+[project.optional-dependencies]
+test = [
+    "attrs",
+    "pytest"
+]
+
 
 [project.urls]
 Homepage = "https://github.com/janusassetallocation/loman"
