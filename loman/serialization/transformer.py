@@ -1,6 +1,6 @@
 import graphlib
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional, Type
+from typing import Iterable, Optional, Type, Union
 
 import numpy as np
 
@@ -83,7 +83,7 @@ class Transformer:
         self._transformable_types = {}
         self._attrs_types = {}
 
-    def register(self, t: CustomTransformer | Type[Transformable] | Type):
+    def register(self, t: Union[CustomTransformer, Type[Transformable] , Type]):
         if isinstance(t, CustomTransformer):
             self.register_transformer(t)
         elif issubclass(t, Transformable):
