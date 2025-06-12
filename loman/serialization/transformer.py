@@ -11,6 +11,8 @@ try:
 except ImportError:
     HAS_ATTRS = False
 
+import dataclasses
+
 KEY_TYPE = 'type'
 KEY_CLASS = 'class'
 KEY_VALUES = 'values'
@@ -20,6 +22,7 @@ TYPENAME_DICT= 'dict'
 TYPENAME_TUPLE = 'tuple'
 TYPENAME_TRANSFORMABLE = 'transformable'
 TYPENAME_ATTRS = 'attrs'
+TYPENAME_DATACLASS = 'dataclass'
 
 
 class UntransformableTypeException(Exception):
@@ -89,6 +92,7 @@ class Transformer:
         self._transformers = {}
         self._transformable_types = {}
         self._attrs_types = {}
+        self._dataclass_types = {}
 
     def register(self, t: Union[CustomTransformer, Type[Transformable] , Type]):
         if isinstance(t, CustomTransformer):
@@ -97,6 +101,8 @@ class Transformer:
             self.register_transformable(t)
         elif HAS_ATTRS and attrs.has(t):
             self.register_attrs(t)
+        elif dataclasses.is_dataclass(t):
+            self.register_dataclass(t)
         else:
             raise ValueError(f"Unable to register {t}")
 
@@ -129,6 +135,11 @@ class Transformer:
         assert name not in self._attrs_types
         self._attrs_types[name] = attrs_type
 
+    def register_dataclass(self, dataclass_type: Type):
+        name = dataclass_type.__name__
+        assert name not in self._dataclass_types
+        self._dataclass_types[name] = dataclass_type
+
     def get_transformer_for_obj(self, obj) -> Optional[CustomTransformer]:
         transformer = self._direct_type_map.get(type(obj))
         if transformer is not None:
@@ -154,6 +165,8 @@ class Transformer:
             return {KEY_TYPE: TYPENAME_TRANSFORMABLE, KEY_CLASS: type(o).__name__, KEY_DATA: o.to_dict(self)}
         elif HAS_ATTRS and attrs.has(o):
             return self._attrs_to_dict(o)
+        elif dataclasses.is_dataclass(o):
+            return self._dataclass_to_dict(o)
         else:
             return self._to_dict_transformer(o)
 
@@ -169,6 +182,15 @@ class Transformer:
         for a in o.__attrs_attrs__:
             data[a.name] = self.to_dict(o.__getattribute__(a.name))
         res = {KEY_TYPE: TYPENAME_ATTRS, KEY_CLASS: type(o).__name__}
+        if len(data) > 0:
+            res[KEY_DATA] = data
+        return res
+
+    def _dataclass_to_dict(self, o):
+        data = {}
+        for f in dataclasses.fields(o):
+            data[f.name] = self.to_dict(getattr(o, f.name))
+        res = {KEY_TYPE: TYPENAME_DATACLASS, KEY_CLASS: type(o).__name__}
         if len(data) > 0:
             res[KEY_DATA] = data
         return res
@@ -201,6 +223,8 @@ class Transformer:
                 return self._from_dict_transformable(d)
             elif type_ == TYPENAME_ATTRS:
                 return self._from_attrs(d)
+            elif type_ == TYPENAME_DATACLASS:
+                return self._from_dataclass(d)
             else:
                 return self._from_dict_transformer(type_, d)
         else:
@@ -226,6 +250,20 @@ class Transformer:
         if cls is None:
             if self.strict:
                 raise UnrecognizedTypeException(f"Unable to create attrs object of type {cls}")
+            else:
+                return MissingObject()
+        else:
+            kwargs = {}
+            if KEY_DATA in d:
+                for key, value in d[KEY_DATA].items():
+                    kwargs[key] = self.from_dict(value)
+            return cls(**kwargs)
+
+    def _from_dataclass(self, d):
+        cls = self._dataclass_types.get(d[KEY_CLASS])
+        if cls is None:
+            if self.strict:
+                raise UnrecognizedTypeException(f"Unable to create dataclass object of type {cls}")
             else:
                 return MissingObject()
         else:

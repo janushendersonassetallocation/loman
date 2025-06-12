@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import List, Iterable
 
 import numpy as np
@@ -132,6 +133,26 @@ def test_serialization_roundtrip_attrs(obj):
     assert obj_roundtrip == obj
 
 
+@dataclass
+class TestDataClass:
+    a: int
+    b: str
+
+
+TEST_OBJS_DATACLASS: List[object] = [
+    TestDataClass(42, "Lorem ipsum.."),
+]
+
+
+@pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_DATACLASS)
+def test_serialization_roundtrip_dataclass(obj):
+    u = Transformer()
+    u.register(TestDataClass)
+    obj_dict = u.to_dict(obj)
+    obj_roundtrip = u.from_dict(obj_dict)
+    assert obj_roundtrip == obj
+
+
 @attrs.define
 class TestAttrsRecursive:
     a: object
@@ -141,6 +162,20 @@ def test_serialization_roundtrip_attrs_recursive():
     u = Transformer()
     u.register(TestAttrsRecursive)
     obj = TestAttrsRecursive(TestAttrsRecursive(TestAttrsRecursive(3)))
+    obj_dict = u.to_dict(obj)
+    obj_roundtrip = u.from_dict(obj_dict)
+    assert obj_roundtrip == obj
+
+
+@dataclass
+class TestDataClassRecursive:
+    a: object
+
+
+def test_serialization_roundtrip_dataclass_recursive():
+    u = Transformer()
+    u.register(TestDataClassRecursive)
+    obj = TestDataClassRecursive(TestDataClassRecursive(TestDataClassRecursive(3)))
     obj_dict = u.to_dict(obj)
     obj_roundtrip = u.from_dict(obj_dict)
     assert obj_roundtrip == obj
