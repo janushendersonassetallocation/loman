@@ -128,6 +128,29 @@ def calc_node(f=None, **kwds):
     return wrap(f)
 
 
+@dataclass
+class Block(Node):
+    block: Union[Callable, 'Computation']
+    args: Tuple[Any, ...] = field(default_factory=tuple)
+    kwds: Dict = field(default_factory=dict)
+
+    def __init__(self, block, *args, **kwds):
+        self.block = block
+        self.args = args
+        self.kwds = kwds
+
+    def add_to_comp(self, comp: 'Computation', name: str, obj: object, ignore_self: bool):
+        if isinstance(self.block, Computation):
+            comp.add_block(name, self.block, *self.args, **self.kwds)
+        elif callable(self.block):
+            block0 = self.block()
+            comp.add_block(name, block0, *self.args, **self.kwds)
+        else:
+            raise TypeError(f'Block {self.block} must be callable or Computation')
+
+block = Block
+
+
 def populate_computation_from_class(comp, cls, obj, ignore_self=True):
     for name, member in inspect.getmembers(cls):
         node_ = None

@@ -138,3 +138,44 @@ def test_block_accessors():
     assert comp.v.foo1.bar1.baz1 == 2
     with pytest.raises(AttributeError):
         x = comp.v.foo1.bar1.baz1.a
+
+
+def test_computation_factory_with_blocks():
+    @ComputationFactory
+    class InnerComputation:
+        a = input_node()
+
+        @calc_node
+        def b(self, a):
+            return a + 1
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return b + c
+
+    @ComputationFactory
+    class OuterComputation:
+        input_foo = input_node()
+        input_bar = input_node()
+
+        foo = block(InnerComputation, links={'a': 'input_foo'})
+        bar = block(InnerComputation, links={'a': 'input_bar'})
+
+        @calc_node(kwds={'a': 'foo/d', 'b': 'bar/d'})
+        def output(self, a, b):
+            return a + b
+
+    comp = OuterComputation()
+
+    comp.insert('input_foo', value=7)
+    comp.insert('input_bar', value=10)
+
+    comp.compute_all()
+
+    assert comp.v.foo.d == 22
+    assert comp.v.bar.d == 31
+    assert comp.v.output == 22 + 31
