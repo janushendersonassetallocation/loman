@@ -14,3 +14,18 @@ def test_setting_node_metadata():
     comp.add_node('foo')
     comp.metadata('foo')['test'] = 'working'
     assert comp.metadata('foo')['test'] == 'working'
+
+def test_setting_block_metadata():
+    comp = lm.Computation()
+    comp.add_node('foo/bar')
+    comp.metadata('foo')['test'] = 'working'
+    assert comp.metadata('foo')['test'] == 'working'
+
+
+def test_setting_block_metadata():
+    comp_inner = lm.Computation()
+    comp_inner.add_node('bar')
+
+    comp = lm.Computation()
+    comp.add_block('foo', comp_inner, metadata={'test': 'working'})
+    assert comp.metadata('foo')['test'] == 'working'

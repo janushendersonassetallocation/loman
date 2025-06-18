@@ -1504,7 +1504,7 @@ class Computation:
         path = to_nodekey(path)
         return prefix_path.join(path)
 
-    def add_block(self, base_path: Name, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None):
+    def add_block(self, base_path: Name, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None, metadata: Optional[dict] = None):
         base_path = to_nodekey(base_path)
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
@@ -1526,6 +1526,11 @@ class Computation:
         if links is not None:
             for target, source in links.items():
                 self.link(base_path.join_parts(target), source)
+        if metadata is not None:
+            self._metadata[base_path] = metadata
+        else:
+            if base_path in self._metadata:
+                del self._metadata[base_path]
 
     def link(self, target: Name, source: Name):
         target = to_nodekey(target)
