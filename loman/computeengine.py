@@ -476,10 +476,9 @@ class Computation:
     def metadata(self, name):
         node_key = to_nodekey(name)
         if self.tree_has_path(name):
-            result = self._metadata.get(node_key)
-            if result is None:
-                return {}
-            return result
+            if node_key not in self._metadata:
+                self._metadata[node_key] = {}
+            return self._metadata[node_key]
         else:
             raise NonExistentNodeException(f'Node {node_key} does not exist.')
 
