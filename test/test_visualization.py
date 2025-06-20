@@ -324,11 +324,12 @@ def test_draw_expanded_block_with_wildcard_2():
                                                     'foo1/bar1/baz1', 'foo1/bar1/baz2', 'foo1/bar2/baz1', 'foo1/bar2/baz2',
                                                     'foo2/bar1/baz1', 'foo2/bar1/baz2', 'foo2/bar2/baz1', 'foo2/bar2/baz2']}
 
-def test_style_preservation():
+def test_style_preservation_with_block_links():
     def build_comp():
         comp = Computation()
         comp.add_node("a", style="dot")
         comp.add_node("b", style="dot")
+        comp.add_node('e', style='dot')
 
         @node(comp, "c")
         def comp_c(a, b):
@@ -340,9 +341,11 @@ def test_style_preservation():
     full_comp = Computation()
     full_comp.add_node("params/a", value=1, style="dot")
     full_comp.add_node("params/b", value=1, style="dot")
+    full_comp.add_node("params/c", value=1, style="dot")
     full_comp.add_block("comp", build_comp(), links={
         "a": "params/a",
-        "b": "params/b"
+        "b": "params/b",
+        "e": "params/c"
     })
 
     expected_styles = ['dot'] * 4 + [None, 'small']
