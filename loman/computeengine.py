@@ -1090,7 +1090,7 @@ class Computation:
     def _style_one(self, name: Name):
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
-        return node[NodeAttributes.STYLE]
+        return node.get(NodeAttributes.STYLE)
 
     def styles(self, name: Union[Name, Names]):
         """
@@ -1482,7 +1482,12 @@ class Computation:
         source = to_nodekey(source)
         if target == source:
             return
-        self.add_node(target, identity_function, kwds={'x': source})
+
+        target_style = self._style_one(target) if self.has_node(target) else None
+        source_style = self._style_one(source) if self.has_node(source) else None
+        style = target_style if target_style else source_style
+
+        self.add_node(target, identity_function, kwds={'x': source}, style=style)
 
     def _repr_svg_(self):
         return GraphView(self).svg()
