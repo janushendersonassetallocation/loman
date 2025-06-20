@@ -1090,7 +1090,7 @@ class Computation:
     def _style_one(self, name: Name):
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
-        return node[NodeAttributes.STYLE]
+        return node.get(NodeAttributes.STYLE)
 
     def styles(self, name: Union[Name, Names]):
         """
