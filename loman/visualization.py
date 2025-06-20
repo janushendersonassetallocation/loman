@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -346,6 +347,8 @@ class GraphView:
     def view(self):
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
             f.write(self.viz_dot.create_pdf())
+            if sys.platform != "win32":
+                os.system('open %s' % f.name)
             os.startfile(f.name)
 
     def _repr_svg_(self):
