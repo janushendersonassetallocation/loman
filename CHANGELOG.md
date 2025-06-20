@@ -1,9 +1,12 @@
 # Change Log
 
-## [0.5.3] (TBD)
+## [0.5.3] (2025-06-20)
 
+- ComputationFactories can have blocks added directly to them
 - Add support for viewing node function source code
-- Added support for metadata
+- Added support for node, block and computation metadata
+- Added a custom json serializer for future use
+- Various bug fixes
 
 ## [0.5.2] (2025-05-28)
 - Added support for pattern matching in node transformations, including wildcard patterns
