@@ -1482,9 +1482,12 @@ class Computation:
         source = to_nodekey(source)
         if target == source:
             return
-        target_style = self.styles(target)
-        source_style = self.styles(source)
-        self.add_node(target, identity_function, kwds={'x': source}, style=target_style if target_style else source_style)
+
+        target_style = self._style_one(target) if self.has_node(target) else None
+        source_style = self._style_one(source) if self.has_node(source) else None
+        style = target_style if target_style else source_style
+
+        self.add_node(target, identity_function, kwds={'x': source}, style=style)
 
     def _repr_svg_(self):
         return GraphView(self).svg()
