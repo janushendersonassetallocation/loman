@@ -1456,6 +1456,7 @@ class Computation:
 
     def add_block(self, base_path: Name, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None):
         base_path = to_nodekey(base_path)
+        # here can we add the nodes whilst we also add the nodes
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
             node_data = block.dag.nodes[node_key]
@@ -1482,7 +1483,9 @@ class Computation:
         source = to_nodekey(source)
         if target == source:
             return
-        self.add_node(target, identity_function, kwds={'x': source})
+        target_style = self.styles(target)
+        source_style = self.styles(source)
+        self.add_node(target, identity_function, kwds={'x': source}, style=target_style if target_style else source_style)
 
     def _repr_svg_(self):
         return GraphView(self).svg()
