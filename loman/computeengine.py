@@ -259,6 +259,7 @@ class Computation:
         self.style = self.get_attribute_view_for_path(NodeKey.root(), self._style_one, self.styles)
         self.tim = self.get_attribute_view_for_path(NodeKey.root(), self._get_timing_one, self.get_timing)
         self.x = self.get_attribute_view_for_path(NodeKey.root(), self.compute_and_get_value, self.compute_and_get_value)
+        self.src = self.get_attribute_view_for_path(NodeKey.root(), self.print_source, self.print_source)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
 
@@ -1276,6 +1277,23 @@ class Computation:
             node_keys = self._get_descendents_node_keys(node_keys)
         output_node_keys = [n for n in node_keys if len(nx.descendants(self.dag, n))==0]
         return node_keys_to_names(output_node_keys)
+
+    def get_source(self, name: Name) -> str:
+        """
+        Get the source code for a node
+        """
+        node_key = to_nodekey(name)
+        func = self.dag.nodes[node_key].get(NodeAttributes.FUNC, None)
+        if func is not None:
+            file = inspect.getsourcefile(func)
+            _, lineno = inspect.getsourcelines(func)
+            source = inspect.getsource(func)
+            return f"{file}:{lineno}\n\n{source}"
+        else:
+            return "NOT A CALCULATED NODE"
+
+    def print_source(self, name: Name):
+        print(self.get_source(name))
 
     def restrict(self, output_names: Union[Name, Names], input_names: Optional[Union[Name, Names]] = None):
         """

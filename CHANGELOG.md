@@ -1,6 +1,10 @@
 # Change Log
 
-## [0.5.2] (TBD)
+## [0.5.3] (TBD)
+
+- Add support for viewing node function source code
+
+## [0.5.2] (2025-05-28)
 
 - Added support for pattern matching in node transformations, including wildcard patterns
 - Add nested attribute views, so comp.v.foo.bar.baz is equivalent to comp.v['foo/bar/baz']
