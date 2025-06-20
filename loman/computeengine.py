@@ -1456,7 +1456,6 @@ class Computation:
 
     def add_block(self, base_path: Name, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None):
         base_path = to_nodekey(base_path)
-        # here can we add the nodes whilst we also add the nodes
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
             node_data = block.dag.nodes[node_key]
