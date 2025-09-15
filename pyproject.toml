@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools >= 77.0.3"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "loman"
@@ -34,7 +34,17 @@ test = [
     "attrs",
     "pytest"
 ]
-
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.12.0",
+    "pre-commit>=3.0",
+    "mypy>=1.0",
+    "marimo>=0.15",
+]
 
 [project.urls]
 Homepage = "https://github.com/janusassetallocation/loman"
+
+[tool.hatch.build.targets.wheel]
+packages = ["loman"]

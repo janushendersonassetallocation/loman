@@ -1,29 +1,51 @@
-name: Run tests
+# This file is part of the tschm/.config-templates repository
+# (https://github.com/tschm/.config-templates).
+#
+# Workflow: Continuous Integration
+# Purpose: This workflow runs tests on multiple Python versions to ensure
+#          compatibility and code quality across different environments.
+#
+# Trigger: This workflow runs on every push
+#
+# Components:
+#   - 🧪 Run tests on multiple Python versions
+#   - 🔄 Matrix strategy for testing on different environments
 
-on: [push]
+name: "CI"
+
+on:
+- push
+
+permissions:
+  contents: read
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+  test:
+    # if: github.repository != 'tschm/.config-templates'
+    # The type of runner that the job will run on
+    runs-on: ${{ matrix.os }}
+
     strategy:
-      fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # mongo container action only supported on Linux
+        os: [ ubuntu-latest ]
+        python-version: [ '3.11', '3.12', '3.13' ]
 
+    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          lfs: true
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      # Use the composite action to set up the project
+      - name: Setup the project
+        id: setup
+        uses: ./.github/actions/setup-project
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
 
-      - name: Install dependencies
+      - name: "Run the tests"
         run: |
-          python -m pip install --upgrade pip
-          pip install '.[test]'
-
-      - name: Test with pytest
-        run: pytest -s
-
+          uv pip install pytest
+          uv run pytest tests
