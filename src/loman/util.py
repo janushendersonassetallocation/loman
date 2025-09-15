@@ -1,5 +1,5 @@
-import types
 import itertools
+import types
 
 import pandas as pd
 
@@ -45,19 +45,20 @@ class AttributeView:
 
     def __getstate__(self):
         return {
-            'get_attribute_list': self.get_attribute_list,
-            'get_attribute': self.get_attribute,
-            'get_item': self.get_item
+            "get_attribute_list": self.get_attribute_list,
+            "get_attribute": self.get_attribute,
+            "get_item": self.get_item,
         }
 
     def __setstate__(self, state):
-        self.get_attribute_list = state['get_attribute_list']
-        self.get_attribute = state['get_attribute']
-        self.get_item = state['get_item']
+        self.get_attribute_list = state["get_attribute_list"]
+        self.get_attribute = state["get_attribute"]
+        self.get_item = state["get_item"]
 
     @staticmethod
     def from_dict(d, use_apply1=True):
         if use_apply1:
+
             def get_attribute(xs):
                 return apply1(d.get, xs)
         else:

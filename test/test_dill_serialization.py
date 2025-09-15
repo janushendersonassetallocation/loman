@@ -1,9 +1,8 @@
 import io
-import threading
 
 import pytest
 
-from loman import Computation, States, ComputationFactory, input_node, calc_node
+from loman import Computation, ComputationFactory, States, calc_node, input_node
 from loman.computeengine import NodeData
 
 
@@ -19,9 +18,9 @@ def test_serialization():
 
     comp = Computation()
     comp.add_node("a")
-    comp.add_node("b", b, kwds={'x': 'a'})
-    comp.add_node("c", c, kwds={'x': 'a'})
-    comp.add_node("d", d, kwds={'x': 'b', 'y': 'c'})
+    comp.add_node("b", b, kwds={"x": "a"})
+    comp.add_node("c", c, kwds={"x": "a"})
+    comp.add_node("d", d, kwds={"x": "b", "y": "c"})
 
     comp.insert("a", 1)
     comp.compute_all()
@@ -33,8 +32,8 @@ def test_serialization():
 
     assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
-        assert comp.dag.nodes[n].get('state', None) == foo.dag.nodes[n].get('state', None)
-        assert comp.dag.nodes[n].get('value', None) == foo.dag.nodes[n].get('value', None)
+        assert comp.dag.nodes[n].get("state", None) == foo.dag.nodes[n].get("state", None)
+        assert comp.dag.nodes[n].get("value", None) == foo.dag.nodes[n].get("value", None)
 
 
 def test_serialization_skip_flag():
@@ -66,17 +65,17 @@ def test_serialization_skip_flag():
 
 def test_no_serialize_flag():
     comp = Computation()
-    comp.add_node('a', serialize=False)
-    comp.add_node('b', lambda a: a + 1)
-    comp.insert('a', 1)
+    comp.add_node("a", serialize=False)
+    comp.add_node("b", lambda a: a + 1)
+    comp.insert("a", 1)
     comp.compute_all()
 
     f = io.BytesIO()
     comp.write_dill(f)
     f.seek(0)
     comp2 = Computation.read_dill(f)
-    assert comp2.state('a') == States.UNINITIALIZED
-    assert comp2['b'] == NodeData(States.UPTODATE, 2)
+    assert comp2.state("a") == States.UNINITIALIZED
+    assert comp2["b"] == NodeData(States.UPTODATE, 2)
 
 
 def test_serialize_nested_loman():
@@ -100,7 +99,7 @@ def test_serialize_nested_loman():
     inner.compute_all()
 
     outer = CompOuter()
-    outer.insert('COMP', inner)
+    outer.insert("COMP", inner)
     outer.compute_all()
 
     f = io.BytesIO()
@@ -124,9 +123,9 @@ def test_roundtrip_old_dill():
 
     comp = Computation()
     comp.add_node("a")
-    comp.add_node("b", b, kwds={'x': 'a'})
-    comp.add_node("c", c, kwds={'x': 'a'})
-    comp.add_node("d", d, kwds={'x': 'b', 'y': 'c'})
+    comp.add_node("b", b, kwds={"x": "a"})
+    comp.add_node("c", c, kwds={"x": "a"})
+    comp.add_node("d", d, kwds={"x": "b", "y": "c"})
 
     comp.insert("a", 1)
     comp.compute_all()
@@ -138,8 +137,8 @@ def test_roundtrip_old_dill():
 
     assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
-        assert comp.dag.nodes[n].get('state', None) == foo.dag.nodes[n].get('state', None)
-        assert comp.dag.nodes[n].get('value', None) == foo.dag.nodes[n].get('value', None)
+        assert comp.dag.nodes[n].get("state", None) == foo.dag.nodes[n].get("state", None)
+        assert comp.dag.nodes[n].get("value", None) == foo.dag.nodes[n].get("value", None)
 
 
 class UnserializableObject:
@@ -171,14 +170,14 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     inner.compute_all()
     print(inner.v.unserializable)
     outer = CompOuter()
-    outer.insert('COMP', inner)
+    outer.insert("COMP", inner)
     outer.compute_all()
 
     with pytest.raises(TypeError):
         f = io.BytesIO()
         outer.write_dill(f)
 
-    outer.v.COMP.clear_tag('unserializable', '__serialize__')
+    outer.v.COMP.clear_tag("unserializable", "__serialize__")
 
     f = io.BytesIO()
     outer.write_dill(f)

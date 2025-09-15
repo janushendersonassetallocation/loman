@@ -4,7 +4,7 @@ class ComputationException(Exception):
 
 class MapException(ComputationException):
     def __init__(self, message, results):
-        super(MapException, self).__init__(message)
+        super().__init__(message)
         self.results = results
 
 

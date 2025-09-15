@@ -1,8 +1,12 @@
-from loman.computeengine import (Computation, ComputationFactory, node, C, input_node, calc_node, block)
-from loman.exception import (MapException, LoopDetectedException, NonExistentNodeException,
-                             CannotInsertToPlaceholderNodeException)
-from loman.consts import States, NodeTransformations
-import loman.visualization as viz
-from loman.visualization import GraphView
 import loman.util as util
-from loman.nodekey import NodeKey, Names, Name, to_nodekey
+import loman.visualization as viz
+from loman.computeengine import C, Computation, ComputationFactory, block, calc_node, input_node, node
+from loman.consts import NodeTransformations, States
+from loman.exception import (
+    CannotInsertToPlaceholderNodeException,
+    LoopDetectedException,
+    MapException,
+    NonExistentNodeException,
+)
+from loman.nodekey import Name, Names, NodeKey, to_nodekey
+from loman.visualization import GraphView

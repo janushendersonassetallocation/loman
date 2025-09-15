@@ -1,14 +1,21 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import List, Iterable
 
+import attrs
 import numpy as np
 import pytest
-import attrs
 
-from loman.serialization import (CustomTransformer, Transformer, Transformable,
-    UntransformableTypeException, UnrecognizedTypeException, MissingObject, NdArrayTransformer)
+from loman.serialization import (
+    CustomTransformer,
+    MissingObject,
+    NdArrayTransformer,
+    Transformable,
+    Transformer,
+    UnrecognizedTypeException,
+    UntransformableTypeException,
+)
 
-TEST_OBJS: List[object] = [
+TEST_OBJS: list[object] = [
     1337,
     3.141,
     "Hello",
@@ -16,18 +23,18 @@ TEST_OBJS: List[object] = [
     ["Hello", "World"],
     {"Hello": "World"},
     {"type": "test", "foo": "bar"},
-    [{'a': 1, 'b': 2}, (1, 2, 3), "Hello"]
+    [{"a": 1, "b": 2}, (1, 2, 3), "Hello"],
 ]
 
-TEST_TRANSFORMED_OBJS: List[object] = [
+TEST_TRANSFORMED_OBJS: list[object] = [
     1337,
     3.141,
     "Hello",
-    {'type': 'tuple', 'values': ['Hello', 'World']},
+    {"type": "tuple", "values": ["Hello", "World"]},
     ["Hello", "World"],
     {"Hello": "World"},
-    {'data': {'foo': 'bar', 'type': 'test'}, 'type': 'dict'},
-    [{'a': 1, 'b': 2}, {'type': 'tuple', 'values': [1, 2, 3]}, 'Hello']
+    {"data": {"foo": "bar", "type": "test"}, "type": "dict"},
+    [{"a": 1, "b": 2}, {"type": "tuple", "values": [1, 2, 3]}, "Hello"],
 ]
 
 
@@ -51,10 +58,7 @@ def test_serialization_roundtrip(obj):
     assert obj_roundtrip == obj
 
 
-TEST_OBJS_COMPLEX: List[object] = [
-    complex(1, 2),
-    {"a": 1, "b": complex(1, 2)}
-]
+TEST_OBJS_COMPLEX: list[object] = [complex(1, 2), {"a": 1, "b": complex(1, 2)}]
 
 
 class ComplexTransformer(CustomTransformer):
@@ -62,12 +66,12 @@ class ComplexTransformer(CustomTransformer):
     def name(self):
         return "complex"
 
-    def to_dict(self, transformer: 'Transformer', o: object) -> dict:
+    def to_dict(self, transformer: "Transformer", o: object) -> dict:
         assert isinstance(o, complex)
-        return {'real': o.real, 'imag': o.imag}
+        return {"real": o.real, "imag": o.imag}
 
-    def from_dict(self, transformer: 'Transformer', d: dict) -> object:
-        return complex(d['real'], d['imag'])
+    def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        return complex(d["real"], d["imag"])
 
     @property
     def supported_direct_types(self):
@@ -91,17 +95,15 @@ class TestTransformable(Transformable):
     def __eq__(self, other):
         return self.a == other.a and self.b == other.b
 
-    def to_dict(self, transformer: 'Transformer') -> dict:
-        return {'a': self.a, 'b': self.b}
+    def to_dict(self, transformer: "Transformer") -> dict:
+        return {"a": self.a, "b": self.b}
 
     @classmethod
-    def from_dict(cls, transformer: 'Transformer', d: dict) -> object:
-        return cls(d['a'], d['b'])
+    def from_dict(cls, transformer: "Transformer", d: dict) -> object:
+        return cls(d["a"], d["b"])
 
 
-TEST_OBJS_TRANSFORMABLE: List[object] = [
-    TestTransformable("Hello", "world")
-]
+TEST_OBJS_TRANSFORMABLE: list[object] = [TestTransformable("Hello", "world")]
 
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_TRANSFORMABLE)
@@ -119,7 +121,7 @@ class TestAttrs:
     b: str
 
 
-TEST_OBJS_ATTRS: List[object] = [
+TEST_OBJS_ATTRS: list[object] = [
     TestAttrs(42, "Lorem ipsum.."),
 ]
 
@@ -139,7 +141,7 @@ class TestDataClass:
     b: str
 
 
-TEST_OBJS_DATACLASS: List[object] = [
+TEST_OBJS_DATACLASS: list[object] = [
     TestDataClass(42, "Lorem ipsum.."),
 ]
 
@@ -183,15 +185,15 @@ def test_serialization_roundtrip_dataclass_recursive():
 
 def test_serialization_strictness():
     u = Transformer(strict=True)
-    with pytest.raises(UntransformableTypeException) as e_info:
+    with pytest.raises(UntransformableTypeException):
         u.to_dict(TEST_OBJS_COMPLEX[0])
-    with pytest.raises(UntransformableTypeException) as e_info:
+    with pytest.raises(UntransformableTypeException):
         u.to_dict(TEST_OBJS_COMPLEX[1])
     u = Transformer(strict=False)
     obj_dict = u.to_dict(TEST_OBJS_COMPLEX[0])
     assert obj_dict is None
     obj_dict = u.to_dict(TEST_OBJS_COMPLEX[1])
-    assert obj_dict == {'a': 1, 'b': None}
+    assert obj_dict == {"a": 1, "b": None}
 
 
 def test_deserialization_strictness():
@@ -200,11 +202,11 @@ def test_deserialization_strictness():
     v = Transformer(strict=True)
 
     obj_dict = u.to_dict(TEST_OBJS_COMPLEX[0])
-    with pytest.raises(UnrecognizedTypeException) as e_info:
+    with pytest.raises(UnrecognizedTypeException):
         obj_roundtrip = v.from_dict(obj_dict)
 
     obj_dict = u.to_dict(TEST_OBJS_COMPLEX[1])
-    with pytest.raises(UnrecognizedTypeException) as e_info:
+    with pytest.raises(UnrecognizedTypeException):
         obj_roundtrip = v.from_dict(obj_dict)
 
     w = Transformer(strict=False)
@@ -214,8 +216,8 @@ def test_deserialization_strictness():
 
     obj_dict = u.to_dict(TEST_OBJS_COMPLEX[1])
     obj_roundtrip = w.from_dict(obj_dict)
-    assert obj_roundtrip['a'] == 1
-    assert isinstance(obj_roundtrip['b'], MissingObject)
+    assert obj_roundtrip["a"] == 1
+    assert isinstance(obj_roundtrip["b"], MissingObject)
 
 
 def test_nd_array_transformer():
@@ -246,25 +248,25 @@ class FooUnregistered(Foo):
 class FooTransformer(CustomTransformer):
     @property
     def name(self) -> str:
-        return 'Foo'
+        return "Foo"
 
-    def to_dict(self, transformer: 'Transformer', o: object) -> dict:
+    def to_dict(self, transformer: "Transformer", o: object) -> dict:
         if type(o) == Foo:
-            return {'v': 'Foo'}
+            return {"v": "Foo"}
         elif type(o) == FooA:
-            return {'v': 'FooA'}
+            return {"v": "FooA"}
         elif type(o) == FooB:
-            return {'v': 'FooB'}
+            return {"v": "FooB"}
         else:
             raise ValueError(f"Cannot transform {o}")
 
-    def from_dict(self, transformer: 'Transformer', d: dict) -> object:
-        v = d['v']
-        if v == 'Foo':
+    def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        v = d["v"]
+        if v == "Foo":
             return Foo()
-        elif v == 'FooA':
+        elif v == "FooA":
             return FooA()
-        elif v == 'FooB':
+        elif v == "FooB":
             return FooB()
         else:
             raise ValueError(f"Cannot transform {v}")
@@ -279,21 +281,21 @@ def test_serialization_roundtrip_transformer_subtypes():
     u.register(FooTransformer())
     o = Foo()
     d = u.to_dict(o)
-    assert d == {'type': 'Foo', 'v': 'Foo'}
+    assert d == {"type": "Foo", "v": "Foo"}
     o2 = u.from_dict(d)
     assert type(o2) == Foo
 
     o = FooA()
     d = u.to_dict(o)
-    assert d == {'type': 'Foo', 'v': 'FooA'}
+    assert d == {"type": "Foo", "v": "FooA"}
     o2 = u.from_dict(d)
     assert type(o2) == FooA
 
     o = FooB()
     d = u.to_dict(o)
-    assert d == {'type': 'Foo', 'v': 'FooB'}
+    assert d == {"type": "Foo", "v": "FooB"}
     o2 = u.from_dict(d)
     assert type(o2) == FooB
 
-    with pytest.raises(ValueError) as e_info:
+    with pytest.raises(ValueError):
         u.to_dict(FooUnregistered())

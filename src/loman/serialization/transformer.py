@@ -1,6 +1,6 @@
 import graphlib
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional, Type, Union
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -13,16 +13,16 @@ except ImportError:
 
 import dataclasses
 
-KEY_TYPE = 'type'
-KEY_CLASS = 'class'
-KEY_VALUES = 'values'
-KEY_DATA = 'data'
+KEY_TYPE = "type"
+KEY_CLASS = "class"
+KEY_VALUES = "values"
+KEY_DATA = "data"
 
-TYPENAME_DICT= 'dict'
-TYPENAME_TUPLE = 'tuple'
-TYPENAME_TRANSFORMABLE = 'transformable'
-TYPENAME_ATTRS = 'attrs'
-TYPENAME_DATACLASS = 'dataclass'
+TYPENAME_DICT = "dict"
+TYPENAME_TUPLE = "tuple"
+TYPENAME_TRANSFORMABLE = "transformable"
+TYPENAME_ATTRS = "attrs"
+TYPENAME_DATACLASS = "dataclass"
 
 
 class UntransformableTypeException(Exception):
@@ -35,7 +35,7 @@ class UnrecognizedTypeException(Exception):
 
 class MissingObject:
     def __repr__(self):
-        return 'Missing'
+        return "Missing"
 
 
 def order_classes(classes):
@@ -55,11 +55,11 @@ class CustomTransformer(ABC):
         pass
 
     @abstractmethod
-    def to_dict(self, transformer: 'Transformer', o: object) -> dict:
+    def to_dict(self, transformer: "Transformer", o: object) -> dict:
         pass
 
     @abstractmethod
-    def from_dict(self, transformer: 'Transformer', d: dict) -> object:
+    def from_dict(self, transformer: "Transformer", d: dict) -> object:
         pass
 
     @property
@@ -73,12 +73,12 @@ class CustomTransformer(ABC):
 
 class Transformable(ABC):
     @abstractmethod
-    def to_dict(self, transformer: 'Transformer') -> dict:
+    def to_dict(self, transformer: "Transformer") -> dict:
         pass
 
     @classmethod
     @abstractmethod
-    def from_dict(cls, transformer: 'Transformer', d: dict) -> object:
+    def from_dict(cls, transformer: "Transformer", d: dict) -> object:
         pass
 
 
@@ -94,7 +94,7 @@ class Transformer:
         self._attrs_types = {}
         self._dataclass_types = {}
 
-    def register(self, t: Union[CustomTransformer, Type[Transformable] , Type]):
+    def register(self, t: CustomTransformer | type[Transformable] | type):
         if isinstance(t, CustomTransformer):
             self.register_transformer(t)
         elif issubclass(t, Transformable):
@@ -125,22 +125,22 @@ class Transformer:
         if contains_supported_subtypes:
             self._subtype_order = order_classes(self._subtype_map.keys())
 
-    def register_transformable(self, transformable_type: Type[Transformable]):
+    def register_transformable(self, transformable_type: type[Transformable]):
         name = transformable_type.__name__
         assert name not in self._transformable_types
         self._transformable_types[name] = transformable_type
 
-    def register_attrs(self, attrs_type: Type):
+    def register_attrs(self, attrs_type: type):
         name = attrs_type.__name__
         assert name not in self._attrs_types
         self._attrs_types[name] = attrs_type
 
-    def register_dataclass(self, dataclass_type: Type):
+    def register_dataclass(self, dataclass_type: type):
         name = dataclass_type.__name__
         assert name not in self._dataclass_types
         self._dataclass_types[name] = dataclass_type
 
-    def get_transformer_for_obj(self, obj) -> Optional[CustomTransformer]:
+    def get_transformer_for_obj(self, obj) -> CustomTransformer | None:
         transformer = self._direct_type_map.get(type(obj))
         if transformer is not None:
             return transformer
@@ -148,7 +148,7 @@ class Transformer:
             if isinstance(obj, tp):
                 return self._subtype_map[tp]
 
-    def get_transformer_for_name(self, name) -> Optional[CustomTransformer]:
+    def get_transformer_for_name(self, name) -> CustomTransformer | None:
         transformer = self._transformers.get(name)
         return transformer
 
@@ -288,14 +288,13 @@ class NdArrayTransformer(CustomTransformer):
     def name(self):
         return "ndarray"
 
-    def to_dict(self, transformer: 'Transformer', o: object) -> dict:
+    def to_dict(self, transformer: "Transformer", o: object) -> dict:
         assert isinstance(o, np.ndarray)
-        return {'shape': list(o.shape), 'dtype': o.dtype.str, 'data': transformer.to_dict(o.ravel().tolist())}
+        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}
 
-    def from_dict(self, transformer: 'Transformer', d: dict) -> object:
-        return np.array(transformer.from_dict(d['data']), d['dtype']).reshape(d['shape'])
+    def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        return np.array(transformer.from_dict(d["data"]), d["dtype"]).reshape(d["shape"])
 
     @property
     def supported_direct_types(self):
         return [np.ndarray]
-

@@ -2,7 +2,8 @@ from enum import Enum
 
 
 class States(Enum):
-    """Possible states for a computation node"""
+    """Possible states for a computation node."""
+
     PLACEHOLDER = 0
     UNINITIALIZED = 1
     STALE = 2
@@ -13,29 +14,29 @@ class States(Enum):
 
 
 class NodeAttributes:
-    VALUE = 'value'
-    STATE = 'state'
-    FUNC = 'func'
-    GROUP = 'group'
-    TAG = 'tag'
-    STYLE = 'style'
-    ARGS = 'args'
-    KWDS = 'kwds'
-    TIMING = 'timing'
-    EXECUTOR = 'executor'
-    CONVERTER = 'converter'
+    VALUE = "value"
+    STATE = "state"
+    FUNC = "func"
+    GROUP = "group"
+    TAG = "tag"
+    STYLE = "style"
+    ARGS = "args"
+    KWDS = "kwds"
+    TIMING = "timing"
+    EXECUTOR = "executor"
+    CONVERTER = "converter"
 
 
 class EdgeAttributes:
-    PARAM = 'param'
+    PARAM = "param"
 
 
 class SystemTags:
-    SERIALIZE = '__serialize__'
-    EXPANSION = '__expansion__'
+    SERIALIZE = "__serialize__"
+    EXPANSION = "__expansion__"
 
 
 class NodeTransformations:
-    CONTRACT = 'contract'
-    COLLAPSE = 'collapse'
-    EXPAND = 'expand'
+    CONTRACT = "contract"
+    COLLAPSE = "collapse"
+    EXPAND = "expand"

@@ -1,4 +1,4 @@
-from .transformer import Transformer, NdArrayTransformer
+from .transformer import NdArrayTransformer, Transformer
 
 
 def default_transformer(*args, **kwargs):
