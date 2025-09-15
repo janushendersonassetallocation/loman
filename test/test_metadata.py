@@ -26,7 +26,8 @@ def test_setting_block_metadata():
     assert comp.metadata("foo")["test"] == "working"
 
 
-def test_setting_block_metadata():
+def test_setting_computation_block_metadata():
+    """Test setting metadata on computation blocks."""
     comp_inner = lm.Computation()
     comp_inner.add_node("bar")
 
