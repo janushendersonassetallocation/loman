@@ -1,3 +1,5 @@
+"""Tests for node key functionality and pattern matching in Loman."""
+
 import pytest
 
 from loman.nodekey import NodeKey, is_pattern, match_pattern, nodekey_join, to_nodekey

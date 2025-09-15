@@ -1,3 +1,5 @@
+"""Tests for serialization and transformation functionality in Loman."""
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -251,11 +253,11 @@ class FooTransformer(CustomTransformer):
         return "Foo"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict:
-        if type(o) == Foo:
+        if type(o) is Foo:
             return {"v": "Foo"}
-        elif type(o) == FooA:
+        elif type(o) is FooA:
             return {"v": "FooA"}
-        elif type(o) == FooB:
+        elif type(o) is FooB:
             return {"v": "FooB"}
         else:
             raise ValueError(f"Cannot transform {o}")
@@ -283,19 +285,19 @@ def test_serialization_roundtrip_transformer_subtypes():
     d = u.to_dict(o)
     assert d == {"type": "Foo", "v": "Foo"}
     o2 = u.from_dict(d)
-    assert type(o2) == Foo
+    assert type(o2) is Foo
 
     o = FooA()
     d = u.to_dict(o)
     assert d == {"type": "Foo", "v": "FooA"}
     o2 = u.from_dict(d)
-    assert type(o2) == FooA
+    assert type(o2) is FooA
 
     o = FooB()
     d = u.to_dict(o)
     assert d == {"type": "Foo", "v": "FooB"}
     o2 = u.from_dict(d)
-    assert type(o2) == FooB
+    assert type(o2) is FooB
 
     with pytest.raises(ValueError):
         u.to_dict(FooUnregistered())

@@ -1,3 +1,5 @@
+"""Tests for Loman tree-related functions and node key operations."""
+
 import loman as lm
 from loman.nodekey import to_nodekey
 

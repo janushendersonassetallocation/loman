@@ -1,3 +1,5 @@
+"""Tests for value equality utility functions in Loman."""
+
 import numpy as np
 import pandas as pd
 

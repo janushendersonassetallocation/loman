@@ -1,3 +1,5 @@
+"""Tests for dill serialization functionality in Loman computations."""
+
 import io
 
 import pytest
@@ -92,8 +94,8 @@ def test_serialize_nested_loman():
         COMP = input_node()
 
         @calc_node
-        def out(self, COMP):
-            return COMP.x.b + 10
+        def out(self, comp):
+            return comp.x.b + 10
 
     inner = CompInner()
     inner.compute_all()
@@ -163,8 +165,8 @@ def test_serialize_nested_loman_with_unserializable_nodes():
         COMP = input_node()
 
         @calc_node
-        def out(self, COMP):
-            return COMP.x.a + 10
+        def out(self, comp):
+            return comp.x.a + 10
 
     inner = CompInner()
     inner.compute_all()

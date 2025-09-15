@@ -1,3 +1,5 @@
+"""Tests for visualization functionality in Loman computations."""
+
 import itertools
 from collections import namedtuple
 from itertools import tee
@@ -39,8 +41,8 @@ def edges_from_chain(chain_iter):
 def check_graph(g, expected_chains):
     expected_nodes = set()
     for chain in expected_chains:
-        for node in chain:
-            expected_nodes.add(node)
+        for node_name in chain:
+            expected_nodes.add(node_name)
 
     expected_edges = set()
     for chain in expected_chains:
