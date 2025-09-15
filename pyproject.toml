@@ -47,4 +47,4 @@ dev = [
 Homepage = "https://github.com/janusassetallocation/loman"
 
 [tool.hatch.build.targets.wheel]
-packages = ["loman"]
+packages = ["src/loman"]
