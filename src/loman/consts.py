@@ -1,3 +1,5 @@
+"""Constants and enumerations for the loman computation engine."""
+
 from enum import Enum
 
 

@@ -1,3 +1,5 @@
+"""Default transformer configuration for serialization."""
+
 from .transformer import NdArrayTransformer, Transformer
 
 

@@ -1,3 +1,5 @@
+"""Visualization tools for computation graphs using Graphviz."""
+
 import os
 import sys
 import tempfile

@@ -1,3 +1,5 @@
+"""Utility functions and classes for loman computation graphs."""
+
 import itertools
 import types
 

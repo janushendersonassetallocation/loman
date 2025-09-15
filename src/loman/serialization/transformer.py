@@ -1,3 +1,5 @@
+"""Object serialization and transformation framework."""
+
 import graphlib
 from abc import ABC, abstractmethod
 from collections.abc import Iterable

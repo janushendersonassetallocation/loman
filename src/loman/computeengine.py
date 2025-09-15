@@ -1,3 +1,5 @@
+"""Core computation engine for dependency-aware calculation graphs."""
+
 import inspect
 import logging
 import traceback

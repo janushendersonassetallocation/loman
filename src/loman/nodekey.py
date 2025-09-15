@@ -1,3 +1,5 @@
+"""Node key implementation for computation graph navigation."""
+
 import json
 import re
 from collections.abc import Iterable

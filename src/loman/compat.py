@@ -1,3 +1,5 @@
+"""Compatibility utilities for function signature inspection."""
+
 import inspect
 from dataclasses import dataclass, field
 

@@ -1,3 +1,6 @@
+"""Exception classes for the loman computation engine."""
+
+
 class ComputationException(Exception):
     pass
 

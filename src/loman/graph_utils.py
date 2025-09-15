@@ -1,3 +1,5 @@
+"""Graph utility functions for computation graph operations."""
+
 import functools
 
 from loman.util import apply_n
