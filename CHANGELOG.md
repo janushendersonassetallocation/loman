@@ -1,5 +1,8 @@
 # Change Log
 
+## [unreleased]
+- Added type hints on ComputationFactory
+
 ## [0.5.2] (TBD)
 
 - Added support for pattern matching in node transformations, including wildcard patterns
