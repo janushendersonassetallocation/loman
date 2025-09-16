@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, FIRST_COMPLETED, wait
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import List, Dict, Tuple, Any, Callable, Set, Union, Mapping, Optional, Iterable
+from typing import List, Dict, Tuple, Any, Callable, Set, Union, Mapping, Optional, Iterable, Type
 
 import decorator
 import dill
@@ -162,7 +162,7 @@ def populate_computation_from_class(comp, cls, obj, ignore_self=True):
             node_.add_to_comp(comp, name, obj, ignore_self)
 
 
-def ComputationFactory(maybe_cls=None, *, ignore_self=True):
+def ComputationFactory(maybe_cls=None, *, ignore_self=True) -> Type["Computation"]:
     def wrap(cls):
         def create_computation(*args, **kwargs):
             obj = cls()
