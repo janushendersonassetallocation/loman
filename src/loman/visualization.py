@@ -23,21 +23,28 @@ from .nodekey import Name, NodeKey, is_pattern, match_pattern, to_nodekey
 
 @dataclass
 class Node:
+    """Represents a node in the visualization graph."""
+
     nodekey: NodeKey
     original_nodekey: NodeKey
     data: dict
 
 
 class NodeFormatter(ABC):
+    """Abstract base class for node formatting in visualizations."""
+
     def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
         pass
 
     @abstractmethod
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format node appearance returning dict of graphviz attributes."""
         pass
 
     @staticmethod
     def create(cmap: dict | Colormap | None = None, colors: str = "state", shapes: str | None = None):
+        """Create a composite node formatter with specified color and shape options."""
         node_formatters = [StandardLabel(), StandardGroup()]
 
         if isinstance(shapes, str):
@@ -64,6 +71,8 @@ class NodeFormatter(ABC):
 
 
 class ColorByState(NodeFormatter):
+    """Node formatter that colors nodes based on their computation state."""
+
     DEFAULT_STATE_COLORS = {
         None: "#ffffff",  # xkcd white
         States.PLACEHOLDER: "#f97306",  # xkcd orange
@@ -76,11 +85,13 @@ class ColorByState(NodeFormatter):
     }
 
     def __init__(self, state_colors=None):
+        """Initialize with custom state color mapping."""
         if state_colors is None:
             state_colors = self.DEFAULT_STATE_COLORS.copy()
         self.state_colors = state_colors
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format node color based on computation state."""
         states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
         if len(nodes) == 1:
             state = states[0]
@@ -152,17 +163,24 @@ class ShapeByType(NodeFormatter):
 
 
 class RectBlocks(NodeFormatter):
+    """Node formatter that shapes composite nodes as rectangles."""
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Return rectangle shape for composite nodes."""
         if is_composite:
             return {"shape": "rect", "peripheries": 2}
 
 
 class StandardLabel(NodeFormatter):
+    """Node formatter that sets node labels."""
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Return standard label for node."""
         return {"label": name.label}
 
 
 def get_group_path(name: NodeKey, data: dict) -> NodeKey:
+    """Determine the group path for a node based on name hierarchy and group attribute."""
     name_group_path = name.parent
     attribute_group = data.get(NodeAttributes.GROUP)
     attribute_group_path = None if attribute_group is None else NodeKey((attribute_group,))
@@ -463,6 +481,7 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
 
 
 def create_root_graph(graph_attr, node_attr, edge_attr):
+    """Create root Graphviz graph with specified attributes."""
     root_graph = pydotplus.Dot()
     if graph_attr is not None:
         for k, v in graph_attr.items():
@@ -475,6 +494,7 @@ def create_root_graph(graph_attr, node_attr, edge_attr):
 
 
 def create_subgraph(group: NodeKey):
+    """Create a Graphviz subgraph for a node group."""
     c = pydotplus.Subgraph("cluster_" + str(group))
     c.obj_dict["attributes"]["label"] = str(group)
     return c

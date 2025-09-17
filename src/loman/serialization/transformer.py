@@ -36,11 +36,15 @@ class UnrecognizedTypeException(Exception):
 
 
 class MissingObject:
+    """Sentinel object representing missing or unset values."""
+
     def __repr__(self):
+        """Return string representation of missing object."""
         return "Missing"
 
 
 def order_classes(classes):
+    """Order classes by inheritance hierarchy using topological sort."""
     graph = {x: set() for x in classes}
     for x in classes:
         for y in classes:
@@ -51,41 +55,55 @@ def order_classes(classes):
 
 
 class CustomTransformer(ABC):
+    """Abstract base class for custom object transformers."""
+
     @property
     @abstractmethod
     def name(self) -> str:
+        """Return unique name identifier for this transformer."""
         pass
 
     @abstractmethod
     def to_dict(self, transformer: "Transformer", o: object) -> dict:
+        """Convert object to dictionary representation."""
         pass
 
     @abstractmethod
     def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        """Reconstruct object from dictionary representation."""
         pass
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
+        """Return types that this transformer handles directly."""
         return []
 
     @property
     def supported_subtypes(self) -> Iterable[type]:
+        """Return base types whose subtypes this transformer can handle."""
         return []
 
 
 class Transformable(ABC):
+    """Abstract base class for objects that can transform themselves."""
+
     @abstractmethod
     def to_dict(self, transformer: "Transformer") -> dict:
+        """Convert this object to dictionary representation."""
         pass
 
     @classmethod
     @abstractmethod
     def from_dict(cls, transformer: "Transformer", d: dict) -> object:
+        """Reconstruct object from dictionary representation."""
         pass
 
 
 class Transformer:
+    """Main transformer class for object serialization and deserialization."""
+
     def __init__(self, *, strict: bool = True):
+        """Initialize transformer with strict mode setting."""
         self.strict = strict
 
         self._direct_type_map = {}
@@ -286,17 +304,23 @@ class Transformer:
 
 
 class NdArrayTransformer(CustomTransformer):
+    """Transformer for NumPy ndarray objects."""
+
     @property
     def name(self):
+        """Return transformer name."""
         return "ndarray"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict:
+        """Convert numpy array to dictionary with shape, dtype, and data."""
         assert isinstance(o, np.ndarray)
         return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}
 
     def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        """Reconstruct numpy array from dictionary."""
         return np.array(transformer.from_dict(d["data"]), d["dtype"]).reshape(d["shape"])
 
     @property
     def supported_direct_types(self):
+        """Return supported numpy array types."""
         return [np.ndarray]
