@@ -569,9 +569,12 @@ class Computation:
     def delete_node(self, name):
         """Delete a node from a computation.
 
-        When nodes are explicitly deleted with ``delete_node``, but are still depended on by other nodes, then they will be set to PLACEHOLDER status. In this case, if the nodes that depend on a PLACEHOLDER node are deleted, then the PLACEHOLDER node will also be deleted.
+        When nodes are explicitly deleted with ``delete_node``, but are still depended on by other nodes, then they
+        will be set to PLACEHOLDER status. In this case, if the nodes that depend on a PLACEHOLDER node are deleted,
+        then the PLACEHOLDER node will also be deleted.
 
-        :param name: Name of the node to delete. If the node does not exist, a ``NonExistentNodeException`` will be raised.
+        :param name: Name of the node to delete. If the node does not exist, a ``NonExistentNodeException`` will
+            be raised.
         """
         node_key = to_nodekey(name)
         LOG.debug(f"Deleting node {node_key}")
@@ -596,7 +599,8 @@ class Computation:
     def rename_node(self, old_name: Name | Mapping[Name, Name], new_name: Name | None = None):
         """Rename a node in a computation.
 
-        :param old_name: Node to rename, or a dictionary of nodes to rename, with existing names as keys, and new names as values
+        :param old_name: Node to rename, or a dictionary of nodes to rename, with existing names as keys, and
+            new names as values
         :param new_name: New name for node.
         """
         if hasattr(old_name, "__getitem__") and not isinstance(old_name, str):
