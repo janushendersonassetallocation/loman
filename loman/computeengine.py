@@ -234,7 +234,7 @@ def identity_function(x):
 
 
 class Computation:
-    def __init__(self, *, default_executor=None, executor_map=None):
+    def __init__(self, *, default_executor=None, executor_map=None, metadata=None):
         """
 
         :param definition_class: A class with methods defining the nodes of the Computation
@@ -251,6 +251,10 @@ class Computation:
         else:
             self.executor_map = executor_map
         self.dag = nx.DiGraph()
+        self._metadata = {}
+        if metadata is not None:
+            self._metadata[NodeKey.root()] = metadata
+
         self.v = self.get_attribute_view_for_path(NodeKey.root(), self._value_one, self.value)
         self.s = self.get_attribute_view_for_path(NodeKey.root(), self._state_one, self.state)
         self.i = self.get_attribute_view_for_path(NodeKey.root(), self._get_inputs_one_names, self.get_inputs)
@@ -259,6 +263,7 @@ class Computation:
         self.style = self.get_attribute_view_for_path(NodeKey.root(), self._style_one, self.styles)
         self.tim = self.get_attribute_view_for_path(NodeKey.root(), self._get_timing_one, self.get_timing)
         self.x = self.get_attribute_view_for_path(NodeKey.root(), self.compute_and_get_value, self.compute_and_get_value)
+        self.src = self.get_attribute_view_for_path(NodeKey.root(), self.print_source, self.print_source)
         self._tag_map = defaultdict(set)
         self._state_map = {state: set() for state in States}
 
@@ -291,7 +296,7 @@ class Computation:
         return set(node_keys_to_names(self._tag_map[tag]))
 
     def add_node(self, name: Name, func=None, *, args=None, kwds=None, value=_MISSING_VALUE_SENTINEL, converter=None,
-                 serialize=True, inspect=True, group=None, tags=None, style=None, executor=None):
+                 serialize=True, inspect=True, group=None, tags=None, style=None, executor=None, metadata=None):
         """
         Adds or updates a node in a computation
 
@@ -329,6 +334,12 @@ class Computation:
         pred_edges = [(p, node_key) for p in self.dag.predecessors(node_key)]
         self.dag.remove_edges_from(pred_edges)
         node = self.dag.nodes[node_key]
+
+        if metadata is None:
+            if node_key in self._metadata:
+                del self._metadata[node_key]
+        else:
+            self._metadata[node_key] = metadata
 
         self._set_state_and_literal_value(node_key, States.UNINITIALIZED, None, require_old_state=False)
 
@@ -462,6 +473,15 @@ class Computation:
         """
         apply_n(self._clear_style_one, name)
 
+    def metadata(self, name):
+        node_key = to_nodekey(name)
+        if self.tree_has_path(name):
+            if node_key not in self._metadata:
+                self._metadata[node_key] = {}
+            return self._metadata[node_key]
+        else:
+            raise NonExistentNodeException(f'Node {node_key} does not exist.')
+
     def delete_node(self, name):
         """
         Delete a node from a computation
@@ -475,6 +495,9 @@ class Computation:
 
         if not self.dag.has_node(node_key):
             raise NonExistentNodeException(f'Node {node_key} does not exist')
+
+        if node_key in self._metadata:
+            del self._metadata[node_key]
 
         if len(self.dag.succ[node_key]) == 0:
             preds = self.dag.predecessors(node_key)
@@ -512,6 +535,14 @@ class Computation:
 
         node_key_mapping = {to_nodekey(old_name): to_nodekey(new_name) for old_name, new_name in name_mapping.items()}
         nx.relabel_nodes(self.dag, node_key_mapping, copy=False)
+
+        for old_node_key, new_node_key in node_key_mapping.items():
+            if old_node_key in self._metadata:
+                self._metadata[new_node_key] = self._metadata[old_node_key]
+                del self._metadata[old_node_key]
+            else:
+                if new_node_key in self._metadata:
+                    del self._metadata[new_node_key]
 
         self._refresh_maps()
 
@@ -951,6 +982,8 @@ class Computation:
 
     def tree_has_path(self, name: Name):
         node_key = to_nodekey(name)
+        if node_key.is_root:
+            return True
         if self.has_node(node_key):
             return True
         for n in self.dag.nodes:
@@ -1090,7 +1123,7 @@ class Computation:
     def _style_one(self, name: Name):
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
-        return node[NodeAttributes.STYLE]
+        return node.get(NodeAttributes.STYLE)
 
     def styles(self, name: Union[Name, Names]):
         """
@@ -1277,6 +1310,23 @@ class Computation:
         output_node_keys = [n for n in node_keys if len(nx.descendants(self.dag, n))==0]
         return node_keys_to_names(output_node_keys)
 
+    def get_source(self, name: Name) -> str:
+        """
+        Get the source code for a node
+        """
+        node_key = to_nodekey(name)
+        func = self.dag.nodes[node_key].get(NodeAttributes.FUNC, None)
+        if func is not None:
+            file = inspect.getsourcefile(func)
+            _, lineno = inspect.getsourcelines(func)
+            source = inspect.getsource(func)
+            return f"{file}:{lineno}\n\n{source}"
+        else:
+            return "NOT A CALCULATED NODE"
+
+    def print_source(self, name: Name):
+        print(self.get_source(name))
+
     def restrict(self, output_names: Union[Name, Names], input_names: Optional[Union[Name, Names]] = None):
         """
         Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input nodes
@@ -1454,7 +1504,7 @@ class Computation:
         path = to_nodekey(path)
         return prefix_path.join(path)
 
-    def add_block(self, base_path: Name, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None):
+    def add_block(self, base_path: Name, block: 'Computation', *, keep_values: Optional[bool] = True, links: Optional[dict] = None, metadata: Optional[dict] = None):
         base_path = to_nodekey(base_path)
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
@@ -1476,13 +1526,23 @@ class Computation:
         if links is not None:
             for target, source in links.items():
                 self.link(base_path.join_parts(target), source)
+        if metadata is not None:
+            self._metadata[base_path] = metadata
+        else:
+            if base_path in self._metadata:
+                del self._metadata[base_path]
 
     def link(self, target: Name, source: Name):
         target = to_nodekey(target)
         source = to_nodekey(source)
         if target == source:
             return
-        self.add_node(target, identity_function, kwds={'x': source})
+
+        target_style = self._style_one(target) if self.has_node(target) else None
+        source_style = self._style_one(source) if self.has_node(source) else None
+        style = target_style if target_style else source_style
+
+        self.add_node(target, identity_function, kwds={'x': source}, style=style)
 
     def _repr_svg_(self):
         return GraphView(self).svg()

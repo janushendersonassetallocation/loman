@@ -1221,3 +1221,16 @@ def test_insert_fails_for_placeholder():
     comp.add_node('b', lambda a: a + 1)
     with pytest.raises(CannotInsertToPlaceholderNodeException):
         comp.insert('a', value=1)
+
+
+def test_get_source():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    @node(comp)
+    def b(a):
+        return a + 1
+
+    src = comp.get_source('b')
+    src_lines = [line.strip() for line in src.split('\n')]
+    assert src_lines[1:] == ['', '@node(comp)', 'def b(a):', 'return a + 1', '']
