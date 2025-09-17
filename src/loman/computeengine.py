@@ -392,9 +392,11 @@ class Computation:
         :type kwds: Dictionary, default None
         :param value: If given, the value is inserted into the node, and the node state set to UPTODATE.
         :type value: default None
-        :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which case, set serialize to False
+        :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which
+            case, set serialize to False
         :type serialize: boolean, default True
-        :param inspect: Whether to use introspection to determine the arguments of the function, which can be slow. If this is not set, kwds and args must be set for the function to obtain parameters.
+        :param inspect: Whether to use introspection to determine the arguments of the function, which can be
+            slow. If this is not set, kwds and args must be set for the function to obtain parameters.
         :type inspect: boolean, default True
         :param group: Subgraph to render node in
         :type group: default None
