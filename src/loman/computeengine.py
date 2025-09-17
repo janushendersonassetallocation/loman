@@ -37,18 +37,24 @@ LOG = logging.getLogger("loman.computeengine")
 
 @dataclass
 class Error:
+    """Container for error information during computation."""
+
     exception: Exception
     traceback: inspect.Traceback
 
 
 @dataclass
 class NodeData:
+    """Data associated with a computation node."""
+
     state: States
     value: object
 
 
 @dataclass
 class TimingData:
+    """Timing information for computation execution."""
+
     start: datetime
     end: datetime
     duration: float
@@ -83,6 +89,8 @@ def node(comp, name=None, *args, **kw):
 
 @dataclass()
 class ConstantValue:
+    """Container for constant values in computations."""
+
     value: object
 
 
@@ -90,6 +98,8 @@ C = ConstantValue
 
 
 class Node:
+    """Base class for computation graph nodes."""
+
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool):
         raise NotImplementedError()
 

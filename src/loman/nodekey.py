@@ -13,10 +13,13 @@ Names = list[Name]
 
 
 class PathNotFound(Exception):
+    """Exception raised when a node path cannot be found."""
+
     pass
 
 
 def quote_part(part: object) -> str:
+    """Quote a node key part for safe representation in paths."""
     if isinstance(part, str):
         if "/" in part:
             return json.dumps(part)

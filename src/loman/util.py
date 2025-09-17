@@ -7,6 +7,7 @@ import pandas as pd
 
 
 def apply1(f, xs, *args, **kwds):
+    """Apply function f to xs, handling generators, lists, and single values."""
     if isinstance(xs, types.GeneratorType):
         return (f(x, *args, **kwds) for x in xs)
     if isinstance(xs, list):
@@ -15,18 +16,23 @@ def apply1(f, xs, *args, **kwds):
 
 
 def as_iterable(xs):
+    """Convert input to iterable form if not already iterable."""
     if isinstance(xs, (types.GeneratorType, list, set)):
         return xs
     return (xs,)
 
 
 def apply_n(f, *xs, **kwds):
+    """Apply function f to the cartesian product of iterables xs."""
     for p in itertools.product(*[as_iterable(x) for x in xs]):
         f(*p, **kwds)
 
 
 class AttributeView:
+    """Provides attribute-style access to dynamic collections."""
+
     def __init__(self, get_attribute_list, get_attribute, get_item=None):
+        """Initialize with functions to get attribute list and individual attributes."""
         self.get_attribute_list = get_attribute_list
         self.get_attribute = get_attribute
         self.get_item = get_item
@@ -59,6 +65,7 @@ class AttributeView:
 
     @staticmethod
     def from_dict(d, use_apply1=True):
+        """Create an AttributeView from a dictionary."""
         if use_apply1:
 
             def get_attribute(xs):
@@ -72,6 +79,7 @@ pandas_types = (pd.Series, pd.DataFrame)
 
 
 def value_eq(a, b):
+    """Compare two values for equality, handling pandas objects specially."""
     if a is b:
         return True
     if isinstance(a, pandas_types):

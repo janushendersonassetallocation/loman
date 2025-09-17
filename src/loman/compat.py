@@ -13,6 +13,7 @@ class _Signature:
 
 
 def get_signature(func):
+    """Extract function signature information for compatibility purposes."""
     sig = inspect.signature(func)
     pk = inspect._ParameterKind
     has_var_args = False

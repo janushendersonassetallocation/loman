@@ -2,26 +2,38 @@
 
 
 class ComputationException(Exception):
+    """Base exception for computation-related errors."""
+
     pass
 
 
 class MapException(ComputationException):
+    """Exception raised during map operations with partial results."""
+
     def __init__(self, message, results):
         super().__init__(message)
         self.results = results
 
 
 class LoopDetectedException(ComputationException):
+    """Exception raised when a dependency loop is detected."""
+
     pass
 
 
 class NonExistentNodeException(ComputationException):
+    """Exception raised when trying to access a non-existent node."""
+
     pass
 
 
 class NodeAlreadyExistsException(ComputationException):
+    """Exception raised when trying to create a node that already exists."""
+
     pass
 
 
 class CannotInsertToPlaceholderNodeException(ComputationException):
+    """Exception raised when trying to insert into a placeholder node."""
+
     pass
