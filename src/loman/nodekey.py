@@ -30,13 +30,17 @@ def quote_part(part: object) -> str:
 
 @dataclass(frozen=True, repr=False)
 class NodeKey:
+    """Immutable key for identifying nodes in the computation graph hierarchy."""
+
     parts: tuple
 
     def __str__(self):
+        """Return string representation using path notation."""
         return "/".join([quote_part(part) for part in self.parts])
 
     @property
     def name(self) -> Name:
+        """Get the name of this node (last part of the path)."""
         if len(self.parts) == 0:
             return ""
         elif len(self.parts) == 1:
@@ -48,11 +52,13 @@ class NodeKey:
 
     @property
     def label(self) -> str:
+        """Get the label for this node (for display purposes)."""
         if len(self.parts) == 0:
             return ""
         return str(self.parts[-1])
 
     def drop_root(self, root: Optional["Name"]) -> Optional["NodeKey"]:
+        """Remove a root prefix from this node key if it matches."""
         if root is None:
             return self
         root = to_nodekey(root)
@@ -138,10 +144,12 @@ class NodeKey:
 
 
 def names_to_node_keys(names: Name | Names) -> list[NodeKey]:
+    """Convert names to NodeKey objects."""
     return [to_nodekey(name) for name in as_iterable(names)]
 
 
 def node_keys_to_names(node_keys: Iterable[NodeKey]) -> list[Name]:
+    """Convert NodeKey objects back to names."""
     return [node_key.name for node_key in node_keys]
 
 

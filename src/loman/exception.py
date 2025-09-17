@@ -11,6 +11,7 @@ class MapException(ComputationException):
     """Exception raised during map operations with partial results."""
 
     def __init__(self, message, results):
+        """Initialize MapException with message and partial results."""
         super().__init__(message)
         self.results = results
 

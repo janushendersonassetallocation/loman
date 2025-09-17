@@ -16,6 +16,8 @@ class States(Enum):
 
 
 class NodeAttributes:
+    """Constants for node attribute names in the computation graph."""
+
     VALUE = "value"
     STATE = "state"
     FUNC = "func"
@@ -30,15 +32,21 @@ class NodeAttributes:
 
 
 class EdgeAttributes:
+    """Constants for edge attribute names in the computation graph."""
+
     PARAM = "param"
 
 
 class SystemTags:
+    """System-level tags used internally by loman."""
+
     SERIALIZE = "__serialize__"
     EXPANSION = "__expansion__"
 
 
 class NodeTransformations:
+    """Node transformation types for visualization."""
+
     CONTRACT = "contract"
     COLLAPSE = "collapse"
     EXPAND = "expand"

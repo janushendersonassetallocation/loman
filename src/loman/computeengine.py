@@ -114,6 +114,7 @@ class InputNode(Node):
         self.kwds = kwds
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool):
+        """Add this input node to the computation graph."""
         comp.add_node(name, **self.kwds)
 
 
@@ -126,6 +127,7 @@ class CalcNode(Node):
     kwds: dict = field(default_factory=dict)
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool):
+        """Add this calculation node to the computation graph."""
         kwds = self.kwds.copy()
         ignore_self = ignore_self or kwds.get("ignore_self", False)
         f = self.f
@@ -1001,10 +1003,12 @@ class Computation:
         return result
 
     def has_node(self, name: Name):
+        """Check if a node with the given name exists in the computation."""
         node_key = to_nodekey(name)
         return node_key in self.dag.nodes
 
     def tree_has_path(self, name: Name):
+        """Check if a hierarchical path exists in the computation tree."""
         node_key = to_nodekey(name)
         if node_key.is_root:
             return True
@@ -1259,6 +1263,7 @@ class Computation:
         return ancestors
 
     def get_ancestors(self, names: Name | Names, include_self=True) -> Names:
+        """Get all ancestor nodes of the specified nodes."""
         node_keys = names_to_node_keys(names)
         ancestor_node_keys = self._get_ancestors_node_keys(node_keys, include_self)
         return node_keys_to_names(ancestor_node_keys)
@@ -1309,11 +1314,13 @@ class Computation:
         return ancestor_node_keys
 
     def get_descendents(self, names: Name | Names, include_self: bool = True) -> Names:
+        """Get all descendent nodes of the specified nodes."""
         node_keys = names_to_node_keys(names)
         descendent_node_keys = self._get_descendents_node_keys(node_keys, include_self)
         return node_keys_to_names(descendent_node_keys)
 
     def get_final_outputs(self, names: Name | Names | None = None):
+        """Get final output nodes (nodes with no descendants) from the specified nodes."""
         if names is None:
             node_keys = self._node_keys()
         else:
@@ -1335,6 +1342,7 @@ class Computation:
             return "NOT A CALCULATED NODE"
 
     def print_source(self, name: Name):
+        """Print the source code for a computation node."""
         print(self.get_source(name))
 
     def restrict(self, output_names: Name | Names, input_names: Name | Names | None = None):
@@ -1507,6 +1515,7 @@ class Computation:
         self.add_node(result_node, f, kwds={"xs": input_node})
 
     def prepend_path(self, path, prefix_path: NodeKey):
+        """Prepend a prefix path to a node path."""
         if isinstance(path, ConstantValue):
             return path
         path = to_nodekey(path)
