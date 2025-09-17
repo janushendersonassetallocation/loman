@@ -32,7 +32,13 @@ class AttributeView:
     """Provides attribute-style access to dynamic collections."""
 
     def __init__(self, get_attribute_list, get_attribute, get_item=None):
-        """Initialize with functions to get attribute list and individual attributes."""
+        """Initialize with functions to get attribute list and individual attributes.
+
+        Args:
+            get_attribute_list: Function that returns list of available attributes
+            get_attribute: Function that takes an attribute name and returns its value
+            get_item: Optional function for item access, defaults to get_attribute
+        """
         self.get_attribute_list = get_attribute_list
         self.get_attribute = get_attribute
         self.get_item = get_item
@@ -40,18 +46,22 @@ class AttributeView:
             self.get_item = get_attribute
 
     def __dir__(self):
+        """Return list of available attributes."""
         return self.get_attribute_list()
 
     def __getattr__(self, attr):
+        """Get attribute by name, raising AttributeError if not found."""
         try:
             return self.get_attribute(attr)
         except KeyError:
             raise AttributeError(attr)
 
     def __getitem__(self, key):
+        """Get item by key."""
         return self.get_item(key)
 
     def __getstate__(self):
+        """Prepare object for serialization."""
         return {
             "get_attribute_list": self.get_attribute_list,
             "get_attribute": self.get_attribute,
@@ -59,9 +69,12 @@ class AttributeView:
         }
 
     def __setstate__(self, state):
+        """Restore object from serialized state."""
         self.get_attribute_list = state["get_attribute_list"]
         self.get_attribute = state["get_attribute"]
         self.get_item = state["get_item"]
+        if self.get_item is None:
+            self.get_item = self.get_attribute
 
     @staticmethod
     def from_dict(d, use_apply1=True):

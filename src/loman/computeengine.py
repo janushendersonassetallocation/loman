@@ -77,6 +77,8 @@ def _node(func, *args, **kws):
 
 
 def node(comp, name=None, *args, **kw):
+    """Decorator to add a function as a node to a computation graph."""
+
     def inner(f):
         if name is None:
             comp.add_node(f.__name__, f, *args, **kw)
@@ -101,15 +103,19 @@ class Node:
     """Base class for computation graph nodes."""
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool):
+        """Add this node to the computation graph."""
         raise NotImplementedError()
 
 
 @dataclass
 class InputNode(Node):
+    """A node representing input data in the computation graph."""
+
     args: tuple[Any, ...] = field(default_factory=tuple)
     kwds: dict = field(default_factory=dict)
 
     def __init__(self, *args, **kwds):
+        """Initialize an input node with arguments and keyword arguments."""
         self.args = args
         self.kwds = kwds
 
@@ -123,6 +129,8 @@ input_node = InputNode
 
 @dataclass
 class CalcNode(Node):
+    """A node representing a calculation in the computation graph."""
+
     f: Callable
     kwds: dict = field(default_factory=dict)
 
@@ -141,6 +149,8 @@ class CalcNode(Node):
 
 
 def calc_node(f=None, **kwds):
+    """Decorator to mark a function as a calculation node."""
+
     def wrap(func):
         func._loman_node_info = CalcNode(func, kwds)
         return func
@@ -152,16 +162,20 @@ def calc_node(f=None, **kwds):
 
 @dataclass
 class Block(Node):
+    """A node representing a computational block or subgraph."""
+
     block: Union[Callable, "Computation"]
     args: tuple[Any, ...] = field(default_factory=tuple)
     kwds: dict = field(default_factory=dict)
 
     def __init__(self, block, *args, **kwds):
+        """Initialize a block node with a computation block and arguments."""
         self.block = block
         self.args = args
         self.kwds = kwds
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool):
+        """Add this block node to the computation graph."""
         if isinstance(self.block, Computation):
             comp.add_block(name, self.block, *self.args, **self.kwds)
         elif callable(self.block):
@@ -175,6 +189,7 @@ block = Block
 
 
 def populate_computation_from_class(comp, cls, obj, ignore_self=True):
+    """Populate a computation from class methods with node decorators."""
     for name, member in inspect.getmembers(cls):
         node_ = None
         if isinstance(member, Node):
@@ -186,6 +201,8 @@ def populate_computation_from_class(comp, cls, obj, ignore_self=True):
 
 
 def ComputationFactory(maybe_cls=None, *, ignore_self=True):
+    """Factory function to create computations from class definitions."""
+
     def wrap(cls):
         def create_computation(*args, **kwargs):
             obj = cls()
@@ -224,43 +241,60 @@ _MISSING_VALUE_SENTINEL = object()
 
 
 class NullObject:
+    """Debug helper object that raises exceptions for all attribute/item access."""
+
     def __getattr__(self, name):
+        """Raise AttributeError for any attribute access."""
         print(f"__getattr__: {name}")
         raise AttributeError(f"'NullObject' object has no attribute '{name}'")
 
     def __setattr__(self, name, value):
+        """Raise AttributeError for any attribute assignment."""
         print(f"__setattr__: {name}")
         raise AttributeError(f"'NullObject' object has no attribute '{name}'")
 
     def __delattr__(self, name):
+        """Raise AttributeError for any attribute deletion."""
         print(f"__delattr__: {name}")
         raise AttributeError(f"'NullObject' object has no attribute '{name}'")
 
     def __call__(self, *args, **kwargs):
+        """Raise TypeError when called as a function."""
         print(f"__call__: {args}, {kwargs}")
         raise TypeError("'NullObject' object is not callable")
 
     def __getitem__(self, key):
+        """Raise KeyError for any item access."""
         print(f"__getitem__: {key}")
         raise KeyError(f"'NullObject' object has no item with key '{key}'")
 
     def __setitem__(self, key, value):
+        """Raise KeyError for any item assignment."""
         print(f"__setitem__: {key}")
         raise KeyError(f"'NullObject' object cannot have items set with key '{key}'")
 
     def __repr__(self):
+        """Return string representation of NullObject."""
         print(f"__repr__: {self.__dict__}")
         return "<NullObject>"
 
 
 def identity_function(x):
+    """Return the input value unchanged."""
     return x
 
 
 class Computation:
+    """A computation graph that manages dependencies and calculations.
+
+    The Computation class provides a framework for building and executing
+    computation graphs where nodes represent data or calculations, and edges
+    represent dependencies between them.
+    """
+
     def __init__(self, *, default_executor=None, executor_map=None, metadata=None):
-        """:param definition_class: A class with methods defining the nodes of the Computation
-        :type definition_class: type
+        """Initialize a new Computation.
+
         :param default_executor: An executor
         :type default_executor: concurrent.futures.Executor, default ThreadPoolExecutor(max_workers=1)
         """
@@ -292,6 +326,8 @@ class Computation:
         self._state_map = {state: set() for state in States}
 
     def get_attribute_view_for_path(self, nodekey: NodeKey, get_one_func: callable, get_many_func: callable):
+        """Create an attribute view for a specific node path."""
+
         def node_func():
             return self.get_tree_list_children(nodekey)
 
@@ -510,6 +546,7 @@ class Computation:
         apply_n(self._clear_style_one, name)
 
     def metadata(self, name):
+        """Get metadata for a node."""
         node_key = to_nodekey(name)
         if self.tree_has_path(name):
             if node_key not in self._metadata:
@@ -846,6 +883,7 @@ class Computation:
         return f, executor_name, args, kwds
 
     def get_definition_args_kwds(self, name: Name) -> tuple[list, dict]:
+        """Get the arguments and keyword arguments for a node's function definition."""
         res_args = []
         res_kwds = {}
         node_key = to_nodekey(name)
@@ -1364,6 +1402,7 @@ class Computation:
         self.dag.remove_nodes_from([n for n in self.dag if n not in ancestor_node_keys])
 
     def __getstate__(self):
+        """Prepare computation for serialization by removing non-serializable nodes."""
         node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
         obj = self.copy()
         for name, tags in node_serialize.items():
@@ -1372,6 +1411,7 @@ class Computation:
         return {"dag": obj.dag}
 
     def __setstate__(self, state):
+        """Restore computation from serialized state."""
         self.__init__()
         self.dag = state["dag"]
         self._refresh_maps()
@@ -1530,6 +1570,7 @@ class Computation:
         links: dict | None = None,
         metadata: dict | None = None,
     ):
+        """Add a computation block as a subgraph to this computation."""
         base_path = to_nodekey(base_path)
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
@@ -1572,6 +1613,7 @@ class Computation:
                 del self._metadata[base_path]
 
     def link(self, target: Name, source: Name):
+        """Create a link between two nodes in the computation graph."""
         target = to_nodekey(target)
         source = to_nodekey(source)
         if target == source:
@@ -1629,6 +1671,7 @@ class Computation:
         return v
 
     def view(self, cmap=None, colors="state", shapes=None):
+        """Create and display a visualization of the computation graph."""
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
         v = GraphView(self, node_formatter=node_formatter)
         v.view()
@@ -1645,6 +1688,7 @@ class Computation:
 
     @classmethod
     def from_class(cls, definition_class, ignore_self=True):
+        """Create a computation from a class with decorated methods."""
         comp = cls()
         obj = definition_class()
         populate_computation_from_class(comp, definition_class, obj, ignore_self=ignore_self)

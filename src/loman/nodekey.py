@@ -70,6 +70,7 @@ class NodeKey:
             return None
 
     def join(self, *others: Name) -> "NodeKey":
+        """Join this node key with other names to create a new node key."""
         result = self
         for other in others:
             if other is None:
@@ -79,30 +80,36 @@ class NodeKey:
         return result
 
     def join_parts(self, *parts) -> "NodeKey":
+        """Join this node key with raw parts to create a new node key."""
         if len(parts) == 0:
             return self
         return NodeKey(self.parts + tuple(parts))
 
     def is_descendent_of(self, other: "NodeKey") -> bool:
+        """Check if this node key is a descendant of another node key."""
         n_self_parts = len(self.parts)
         n_other_parts = len(other.parts)
         return n_self_parts > n_other_parts and self.parts[:n_other_parts] == other.parts
 
     @property
     def parent(self) -> "NodeKey":
+        """Get the parent node key."""
         if len(self.parts) == 0:
             raise PathNotFound()
         return NodeKey(self.parts[:-1])
 
     def prepend(self, nk: "NodeKey") -> "NodeKey":
+        """Prepend another node key to this one."""
         return nk.join_parts(*self.parts)
 
     def __repr__(self) -> str:
+        """Return string representation for debugging."""
         path_str = str(self)
         quoted_path_str = repr(path_str)
         return f"{self.__class__.__name__}({quoted_path_str})"
 
     def __eq__(self, other) -> bool:
+        """Check equality with another NodeKey."""
         if other is None:
             return False
         if not isinstance(other, NodeKey):
@@ -113,16 +120,19 @@ class NodeKey:
 
     @classmethod
     def root(cls) -> "NodeKey":
+        """Get the root node key."""
         if cls._ROOT is None:
             cls._ROOT = cls(())
         return cls._ROOT
 
     @property
     def is_root(self):
+        """Check if this is the root node key."""
         return len(self.parts) == 0
 
     @staticmethod
     def common_parent(nodekey1: Name, nodekey2: Name):
+        """Find the common parent of two node keys."""
         nodekey1 = to_nodekey(nodekey1)
         nodekey2 = to_nodekey(nodekey2)
         parts = []
@@ -133,6 +143,7 @@ class NodeKey:
         return NodeKey(tuple(parts))
 
     def ancestors(self) -> list["NodeKey"]:
+        """Get all ancestor node keys from root to parent."""
         result = []
         x = self
         while True:
@@ -185,10 +196,12 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
 
 
 def parse_nodekey(path_str: str) -> NodeKey:
+    """Parse a string representation into a NodeKey."""
     return _parse_nodekey(path_str, 0)
 
 
 def to_nodekey(name: Name) -> NodeKey:
+    """Convert a name to a NodeKey object."""
     if isinstance(name, str):
         return parse_nodekey(name)
     elif isinstance(name, NodeKey):
@@ -200,6 +213,7 @@ def to_nodekey(name: Name) -> NodeKey:
 
 
 def nodekey_join(*names: Name) -> NodeKey:
+    """Join multiple names into a single NodeKey."""
     return NodeKey.root().join(*names)
 
 
@@ -235,6 +249,7 @@ def _match_pattern_recursive(pattern: NodeKey, target: NodeKey, p_idx: int, t_id
 
 
 def is_pattern(nodekey: NodeKey) -> bool:
+    """Check if a node key contains wildcard patterns."""
     return any("*" in part or "**" in part for part in nodekey.parts)
 
 

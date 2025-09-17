@@ -110,7 +110,10 @@ class ColorByState(NodeFormatter):
 
 
 class ColorByTiming(NodeFormatter):
+    """Node formatter that colors nodes based on their execution timing."""
+
     def __init__(self, cmap: Colormap | None = None):
+        """Initialize with an optional colormap for timing visualization."""
         if cmap is None:
             cmap = mpl.colors.LinearSegmentedColormap.from_list("blend", ["#15b01a", "#ffff14", "#e50000"])
         self.cmap = cmap
@@ -118,6 +121,7 @@ class ColorByTiming(NodeFormatter):
         self.max_duration = np.nan
 
     def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate the color mapping based on node timing data."""
         durations = []
         for node in nodes:
             timing = node.data.get(NodeAttributes.TIMING)
@@ -127,6 +131,7 @@ class ColorByTiming(NodeFormatter):
         self.min_duration = min(durations)
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format a node with timing-based coloring."""
         if len(nodes) == 1:
             data = nodes[0].data
             timing_data = data.get(NodeAttributes.TIMING)
@@ -140,7 +145,10 @@ class ColorByTiming(NodeFormatter):
 
 
 class ShapeByType(NodeFormatter):
+    """Node formatter that sets node shapes based on their type."""
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format a node with type-based shape styling."""
         if len(nodes) == 1:
             data = nodes[0].data
             value = data.get(NodeAttributes.VALUE)
@@ -190,7 +198,10 @@ def get_group_path(name: NodeKey, data: dict) -> NodeKey:
 
 
 class StandardGroup(NodeFormatter):
+    """Node formatter that applies standard grouping styles."""
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format a node with standard group styling."""
         if len(nodes) == 1:
             data = nodes[0].data
             group_path = get_group_path(name, data)
@@ -202,7 +213,10 @@ class StandardGroup(NodeFormatter):
 
 
 class StandardStylingOverrides(NodeFormatter):
+    """Node formatter that applies standard styling overrides."""
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format a node with standard styling overrides."""
         if len(nodes) == 1:
             data = nodes[0].data
             style = data.get(NodeAttributes.STYLE)
@@ -233,6 +247,8 @@ class CompositeNodeFormatter(NodeFormatter):
 
 @dataclass
 class GraphView:
+    """A view for visualizing computation graphs as graphical diagrams."""
+
     computation: "loman.Computation"
     root: Name | None = None
     node_formatter: NodeFormatter | None = None
@@ -248,6 +264,7 @@ class GraphView:
     viz_dot: pydotplus.Dot | None = None
 
     def __post_init__(self):
+        """Initialize the graph view after dataclass construction."""
         self.refresh()
 
     @staticmethod

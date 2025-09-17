@@ -28,10 +28,14 @@ TYPENAME_DATACLASS = "dataclass"
 
 
 class UntransformableTypeException(Exception):
+    """Exception raised when a type cannot be transformed for serialization."""
+
     pass
 
 
 class UnrecognizedTypeException(Exception):
+    """Exception raised when a type is not recognized during transformation."""
+
     pass
 
 
@@ -115,6 +119,7 @@ class Transformer:
         self._dataclass_types = {}
 
     def register(self, t: CustomTransformer | type[Transformable] | type):
+        """Register a transformer, transformable type, or regular type."""
         if isinstance(t, CustomTransformer):
             self.register_transformer(t)
         elif issubclass(t, Transformable):
@@ -127,6 +132,7 @@ class Transformer:
             raise ValueError(f"Unable to register {t}")
 
     def register_transformer(self, transformer: CustomTransformer):
+        """Register a custom transformer for specific types."""
         assert transformer.name not in self._transformers
         for type_ in transformer.supported_direct_types:
             assert type_ not in self._direct_type_map
