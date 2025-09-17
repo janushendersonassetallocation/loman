@@ -1234,3 +1234,30 @@ def test_get_source():
     src = comp.get_source('b')
     src_lines = [line.strip() for line in src.split('\n')]
     assert src_lines[1:] == ['', '@node(comp)', 'def b(a):', 'return a + 1', '']
+
+def test_compute_and_get_value_raises_error_and_sets_state():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    @node(comp)
+    def b(a):
+        """Will error"""
+        return a / 0
+    with pytest.raises(ZeroDivisionError):
+        b = comp.compute_and_get_value("b")
+
+    assert comp.state("b") == States.ERROR
+
+def test_view_x_raises_error_and_sets_state():
+    comp = Computation()
+    comp.add_node('a', value=1)
+
+    @node(comp)
+    def b(a):
+        """Will error"""
+        return a / 0
+
+    with pytest.raises(ZeroDivisionError):
+        b = comp.x.b
+
+    assert comp.s.b == States.ERROR

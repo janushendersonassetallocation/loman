@@ -1083,9 +1083,12 @@ class Computation:
         name = to_nodekey(name)
         if self.state(name) == States.UPTODATE:
             return self.value(name)
-        self.compute(name, raise_exceptions=True)
+        self.compute(name, raise_exceptions=False)
         if self.state(name) == States.UPTODATE:
             return self.value(name)
+        elif self.state(name) == States.ERROR:
+            exc = self.value(name).exception
+            raise exc
         raise ComputationException(f"Unable to compute node {name}")
 
     def _tag_one(self, name: Name):
