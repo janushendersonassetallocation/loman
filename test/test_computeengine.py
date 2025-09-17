@@ -10,7 +10,7 @@ from collections import namedtuple
 import random
 import pytest
 
-from loman.computeengine import NodeData, NodeKey
+from loman.computeengine import NodeData, NodeKey, ComputationException
 from loman.nodekey import to_nodekey
 
 
@@ -710,8 +710,15 @@ def test_view_x_exception():
     assert comp.s.d == States.UNINITIALIZED
 
     comp.insert("a", 10)
+
     with pytest.raises(ZeroDivisionError):
+        assert comp.x.c
+
+    with pytest.raises(ComputationException):
         assert comp.x.d == 31
+
+    assert comp.s.c == States.ERROR
+    assert comp.s.d == States.STALE
 
 
 def test_delete_nonexistent_causes_exception():
