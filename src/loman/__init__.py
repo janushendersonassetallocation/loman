@@ -6,7 +6,10 @@ where nodes represent data or calculations, and edges represent dependencies.
 
 import loman.util as util
 import loman.visualization as viz
-from loman.computeengine import C, Computation, ComputationFactory, block, calc_node, input_node, node
+from loman.computeengine import C, Computation, computation_factory, block, calc_node, input_node, node
+
+# Backward compatibility alias
+ComputationFactory = computation_factory
 from loman.consts import NodeTransformations, States
 from loman.exception import (
     CannotInsertToPlaceholderNodeException,
@@ -22,7 +25,8 @@ __all__ = [
     "viz",
     "C",
     "Computation",
-    "ComputationFactory",
+    "computation_factory",
+    "ComputationFactory",  # Backward compatibility
     "block",
     "calc_node",
     "input_node",

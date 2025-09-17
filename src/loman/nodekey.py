@@ -12,7 +12,7 @@ Name = Union[str, "NodeKey", object]
 Names = list[Name]
 
 
-class PathNotFound(Exception):
+class PathNotFoundError(Exception):
     """Exception raised when a node path cannot be found."""
 
     pass
@@ -95,7 +95,7 @@ class NodeKey:
     def parent(self) -> "NodeKey":
         """Get the parent node key."""
         if len(self.parts) == 0:
-            raise PathNotFound()
+            raise PathNotFoundError()
         return NodeKey(self.parts[:-1])
 
     def prepend(self, nk: "NodeKey") -> "NodeKey":

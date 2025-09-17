@@ -22,7 +22,7 @@ from .compat import get_signature
 from .consts import EdgeAttributes, NodeAttributes, NodeTransformations, States, SystemTags
 from .exception import (
     CannotInsertToPlaceholderNodeException,
-    ComputationException,
+    ComputationError,
     LoopDetectedException,
     MapException,
     NodeAlreadyExistsException,
@@ -200,7 +200,7 @@ def populate_computation_from_class(comp, cls, obj, ignore_self=True):
             node_.add_to_comp(comp, name, obj, ignore_self)
 
 
-def ComputationFactory(maybe_cls=None, *, ignore_self=True):
+def computation_factory(maybe_cls=None, *, ignore_self=True):
     """Factory function to create computations from class definitions."""
 
     def wrap(cls):
@@ -671,7 +671,8 @@ class Computation:
 
         Following insertation, the node will have state UPTODATE, and all its descendents will be COMPUTABLE or STALE.
 
-        If an attempt is made to insert a value into a node that does not exist, a ``NonExistentNodeException`` will be raised.
+        If an attempt is made to insert a value into a node that does not exist, a ``NonExistentNodeException``
+        will be raised.
 
         :param name: Name of the node to add.
         :param value: The value to be inserted into the node.
@@ -703,11 +704,15 @@ class Computation:
     def insert_many(self, name_value_pairs: Iterable[tuple[Name, object]]):
         """Insert values into many nodes of a computation simultaneously.
 
-        Following insertation, the nodes will have state UPTODATE, and all their descendents will be COMPUTABLE or STALE. In the case of inserting many nodes, some of which are descendents of others, this ensures that the inserted nodes have correct status, rather than being set as STALE when their ancestors are inserted.
+        Following insertation, the nodes will have state UPTODATE, and all their descendents will be COMPUTABLE
+        or STALE. In the case of inserting many nodes, some of which are descendents of others, this ensures that
+        the inserted nodes have correct status, rather than being set as STALE when their ancestors are inserted.
 
-        If an attempt is made to insert a value into a node that does not exist, a ``NonExistentNodeException`` will be raised, and none of the nodes will be inserted.
+        If an attempt is made to insert a value into a node that does not exist, a ``NonExistentNodeException`` will be
+        raised, and none of the nodes will be inserted.
 
-        :param name_value_pairs: Each tuple should be a pair (name, value), where name is the name of the node to insert the value into.
+        :param name_value_pairs: Each tuple should be a pair (name, value), where name is the name of the node to
+            insert the value into.
         :type name_value_pairs: List of tuples
         """
         node_key_value_pairs = [(to_nodekey(name), value) for name, value in name_value_pairs]
@@ -736,7 +741,8 @@ class Computation:
 
         :param other: The computation object to take values from
         :type Computation:
-        :param nodes: Only populate the nodes with the names provided in this list. By default, all nodes from the other Computation object that have corresponding nodes in this Computation object will be inserted
+        :param nodes: Only populate the nodes with the names provided in this list. By default, all nodes from the
+            other Computation object that have corresponding nodes in this Computation object will be inserted
         :type nodes: List, default None
         """
         if nodes is None:
@@ -1001,9 +1007,14 @@ class Computation:
     def compute(self, name: Name | Iterable[Name], raise_exceptions=False):
         """Compute a node and all necessary predecessors.
 
-        Following the computation, if successful, the target node, and all necessary ancestors that were not already UPTODATE will have been calculated and set to UPTODATE. Any node that did not need to be calculated will not have been recalculated.
+        Following the computation, if successful, the target node, and all necessary ancestors that were not already
+        UPTODATE will have been calculated and set to UPTODATE. Any node that did not need to be calculated will not
+        have been recalculated.
 
-        If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an object containing the exception object, as well as a traceback. This will not halt the computation, which will proceed as far as it can, until no more nodes that would be required to calculate the target are COMPUTABLE.
+        If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an
+        object containing the exception object, as well as a traceback. This will not halt the computation, which
+        will proceed as far as it can, until no more nodes that would be required to calculate the target are
+        COMPUTABLE.
 
         :param name: Name of the node to compute
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
@@ -1023,9 +1034,12 @@ class Computation:
     def compute_all(self, raise_exceptions=False):
         """Compute all nodes of a computation that can be computed.
 
-        Nodes that are already UPTODATE will not be recalculated. Following the computation, if successful, all nodes will have state UPTODATE, except UNINITIALIZED input nodes and PLACEHOLDER nodes.
+        Nodes that are already UPTODATE will not be recalculated. Following the computation, if successful, all
+        nodes will have state UPTODATE, except UNINITIALIZED input nodes and PLACEHOLDER nodes.
 
-        If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an object containing the exception object, as well as a traceback. This will not halt the computation, which will proceed as far as it can, until no more nodes are COMPUTABLE.
+        If any nodes raises an exception, then the state of that node will be set to ERROR, and its value set to an
+        object containing the exception object, as well as a traceback. This will not halt the computation, which
+        will proceed as far as it can, until no more nodes are COMPUTABLE.
 
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
@@ -1112,7 +1126,8 @@ class Computation:
     def state(self, name: Name | Names):
         """Get the state of a node.
 
-        This can also be accessed using the attribute-style accessor ``s`` if ``name`` is a valid Python attribute name::
+        This can also be accessed using the attribute-style accessor ``s`` if ``name`` is a valid Python
+        attribute name::
 
             >>> comp = Computation()
             >>> comp.add_node('foo', value=1)
@@ -1133,7 +1148,8 @@ class Computation:
     def value(self, name: Name | Names):
         """Get the current value of a node.
 
-        This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python attribute name::
+        This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python
+        attribute name::
 
             >>> comp = Computation()
             >>> comp.add_node('foo', value=1)
@@ -1150,7 +1166,8 @@ class Computation:
     def compute_and_get_value(self, name: Name):
         """Get the current value of a node.
 
-        This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python attribute name::
+        This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python
+        attribute name::
 
             >>> comp = Computation()
             >>> comp.add_node('foo', value=1)
@@ -1169,7 +1186,7 @@ class Computation:
         self.compute(name, raise_exceptions=True)
         if self.state(name) == States.UPTODATE:
             return self.value(name)
-        raise ComputationException(f"Unable to compute node {name}")
+        raise ComputationError(f"Unable to compute node {name}")
 
     def _tag_one(self, name: Name):
         node_key = to_nodekey(name)
@@ -1306,7 +1323,8 @@ class Computation:
         """Get a list of the inputs for a node or set of nodes.
 
         :param name: Name or names of nodes to get inputs for
-        :return: If name is scalar, return a list of upstream nodes used as input. If name is a list, return a list of list of inputs.
+        :return: If name is scalar, return a list of upstream nodes used as input. If name is a list, return a
+            list of list of inputs.
         """
         return apply1(self._get_inputs_one_names, name)
 
@@ -1356,7 +1374,8 @@ class Computation:
         """Get a list of the outputs for a node or set of nodes.
 
         :param name: Name or names of nodes to get outputs for
-        :return: If name is scalar, return a list of downstream nodes used as output. If name is a list, return a list of list of outputs.
+        :return: If name is scalar, return a list of downstream nodes used as output. If name is a list, return a
+            list of list of outputs.
 
         """
         return apply1(self._get_outputs_one, name)
@@ -1403,9 +1422,12 @@ class Computation:
         print(self.get_source(name))
 
     def restrict(self, output_names: Name | Names, input_names: Name | Names | None = None):
-        """Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input nodes.
+        """Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input
+        nodes.
 
-        If the set of input_nodes that is specified is not sufficient for the set of output_nodes then additional nodes that are ancestors of the output_nodes will be included, but the input nodes specified will be input nodes of the modified Computation.
+        If the set of input_nodes that is specified is not sufficient for the set of output_nodes then additional
+        nodes that are ancestors of the output_nodes will be included, but the input nodes specified will be input
+        nodes of the modified Computation.
 
         :param output_nodes:
         :param input_nodes:
@@ -1498,7 +1520,8 @@ class Computation:
     def copy(self):
         """Create a copy of a computation.
 
-        The copy is shallow. Any values in the new Computation's DAG will be the same object as this Computation's DAG. As new objects will be created by any further computations, this should not be an issue.
+        The copy is shallow. Any values in the new Computation's DAG will be the same object as this Computation's
+        DAG. As new objects will be created by any further computations, this should not be an issue.
 
         :rtype: Computation
         """
@@ -1511,9 +1534,16 @@ class Computation:
     def add_named_tuple_expansion(self, name, namedtuple_type, group=None):
         """Automatically add nodes to extract each element of a named tuple type.
 
-        It is often convenient for a calculation to return multiple values, and it is polite to do this a namedtuple rather than a regular tuple, so that later users have same name to identify elements of the tuple. It can also help make a computation clearer if a downstream computation depends on one element of such a tuple, rather than the entire tuple. This does not affect the computation per se, but it does make the intention clearer.
+        It is often convenient for a calculation to return multiple values, and it is polite to do this a namedtuple
+        rather than a regular tuple, so that later users have same name to identify elements of the tuple. It can
+        also help make a computation clearer if a downstream computation depends on one element of such a tuple,
+        rather than the entire tuple. This does not affect the computation per se, but it does make the intention
+        clearer.
 
-        To avoid having to create many boiler-plate node definitions to expand namedtuples, the ``add_named_tuple_expansion`` method automatically creates new nodes for each element of a tuple. The convention is that an element called 'element', in a node called 'node' will be expanded into a new node called 'node.element', and that this will be applied for each element.
+        To avoid having to create many boiler-plate node definitions to expand namedtuples, the
+        ``add_named_tuple_expansion`` method automatically creates new nodes for each element of a tuple. The
+        convention is that an element called 'element', in a node called 'node' will be expanded into a new node
+        called 'node.element', and that this will be applied for each element.
 
         Example::
 
@@ -1547,7 +1577,10 @@ class Computation:
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
         """Apply a graph to each element of iterable.
 
-        In turn, each element in the ``input_node`` of this graph will be inserted in turn into the subgraph's ``subgraph_input_node``, then the subgraph's ``subgraph_output_node`` calculated. The resultant list, with an element or each element in ``input_node``, will be inserted into ``result_node`` of this graph. In this way ``add_map_node`` is similar to ``map`` in functional programming.
+        In turn, each element in the ``input_node`` of this graph will be inserted in turn into the subgraph's
+        ``subgraph_input_node``, then the subgraph's ``subgraph_output_node`` calculated. The resultant list, with
+        an element or each element in ``input_node``, will be inserted into ``result_node`` of this graph. In this
+        way ``add_map_node`` is similar to ``map`` in functional programming.
 
         :param result_node: The node to place a list of results in **this** graph
         :param input_node: The node to get a list input values from **this** graph
@@ -1667,7 +1700,8 @@ class Computation:
         :param cmap: Default: None
         :param colors: 'state' - colors indicate state. 'timing' - colors indicate execution time. Default: 'state'.
         :param shapes: None - ovals. 'type' - shapes indicate type. Default: None.
-        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
+        :param graph_attr: Mapping of (attribute, value) pairs for the graph. For example
+            ``graph_attr={'size': '"10,8"'}`` can control the size of the output graph
         :param node_attr: Mapping of (attribute, value) pairs set for all nodes.
         :param edge_attr: Mapping of (attribute, value) pairs set for all edges.
         :param collapse_all: Whether to collapse all blocks that aren't explicitly expanded.

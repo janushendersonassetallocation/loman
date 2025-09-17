@@ -27,13 +27,13 @@ TYPENAME_ATTRS = "attrs"
 TYPENAME_DATACLASS = "dataclass"
 
 
-class UntransformableTypeException(Exception):
+class UntransformableTypeError(Exception):
     """Exception raised when a type cannot be transformed for serialization."""
 
     pass
 
 
-class UnrecognizedTypeException(Exception):
+class UnrecognizedTypeError(Exception):
     """Exception raised when a type is not recognized during transformation."""
 
     pass
@@ -231,7 +231,7 @@ class Transformer:
         transformer = self.get_transformer_for_obj(o)
         if transformer is None:
             if self.strict:
-                raise UntransformableTypeException(f"Could not transform object of type {type(o).__name__}")
+                raise UntransformableTypeError(f"Could not transform object of type {type(o).__name__}")
             else:
                 return None
         d = transformer.to_dict(self, o)
@@ -268,7 +268,7 @@ class Transformer:
         cls = self._transformable_types.get(classname)
         if cls is None:
             if self.strict:
-                raise UnrecognizedTypeException(f"Unable to transform Transformable object of class {classname}")
+                raise UnrecognizedTypeError(f"Unable to transform Transformable object of class {classname}")
             else:
                 return MissingObject()
         else:
@@ -277,12 +277,12 @@ class Transformer:
     def _from_attrs(self, d):
         if not HAS_ATTRS:
             if self.strict:
-                raise UnrecognizedTypeException("attrs package not installed")
+                raise UnrecognizedTypeError("attrs package not installed")
             return MissingObject()
         cls = self._attrs_types.get(d[KEY_CLASS])
         if cls is None:
             if self.strict:
-                raise UnrecognizedTypeException(f"Unable to create attrs object of type {cls}")
+                raise UnrecognizedTypeError(f"Unable to create attrs object of type {cls}")
             else:
                 return MissingObject()
         else:
@@ -296,7 +296,7 @@ class Transformer:
         cls = self._dataclass_types.get(d[KEY_CLASS])
         if cls is None:
             if self.strict:
-                raise UnrecognizedTypeException(f"Unable to create dataclass object of type {cls}")
+                raise UnrecognizedTypeError(f"Unable to create dataclass object of type {cls}")
             else:
                 return MissingObject()
         else:
@@ -310,7 +310,7 @@ class Transformer:
         transformer = self.get_transformer_for_name(type_)
         if transformer is None:
             if self.strict:
-                raise UnrecognizedTypeException(f"Unable to transform object of type {type_}")
+                raise UnrecognizedTypeError(f"Unable to transform object of type {type_}")
             else:
                 return MissingObject()
         return transformer.from_dict(self, d)
