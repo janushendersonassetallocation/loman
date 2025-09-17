@@ -152,21 +152,25 @@ class Transformer:
             self._subtype_order = order_classes(self._subtype_map.keys())
 
     def register_transformable(self, transformable_type: type[Transformable]):
+        """Register a transformable type that can serialize itself."""
         name = transformable_type.__name__
         assert name not in self._transformable_types
         self._transformable_types[name] = transformable_type
 
     def register_attrs(self, attrs_type: type):
+        """Register an attrs-decorated class for serialization."""
         name = attrs_type.__name__
         assert name not in self._attrs_types
         self._attrs_types[name] = attrs_type
 
     def register_dataclass(self, dataclass_type: type):
+        """Register a dataclass for serialization."""
         name = dataclass_type.__name__
         assert name not in self._dataclass_types
         self._dataclass_types[name] = dataclass_type
 
     def get_transformer_for_obj(self, obj) -> CustomTransformer | None:
+        """Get the appropriate transformer for a given object."""
         transformer = self._direct_type_map.get(type(obj))
         if transformer is not None:
             return transformer
@@ -175,10 +179,12 @@ class Transformer:
                 return self._subtype_map[tp]
 
     def get_transformer_for_name(self, name) -> CustomTransformer | None:
+        """Get a transformer by its registered name."""
         transformer = self._transformers.get(name)
         return transformer
 
     def to_dict(self, o):
+        """Convert an object to a serializable dictionary representation."""
         if isinstance(o, str) or o is None or o is True or o is False or isinstance(o, (int, float)):
             return o
         elif isinstance(o, tuple):
@@ -233,6 +239,7 @@ class Transformer:
         return d
 
     def from_dict(self, d):
+        """Convert a dictionary representation back to the original object."""
         if isinstance(d, str) or d is None or d is True or d is False or isinstance(d, (int, float)):
             return d
         elif isinstance(d, list):

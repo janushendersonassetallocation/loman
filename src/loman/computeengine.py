@@ -375,11 +375,20 @@ class Computation:
         """Adds or updates a node in a computation.
 
         :param name: Name of the node to add. This may be any hashable object.
-        :param func: Function to use to calculate the node if the node is a calculation node. By default, the input nodes to the function will be implied from the names of the function    parameters. For example, a parameter called ``a`` would be taken from the node called ``a``. This can be modified with the ``kwds`` parameter.
+        :param func: Function to use to calculate the node if the node is a calculation node. By default, the input
+            nodes to the function will be implied from the names of the function parameters. For example, a
+            parameter called ``a`` would be taken from the node called ``a``. This can be modified with the
+            ``kwds`` parameter.
         :type func: Function, default None
-        :param args: Specifies a list of nodes that will be used to populate arguments of the function positionally for a calculation node. e.g. If args is ``['a', 'b', 'c']`` then the function would be called with three parameters, taken from the nodes 'a', 'b' and 'c' respectively.
+        :param args: Specifies a list of nodes that will be used to populate arguments of the function positionally
+            for a calculation node. e.g. If args is ``['a', 'b', 'c']`` then the function would be called with
+            three parameters, taken from the nodes 'a', 'b' and 'c' respectively.
         :type args: List, default None
-        :param kwds: Specifies a mapping from parameter name to the node that should be used to populate that parameter when calling the function for a calculation node. e.g. If args is ``{'x': 'a', 'y': 'b'}`` then the function would be called with parameters named 'x' and 'y', and their values would be taken from nodes 'a' and 'b' respectively. Each entry in the dictionary can be read as "take parameter [key] from node [value]".
+        :param kwds: Specifies a mapping from parameter name to the node that should be used to populate that
+            parameter when calling the function for a calculation node. e.g. If args is ``{'x': 'a', 'y': 'b'}``
+            then the function would be called with parameters named 'x' and 'y', and their values would be taken
+            from nodes 'a' and 'b' respectively. Each entry in the dictionary can be read as "take parameter
+            [key] from node [value]".
         :type kwds: Dictionary, default None
         :param value: If given, the value is inserted into the node, and the node state set to UPTODATE.
         :type value: default None
@@ -583,7 +592,8 @@ class Computation:
             self._set_state(node_key, States.PLACEHOLDER)
 
     def rename_node(self, old_name: Name | Mapping[Name, Name], new_name: Name | None = None):
-        """Rename a node in a computation
+        """Rename a node in a computation.
+
         :param old_name: Node to rename, or a dictionary of nodes to rename, with existing names as keys, and new names as values
         :param new_name: New name for node.
         """
@@ -1017,19 +1027,22 @@ class Computation:
         self._compute_nodes(self._node_keys(), raise_exceptions=raise_exceptions)
 
     def _node_keys(self) -> list[NodeKey]:
-        """Get a list of nodes in this computation
+        """Get a list of nodes in this computation.
+
         :return: List of nodes.
         """
         return list(self.dag.nodes)
 
     def nodes(self) -> list[Name]:
-        """Get a list of nodes in this computation
+        """Get a list of nodes in this computation.
+
         :return: List of nodes.
         """
         return list(n.name for n in self.dag.nodes)
 
     def get_tree_list_children(self, name: Name) -> set[Name]:
-        """Get a list of nodes in this computation
+        """Get a list of nodes in this computation.
+
         :return: List of nodes.
         """
         node_key = to_nodekey(name)
@@ -1695,7 +1708,8 @@ class Computation:
         return comp
 
     def inject_dependencies(self, dependencies: dict, *, force: bool = False):
-        """Injects dependencies into the nodes of the current computation where nodes are in a placeholder state
+        """Injects dependencies into the nodes of the current computation where nodes are in a placeholder state.
+
         (or all possible nodes when the 'force' parameter is set to True), using values
         provided in the 'dependencies' dictionary.
 

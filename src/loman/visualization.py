@@ -230,13 +230,17 @@ class StandardStylingOverrides(NodeFormatter):
 
 @dataclass
 class CompositeNodeFormatter(NodeFormatter):
+    """A node formatter that combines multiple formatters together."""
+
     formatters: list[NodeFormatter] = field(default_factory=list)
 
     def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate all the contained formatters with the given nodes."""
         for formatter in self.formatters:
             formatter.calibrate(nodes)
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+        """Format a node by combining output from all contained formatters."""
         d = {}
         for formatter in self.formatters:
             format_attrs = formatter.format(name, nodes, is_composite)
@@ -269,6 +273,7 @@ class GraphView:
 
     @staticmethod
     def get_sub_block(dag, root, node_transformations: dict):
+        """Extract a subgraph with node transformations for visualization."""
         d_transform_to_nodes = defaultdict(list)
         for nk, transform in node_transformations.items():
             d_transform_to_nodes[transform].append(nk)
@@ -365,6 +370,7 @@ class GraphView:
         return to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 
     def refresh(self):
+        """Refresh the visualization by rebuilding the graph structure."""
         node_transformations = self._initialize_transforms()
         self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(
             self.computation.dag, self.root, node_transformations
@@ -373,11 +379,13 @@ class GraphView:
         self.viz_dot = self._create_dot_graph()
 
     def svg(self) -> str | None:
+        """Generate SVG representation of the visualization."""
         if self.viz_dot is None:
             return None
         return self.viz_dot.create_svg().decode("utf-8")
 
     def view(self):
+        """Open the visualization in a PDF viewer."""
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(self.viz_dot.create_pdf())
             if sys.platform != "win32":
@@ -391,6 +399,7 @@ class GraphView:
 def create_viz_dag(
     struct_dag, comp_dag, node_formatter: NodeFormatter, original_nodes: dict, composite_nodes: set
 ) -> nx.DiGraph:
+    """Create a visualization DAG from the computation structure."""
     if node_formatter is not None:
         nodes = []
         for nodekey in struct_dag.nodes:
@@ -441,6 +450,7 @@ def create_viz_dag(
 
 
 def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
+    """Convert a visualization DAG to a PyDot graph for rendering."""
     root = NodeKey.root()
 
     node_groups = {}
