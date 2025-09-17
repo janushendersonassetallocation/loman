@@ -1,5 +1,8 @@
 # Change Log
 
+## [unreleased]
+- Fixes bug with `compute_and_get_value` not setting error state on exception
+
 ## [0.5.3] (2025-06-20)
 
 - ComputationFactories can have blocks added directly to them
