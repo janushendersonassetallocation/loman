@@ -6,7 +6,7 @@ where nodes represent data or calculations, and edges represent dependencies.
 
 import loman.util as util
 import loman.visualization as viz
-from loman.computeengine import C, Computation, computation_factory, block, calc_node, input_node, node
+from loman.computeengine import C, Computation, block, calc_node, computation_factory, input_node, node
 
 # Backward compatibility alias
 ComputationFactory = computation_factory
