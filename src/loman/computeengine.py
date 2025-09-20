@@ -1422,9 +1422,9 @@ class Computation:
         print(self.get_source(name))
 
     def restrict(self, output_names: Name | Names, input_names: Name | Names | None = None):
-        """Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input
-        nodes.
+        """Restrict a computation to the ancestors of a set of output nodes.
 
+        Excludes ancestors of a set of input nodes.
 
         If the set of input_nodes that is specified is not sufficient for the set of output_nodes then additional
         nodes that are ancestors of the output_nodes will be included, but the input nodes specified will be input
