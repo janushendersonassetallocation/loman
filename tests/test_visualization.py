@@ -11,7 +11,7 @@ import loman.visualization
 from loman import Computation, States, node
 from loman.consts import NodeTransformations
 from loman.nodekey import NodeKey, to_nodekey
-from test.standard_test_computations import BasicFourNodeComputation, create_example_block_computation
+from tests.standard_test_computations import BasicFourNodeComputation, create_example_block_computation
 
 
 def node_set(nodes):

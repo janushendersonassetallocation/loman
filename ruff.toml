@@ -74,8 +74,7 @@ line-ending = "auto"
 
 # File-specific rule exceptions
 [lint.per-file-ignores]
-"tests/**/*.py" = ["S101"]        # Allow assert statements in tests
-"test/**/*.py" = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "F403", "F405", "E741"]  # Ignore docstring requirements and test-specific issues
+"tests/**/*.py" = ["S101", "D100", "D101", "D102", "D103", "D104", "D105", "D107", "F403", "F405", "E741"]  # Allow assert statements and ignore docstring requirements in tests
 "book/marimo/*.py" = ["N803", "S101"] # Allow non-lowercase variable names (N803)
                                       # and assert statements in marimo files
 "docs/conf.py" = ["D100"]            # Ignore missing module docstring in docs config

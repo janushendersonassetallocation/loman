@@ -1,7 +1,7 @@
 import random
 
 from loman import Computation, States
-from test.standard_test_computations import BasicFourNodeComputation
+from tests.standard_test_computations import BasicFourNodeComputation
 
 
 def test_get_inputs():

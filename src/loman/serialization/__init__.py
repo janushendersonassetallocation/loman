@@ -7,9 +7,13 @@ from .transformer import (
     NdArrayTransformer,
     Transformable,
     Transformer,
-    UnrecognizedTypeException,
-    UntransformableTypeException,
+    UnrecognizedTypeError,
+    UntransformableTypeError,
 )
+
+# Backward compatibility aliases
+UnrecognizedTypeException = UnrecognizedTypeError
+UntransformableTypeException = UntransformableTypeError
 
 __all__ = [
     "default_transformer",

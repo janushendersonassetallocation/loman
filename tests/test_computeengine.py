@@ -9,11 +9,11 @@ import pytest
 
 from loman import (
     C,
-    CannotInsertToPlaceholderNodeException,
+    CannotInsertToPlaceholderNodeError,
     Computation,
-    LoopDetectedException,
-    MapException,
-    NonExistentNodeException,
+    LoopDetectedError,
+    MapError,
+    NonExistentNodeError,
     States,
     node,
 )
@@ -547,7 +547,7 @@ def test_map_graph_error():
     comp.insert("inputs", [1, 2, 3])
     comp.compute_all()
     assert comp.state("results") == States.ERROR
-    assert isinstance(comp.value("results").exception, MapException)
+    assert isinstance(comp.value("results").exception, MapError)
     results = comp.value("results").exception.results
     assert results[0] == -1
     assert results[2] == 1
@@ -670,7 +670,7 @@ def test_avoid_infinite_loop_compute_all():
     comp.add_node("b", lambda a: a + 1)
     comp.add_node("c", lambda b: b + 1)
     comp.insert("a", 1)
-    with pytest.raises(LoopDetectedException):
+    with pytest.raises(LoopDetectedError):
         comp.compute_all()
 
 
@@ -739,13 +739,13 @@ def test_view_x_exception():
 
 def test_delete_nonexistent_causes_exception():
     comp = Computation()
-    with pytest.raises(NonExistentNodeException):
+    with pytest.raises(NonExistentNodeError):
         comp.delete_node("a")
 
 
 def test_insert_nonexistent_causes_exception():
     comp = Computation()
-    with pytest.raises(NonExistentNodeException):
+    with pytest.raises(NonExistentNodeError):
         comp.insert("a", 1)
 
 
@@ -754,7 +754,7 @@ def test_insert_many_nonexistent_causes_exception():
     comp.add_node("a")
     comp.insert("a", 0)
 
-    with pytest.raises(NonExistentNodeException):
+    with pytest.raises(NonExistentNodeError):
         comp.insert_many([("a", 1), ("b", 2)])
 
     assert comp.v.a == 0
@@ -1249,7 +1249,7 @@ def test_args_kwds():
 def test_insert_fails_for_placeholder():
     comp = Computation()
     comp.add_node("b", lambda a: a + 1)
-    with pytest.raises(CannotInsertToPlaceholderNodeException):
+    with pytest.raises(CannotInsertToPlaceholderNodeError):
         comp.insert("a", value=1)
 
 
