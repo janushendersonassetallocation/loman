@@ -1,7 +1,7 @@
 import random
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, datetime
 from time import sleep
 
 import pandas as pd
@@ -1092,11 +1092,11 @@ def test_thread_pool_executor():
         return c
 
     comp = Computation(default_executor=ThreadPoolExecutor(n))
-    start_dt = datetime.utcnow()
+    start_dt = datetime.now(UTC)
     for c in range(n):
         comp.add_node(c, wait, kwds={"c": C(c)})
     comp.compute_all()
-    end_dt = datetime.utcnow()
+    end_dt = datetime.now(UTC)
     delta = (end_dt - start_dt).total_seconds()
     assert delta < (n - 1) * sleep_time
 
@@ -1111,11 +1111,11 @@ def test_node_specific_thread_pool_executor():
 
     executor_map = {"foo": ThreadPoolExecutor(n)}
     comp = Computation(executor_map=executor_map)
-    start_dt = datetime.utcnow()
+    start_dt = datetime.now(UTC)
     for c in range(n):
         comp.add_node(c, wait, kwds={"c": C(c)}, executor="foo")
     comp.compute_all()
-    end_dt = datetime.utcnow()
+    end_dt = datetime.now(UTC)
     delta = (end_dt - start_dt).total_seconds()
     assert delta < (n - 1) * sleep_time
 

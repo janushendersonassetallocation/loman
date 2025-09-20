@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Union
 
@@ -222,7 +222,7 @@ def computation_factory(maybe_cls=None, *, ignore_self=True):
 def _eval_node(name, f, args, kwds, raise_exceptions):
     """To make multiprocessing work, this function must be standalone so that pickle works."""
     exc, tb = None, None
-    start_dt = datetime.utcnow()
+    start_dt = datetime.now(UTC)
     try:
         logging.debug("Running " + str(name))
         value = f(*args, **kwds)
@@ -233,7 +233,7 @@ def _eval_node(name, f, args, kwds, raise_exceptions):
         tb = traceback.format_exc()
         if raise_exceptions:
             raise
-    end_dt = datetime.utcnow()
+    end_dt = datetime.now(UTC)
     return value, exc, tb, start_dt, end_dt
 
 

@@ -89,7 +89,7 @@ def test_serialization_roundtrip_complex_transformer(obj):
     assert obj_roundtrip == obj
 
 
-class TestTransformable(Transformable):
+class TransformableExample(Transformable):
     def __init__(self, a, b):
         self.a = a
         self.b = b
@@ -105,81 +105,81 @@ class TestTransformable(Transformable):
         return cls(d["a"], d["b"])
 
 
-TEST_OBJS_TRANSFORMABLE: list[object] = [TestTransformable("Hello", "world")]
+TEST_OBJS_TRANSFORMABLE: list[object] = [TransformableExample("Hello", "world")]
 
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_TRANSFORMABLE)
 def test_serialization_roundtrip_transformable(obj):
     u = Transformer()
-    u.register(TestTransformable)
+    u.register(TransformableExample)
     obj_dict = u.to_dict(obj)
     obj_roundtrip = u.from_dict(obj_dict)
     assert obj_roundtrip == obj
 
 
 @attrs.define
-class TestAttrs:
+class AttrsExample:
     a: int
     b: str
 
 
 TEST_OBJS_ATTRS: list[object] = [
-    TestAttrs(42, "Lorem ipsum.."),
+    AttrsExample(42, "Lorem ipsum.."),
 ]
 
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_ATTRS)
 def test_serialization_roundtrip_attrs(obj):
     u = Transformer()
-    u.register(TestAttrs)
+    u.register(AttrsExample)
     obj_dict = u.to_dict(obj)
     obj_roundtrip = u.from_dict(obj_dict)
     assert obj_roundtrip == obj
 
 
 @dataclass
-class TestDataClass:
+class DataClassExample:
     a: int
     b: str
 
 
 TEST_OBJS_DATACLASS: list[object] = [
-    TestDataClass(42, "Lorem ipsum.."),
+    DataClassExample(42, "Lorem ipsum.."),
 ]
 
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_DATACLASS)
 def test_serialization_roundtrip_dataclass(obj):
     u = Transformer()
-    u.register(TestDataClass)
+    u.register(DataClassExample)
     obj_dict = u.to_dict(obj)
     obj_roundtrip = u.from_dict(obj_dict)
     assert obj_roundtrip == obj
 
 
 @attrs.define
-class TestAttrsRecursive:
+class AttrsRecursiveExample:
     a: object
 
 
 def test_serialization_roundtrip_attrs_recursive():
     u = Transformer()
-    u.register(TestAttrsRecursive)
-    obj = TestAttrsRecursive(TestAttrsRecursive(TestAttrsRecursive(3)))
+    u.register(AttrsRecursiveExample)
+    obj = AttrsRecursiveExample(AttrsRecursiveExample(AttrsRecursiveExample(3)))
     obj_dict = u.to_dict(obj)
     obj_roundtrip = u.from_dict(obj_dict)
     assert obj_roundtrip == obj
 
 
 @dataclass
-class TestDataClassRecursive:
+class DataClassRecursiveExample:
     a: object
 
 
 def test_serialization_roundtrip_dataclass_recursive():
     u = Transformer()
-    u.register(TestDataClassRecursive)
-    obj = TestDataClassRecursive(TestDataClassRecursive(TestDataClassRecursive(3)))
+    u.register(DataClassRecursiveExample)
+    obj = DataClassRecursiveExample(DataClassRecursiveExample(DataClassRecursiveExample(3)))
     obj_dict = u.to_dict(obj)
     obj_roundtrip = u.from_dict(obj_dict)
     assert obj_roundtrip == obj

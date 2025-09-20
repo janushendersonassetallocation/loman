@@ -132,7 +132,7 @@ def test_roundtrip_old_dill():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill_old(f)
+    comp.write_dill(f)
 
     f.seek(0)
     foo = Computation.read_dill(f)
