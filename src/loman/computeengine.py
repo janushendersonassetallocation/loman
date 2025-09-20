@@ -503,7 +503,7 @@ class Computation:
         for node_key in self._node_keys():
             state = self.dag.nodes[node_key][NodeAttributes.STATE]
             self._state_map[state].add(node_key)
-            tags = self.dag.nodes[node_key][NodeAttributes.TAG]
+            tags = self.dag.nodes[node_key].get(NodeAttributes.TAG, set())
             for tag in tags:
                 self._tag_map[tag].add(node_key)
 

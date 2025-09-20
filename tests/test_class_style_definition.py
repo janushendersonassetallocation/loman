@@ -12,16 +12,16 @@ def test_class_style_definition():
         a = input_node(value=3)
 
         @calc_node
-        def b(self):
-            return self + 1
+        def b(self, a):
+            return a + 1
 
         @calc_node
-        def c(self):
-            return 2 * self
+        def c(self, a):
+            return 2 * a
 
         @calc_node
-        def d(self, c):
-            return self + c
+        def d(self, b, c):
+            return b + c
 
     comp = Computation.from_class(FooComp)
     comp.compute_all()
@@ -35,16 +35,16 @@ def test_class_style_definition_as_decorator():
         a = input_node(value=3)
 
         @calc_node
-        def b(self):
-            return self + 1
+        def b(self, a):
+            return a + 1
 
         @calc_node
-        def c(self):
-            return 2 * self
+        def c(self, a):
+            return 2 * a
 
         @calc_node
-        def d(self, c):
-            return self + c
+        def d(self, b, c):
+            return b + c
 
     FooComp.compute_all()
 
@@ -57,16 +57,16 @@ def test_class_style_definition_as_factory_decorator():
         a = input_node(value=3)
 
         @calc_node
-        def b(self):
-            return self + 1
+        def b(self, a):
+            return a + 1
 
         @calc_node
-        def c(self):
-            return 2 * self
+        def c(self, a):
+            return 2 * a
 
         @calc_node
-        def d(self, c):
-            return self + c
+        def d(self, b, c):
+            return b + c
 
     comp = FooComp()
     comp.compute_all()
@@ -79,16 +79,16 @@ def test_class_style_definition_as_factory_decorator_with_args():
         a = input_node(value=3)
 
         @calc_node
-        def b(self):
-            return self + 1
+        def b(self, a):
+            return a + 1
 
         @calc_node
-        def c(self):
-            return 2 * self
+        def c(self, a):
+            return 2 * a
 
         @calc_node
-        def d(self, c):
-            return self + c
+        def d(self, b, c):
+            return b + c
 
     comp = FooComp()
     comp.compute_all()
@@ -173,18 +173,19 @@ def test_computation_factory_methods_calc_node_ignore_self():
         a = input_node(value=3)
 
         @calc_node
-        def b(self):
-            return self + 1
+        def b(self, a):
+            return a + 1
 
         @calc_node(ignore_self=True)
         def c(self, a):
             return 2 * a
 
         @calc_node
-        def d(self, c):
-            return self + c
+        def d(self, b, c):
+            return b + c
 
     comp = FooComp()
+    comp.add_node("self", value=None)  # Provide self node as required when ignore_self=False
     comp.compute_all()
     assert comp.s.d == States.UPTODATE and comp.v.d == 10
 

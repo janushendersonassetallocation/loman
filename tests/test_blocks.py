@@ -131,13 +131,13 @@ def test_block_accessors():
     assert comp.v.foo1["bar1"].baz1.a == 1
 
     with pytest.raises(AttributeError):
-        pass
+        comp.v.foo1.bar1.baz1.nonexistent
 
     comp.add_node("foo1/bar1/baz1", value=2)
 
     assert comp.v.foo1.bar1.baz1 == 2
     with pytest.raises(AttributeError):
-        pass
+        comp.v.foo1.bar1.nonexistent
 
 
 def test_computation_factory_with_blocks():

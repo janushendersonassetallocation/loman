@@ -6,16 +6,16 @@ class BasicFourNodeComputation:
     a = input_node()
 
     @calc_node
-    def b(self):
-        return self + 1
+    def b(self, a):
+        return a + 1
 
     @calc_node
-    def c(self):
-        return 2 * self
+    def c(self, a):
+        return 2 * a
 
     @calc_node
-    def d(self, c):
-        return self + c
+    def d(self, b, c):
+        return b + c
 
 
 def create_example_block_computation():
