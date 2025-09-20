@@ -1425,6 +1425,7 @@ class Computation:
         """Restrict a computation to the ancestors of a set of output nodes, excluding ancestors of a set of input
         nodes.
 
+
         If the set of input_nodes that is specified is not sufficient for the set of output_nodes then additional
         nodes that are ancestors of the output_nodes will be included, but the input nodes specified will be input
         nodes of the modified Computation.
@@ -1563,15 +1564,15 @@ class Computation:
         :type namedtuple_type: namedtuple class
         """
 
-        def make_f(field):
+        def make_f(field_name):
             def get_field_value(tuple):
-                return getattr(tuple, field)
+                return getattr(tuple, field_name)
 
             return get_field_value
 
-        for field in namedtuple_type._fields:
-            node_name = f"{name}.{field}"
-            self.add_node(node_name, make_f(field), kwds={"tuple": name}, group=group)
+        for field_name in namedtuple_type._fields:
+            node_name = f"{name}.{field_name}"
+            self.add_node(node_name, make_f(field_name), kwds={"tuple": name}, group=group)
             self.set_tag(node_name, SystemTags.EXPANSION)
 
     def add_map_node(self, result_node, input_node, subgraph, subgraph_input_node, subgraph_output_node):
