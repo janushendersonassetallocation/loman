@@ -7,7 +7,7 @@ line-length = 120
 target-version = "py311"
 
 # Exclude directories with Jinja template variables in their names
-exclude = ["**/[{][{]*/", "**/*[}][}]*/"]
+exclude = ["**/[{][{]*/", "**/*[}][}]*/", "examples/**/*.ipynb"]
 
 [lint]
 # Available rule sets in Ruff:
@@ -78,3 +78,4 @@ line-ending = "auto"
 "test/**/*.py" = ["D100", "D101", "D102", "D103", "D104", "D105", "D107", "F403", "F405", "E741"]  # Ignore docstring requirements and test-specific issues
 "book/marimo/*.py" = ["N803", "S101"] # Allow non-lowercase variable names (N803)
                                       # and assert statements in marimo files
+"docs/conf.py" = ["D100"]            # Ignore missing module docstring in docs config
