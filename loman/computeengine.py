@@ -868,7 +868,13 @@ class Computation:
             for fut in done:
                 node_key = futs.pop(fut)
                 node0 = self.dag.nodes[node_key]
-                value, exc, tb, start_dt, end_dt = fut.result()
+                try:
+                    value, exc, tb, start_dt, end_dt = fut.result()
+                except Exception as e:
+                    exc = e
+                    tb = traceback.format_exc()
+                    self._set_error(node_key, exc, tb)
+                    raise
                 delta = (end_dt - start_dt).total_seconds()
                 if exc is None:
                     self._set_state_and_value(node_key, States.UPTODATE, value, throw_conversion_exception=False)
