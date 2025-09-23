@@ -6,15 +6,15 @@ class BasicFourNodeComputation:
     a = input_node()
 
     @calc_node
-    def b(self, a):
+    def b(a):
         return a + 1
 
     @calc_node
-    def c(self, a):
+    def c(a):
         return 2 * a
 
     @calc_node
-    def d(self, b, c):
+    def d(b, c):
         return b + c
 
 

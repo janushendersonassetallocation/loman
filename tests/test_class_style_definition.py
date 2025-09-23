@@ -12,15 +12,15 @@ def test_class_style_definition():
         a = input_node(value=3)
 
         @calc_node
-        def b(self, a):
+        def b(a):
             return a + 1
 
         @calc_node
-        def c(self, a):
+        def c(a):
             return 2 * a
 
         @calc_node
-        def d(self, b, c):
+        def d(b, c):
             return b + c
 
     comp = Computation.from_class(FooComp)
@@ -35,15 +35,15 @@ def test_class_style_definition_as_decorator():
         a = input_node(value=3)
 
         @calc_node
-        def b(self, a):
+        def b(a):
             return a + 1
 
         @calc_node
-        def c(self, a):
+        def c(a):
             return 2 * a
 
         @calc_node
-        def d(self, b, c):
+        def d(b, c):
             return b + c
 
     FooComp.compute_all()
@@ -57,15 +57,15 @@ def test_class_style_definition_as_factory_decorator():
         a = input_node(value=3)
 
         @calc_node
-        def b(self, a):
+        def b(a):
             return a + 1
 
         @calc_node
-        def c(self, a):
+        def c(a):
             return 2 * a
 
         @calc_node
-        def d(self, b, c):
+        def d(b, c):
             return b + c
 
     comp = FooComp()
@@ -79,15 +79,15 @@ def test_class_style_definition_as_factory_decorator_with_args():
         a = input_node(value=3)
 
         @calc_node
-        def b(self, a):
+        def b(a):
             return a + 1
 
         @calc_node
-        def c(self, a):
+        def c(a):
             return 2 * a
 
         @calc_node
-        def d(self, b, c):
+        def d(b, c):
             return b + c
 
     comp = FooComp()
@@ -173,7 +173,7 @@ def test_computation_factory_methods_calc_node_ignore_self():
         a = input_node(value=3)
 
         @calc_node
-        def b(self, a):
+        def b(a):
             return a + 1
 
         @calc_node(ignore_self=True)
@@ -181,7 +181,7 @@ def test_computation_factory_methods_calc_node_ignore_self():
             return 2 * a
 
         @calc_node
-        def d(self, b, c):
+        def d(b, c):
             return b + c
 
     comp = FooComp()
