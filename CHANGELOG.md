@@ -1,5 +1,8 @@
 # Change Log
 
+## [unreleased]
+- Added type hints on ComputationFactory
+
 ## [0.5.3] (2025-06-20)
 
 - ComputationFactories can have blocks added directly to them
