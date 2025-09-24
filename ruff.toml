@@ -63,7 +63,9 @@ select = ["D", "E", "F", "I", "N", "W", "UP"]
 [lint.pydocstyle]
 convention = "google"
 
-# Formatting configuration
+###########################################################
+#                 Formatting configuration
+###########################################################
 [format]
 # Use double quotes for strings
 quote-style = "double"
@@ -72,9 +74,37 @@ indent-style = "space"
 # Automatically detect and use the appropriate line ending
 line-ending = "auto"
 
-# File-specific rule exceptions
+###########################################################
+#                File-specific exceptions
+###########################################################
 [lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "D100", "D101", "D102", "D103", "D104", "D105", "D107", "F403", "F405", "E741"]  # Allow assert statements and ignore docstring requirements in tests
-"book/marimo/*.py" = ["N803", "S101"] # Allow non-lowercase variable names (N803)
-                                      # and assert statements in marimo files
-"docs/conf.py" = ["D100"]            # Ignore missing module docstring in docs config
+ # Allow assert statements and ignore docstring requirements in tests
+"tests/**/*.py" = [ 
+    "S101",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    "F403",
+    "F405",
+    "E741"
+    ]
+# Ignore self parameter naming for ComputationFactory methods                       
+"tests/test_class_style_definition.py" = [
+    "N805",
+    ]
+"tests/standard_test_computations.py" = [
+    "N805",
+    ]
+ # Allow non-lowercase variable names and assert statements in marimo files
+"book/marimo/*.py" = [
+    "N803",
+    "S101",
+    ]
+# Ignore missing module docstring in docs config                               
+"docs/conf.py" = [
+    "D100",
+    ]
