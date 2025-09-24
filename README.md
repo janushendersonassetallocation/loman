@@ -52,6 +52,6 @@ Or you can download from github: <https://github.com/janusassetallocation/loman>
 
 Up-to-date and thorough documentation is available on ReadTheDocs at <http://loman.readthedocs.io/>
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-This project uses configuration templates from [tschm/.config-templates](https://github.com/tschm/.config-templates) for development tooling and code quality standards.
+- [.config-templates](https://github.com/tschm/.config-templates) - for project tooling templates
