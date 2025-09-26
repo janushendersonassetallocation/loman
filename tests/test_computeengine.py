@@ -735,6 +735,7 @@ def test_view_x_exception():
     comp.insert("a", 10)
     with pytest.raises(ZeroDivisionError):
         assert comp.x.d == 31
+    assert comp.s.c == States.ERROR
 
 
 def test_delete_nonexistent_causes_exception():
