@@ -11,7 +11,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Union, Type
+from typing import Any, Type, Union  # noqa: UP035
 
 import decorator
 import dill
@@ -200,7 +200,7 @@ def populate_computation_from_class(comp, cls, obj, ignore_self=True):
             node_.add_to_comp(comp, name, obj, ignore_self)
 
 
-def computation_factory(maybe_cls=None, *, ignore_self=True) -> Type["Computation"]:
+def computation_factory(maybe_cls=None, *, ignore_self=True) -> Type["Computation"]:  # noqa: UP006
     """Factory function to create computations from class definitions."""
 
     def wrap(cls):
