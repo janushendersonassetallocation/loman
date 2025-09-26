@@ -54,3 +54,19 @@ packages = ["src/loman"]
 known_first_party = ["loman"]
 pep621_dev_dependency_groups = ["test", "dev"]
 per_rule_ignores = {DEP002 = ["pytest", "pytest-cov", "ruff", "pre-commit", "mypy", "marimo", "attrs"], DEP004 = ["attrs"]}
+
+[tool.deptry.package_module_name_map]
+pre-commit = "pre_commit"
+pytest-cov = "pytest_cov"
+matplotlib = "matplotlib"
+pydotplus = "pydotplus"
+decorator = "decorator"
+networkx = "networkx"
+marimo = "marimo"
+pandas = "pandas"
+pytest = "pytest"
+attrs = "attrs"
+numpy = "numpy"
+mypy = "mypy"
+ruff = "ruff"
+dill = "dill"
