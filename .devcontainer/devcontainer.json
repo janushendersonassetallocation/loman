@@ -1,5 +1,5 @@
 {
-    "name": "Generic Python .devcontainer",
+    "name": "Python 3.13",
     "image": "mcr.microsoft.com/devcontainers/python:3.13",
     "hostRequirements": {
         "cpus": 4
@@ -8,14 +8,17 @@
         "ghcr.io/devcontainers/features/common-utils:2": {},
         "ghcr.io/devcontainers/features/git:1": {}
     },
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+    ],
+    "containerEnv": {
+        "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}"
+    },
     "forwardPorts": [8080],
     "customizations": {
         "vscode": {
             "settings": {
-                "python.pythonPath": ".venv/bin/python",
                 "python.defaultInterpreterPath": ".venv/bin/python",
-                "python.linting.enabled": true,
-                "python.linting.pylintEnabled": true,
                 "python.testing.pytestEnabled": true,
                 "python.testing.unittestEnabled": false,
                 "python.testing.pytestArgs": ["."],
@@ -26,8 +29,7 @@
             "extensions": [
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "marimo-team.vscode-marimo",
-                "marimo-ai.marimo-vscode"
+                "marimo-team.vscode-marimo"
             ]
         }
     },
