@@ -5,7 +5,7 @@
 
 ### Manage complex calculation flow via robust DAG-based dependency logic in Python
 
-🧠 **Smart computation management** - Only recalculate what's necessary 🧠
+**Smart computation management** - Only recalculate what's necessary
 
 [![Python Version](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Version](https://img.shields.io/pypi/v/loman.svg)](https://pypi.python.org/pypi/loman)
@@ -167,7 +167,6 @@ Want to try Loman without any local setup? Click the Codespaces badge above or u
 - ⚡ **Zero Setup** - Everything configured with our dev container
 - 🎯 **VS Code Extensions** - Python, testing, and productivity extensions pre-installed
 
-The Codespace uses our carefully crafted [dev container configuration](.devcontainer/devcontainer.json) to provide a consistent development environment across all platforms.
 
 ## 👥 Contributing
 
