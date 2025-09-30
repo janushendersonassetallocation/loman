@@ -25,8 +25,8 @@ Loman tracks the state of your computations and their dependencies, enabling int
 - 🛠️ [Development](#️-development)
 - 🚀 [Quick Start](#-quick-start)
 - 📖 [Documentation](#-documentation)
+- ☁️ [Codespaces](#️-try-loman-in-codespaces)
 - 👥 [Contributing](#-contributing)
-- 📄 [License](#-license)
 
 ## ✨ Features
 
@@ -190,12 +190,6 @@ Whether you're fixing bugs, adding features, or improving documentation, your he
 - 📋 [Contributing Guide](CONTRIBUTING.md)
 - 🤝 [Code of Conduct](CODE_OF_CONDUCT.md)
 - 🐛 [Issue Tracker](https://github.com/janusassetallocation/loman/issues)
-
-## 📄 License
-
-Loman is licensed under the 3-Clause BSD License.
-
-- See the full license in the [LICENSE](LICENSE) file.
 
 ### Acknowledgments 🙏
 
