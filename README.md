@@ -1,18 +1,23 @@
-# 🔄 Loman
 
-### Smart dependency tracking and incremental computation for Python
+<div align="center">
 
+# Loman
+
+### Manage complex calculation flows with robust DAG-based dependency tracking in Python
+
+
+[![Python Version](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Version](https://img.shields.io/pypi/v/loman.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Wheel](https://img.shields.io/pypi/wheel/loman.svg)](https://pypi.python.org/pypi/loman)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/loman.svg)](https://pypi.python.org/pypi/loman)
-[![PyPI - License](https://img.shields.io/pypi/l/loman.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Github - Test Status](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml)
 [![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
 [![Codespaces](https://img.shields.io/badge/Codespaces-Open-blue.svg?logo=github)](https://codespaces.new/janusassetallocation/loman)
 
-🧠 **Smart computation management** - Only recalculate what's necessary when data changes
+🧠 **Smart computation management** - Only recalculate what's necessary
 
 Loman tracks the state of your computations and their dependencies, enabling intelligent partial recalculations that save time and computational resources. Perfect for data pipelines, real-time systems, and complex analytical workflows.
+
+</div>
 
 ## Table of Contents
 
@@ -63,28 +68,6 @@ comp.get_value_dict()
 
 # Visualize the computation graph
 comp.draw_graphviz()  # Creates the graph shown above
-```
-
-### More Examples
-
-```python
-# Update input and see smart recalculation
-comp.set_value('a', 10)
-comp.compute('d')  # Only recalculates affected nodes
-comp.get_value_dict()
-# {'a': 10, 'b': 11, 'c': 20, 'd': 31, 'e': None}
-
-# Financial modeling example
-portfolio = Computation()
-portfolio.add_node('prices', value=stock_prices)
-portfolio.add_node('weights', value=portfolio_weights)  
-portfolio.add_node('returns', lambda prices: prices.pct_change())
-portfolio.add_node('portfolio_return', lambda returns, weights: (returns * weights).sum(axis=1))
-portfolio.add_node('sharpe_ratio', lambda portfolio_return: portfolio_return.mean() / portfolio_return.std())
-
-# When new prices arrive, only affected calculations run
-portfolio.set_value('prices', updated_prices)
-portfolio.compute('sharpe_ratio')
 ```
 
 📚 **Explore More**: Check out our [Interactive Examples](examples/) including:
@@ -169,6 +152,24 @@ task coverage
 - 📊 [Interactive Examples](examples/): Real-world financial modeling examples
 - 🔧 [API Reference](http://loman.readthedocs.io/en/latest/api.html): Complete function and class documentation
 
+## ☁️ Try Loman in Codespaces
+
+> **Instant development environment in your browser**
+
+Want to try Loman without any local setup? Click the Codespaces badge above or use the button below to launch a fully configured development environment in your browser:
+
+[![Open in GitHub Codespaces](https://img.shields.io/badge/Open%20in-Codespaces-blue?style=for-the-badge&logo=github)](https://codespaces.new/janusassetallocation/loman)
+
+### What's Included
+
+- 🐍 **Python 3.13** - Latest Python with all dependencies pre-installed
+- 🛠️ **Development Tools** - pytest, ruff, mypy, pre-commit hooks ready to go
+- 📓 **Interactive Notebooks** - Marimo notebooks for exploring examples
+- ⚡ **Zero Setup** - Everything configured with our dev container
+- 🎯 **VS Code Extensions** - Python, testing, and productivity extensions pre-installed
+
+The Codespace uses our carefully crafted [dev container configuration](.devcontainer/devcontainer.json) to provide a consistent development environment across all platforms.
+
 ## 👥 Contributing
 
 We welcome contributions! 🎉
@@ -195,7 +196,7 @@ Whether you're fixing bugs, adding features, or improving documentation, your he
 
 Loman is licensed under the 3-Clause BSD License.
 
-� See the full license in the [LICENSE](LICENSE) file.
+- See the full license in the [LICENSE](LICENSE) file.
 
 ### Acknowledgments 🙏
 
@@ -203,6 +204,8 @@ Loman is licensed under the 3-Clause BSD License.
 
 ---
 
-**Made with ❤️ by the Loman community**
+<div align="center">
 
 ⭐ **If you find Loman useful, please consider giving it a star!** ⭐
+
+</div>
