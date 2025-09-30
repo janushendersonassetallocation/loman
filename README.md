@@ -173,7 +173,7 @@ Whether you're fixing bugs, adding features, or improving documentation, your he
 1. 🍴 Fork the repository
 2. 🌿 Create your feature branch: `git checkout -b feature/amazing-feature`
 3. ✨ Make your changes and add tests
-4. 🧪 Test your changes: `task test`
+4. 🧪 Test your changes: `make test`
 5. 📝 Commit your changes: `git commit -m 'Add amazing feature'`
 6. 🚀 Push to your branch: `git push origin feature/amazing-feature`
 7. 🎯 Open a Pull Request
