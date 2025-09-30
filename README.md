@@ -5,6 +5,7 @@
 
 ### Manage complex calculation flow via robust DAG-based dependency logic in Python
 
+🧠 **Smart computation management** - Only recalculate what's necessary 🧠
 
 [![Python Version](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Version](https://img.shields.io/pypi/v/loman.svg)](https://pypi.python.org/pypi/loman)
@@ -14,8 +15,6 @@
 [![Codespaces](https://img.shields.io/badge/Codespaces-Open-blue.svg?logo=github)](https://codespaces.new/janusassetallocation/loman)
 
 </div>
-
-🧠 **Smart computation management** - Only recalculate what's necessary
 
 Loman tracks the state of your computations and their dependencies, enabling intelligent partial recalculations that save time and computational resources. Perfect for data pipelines, real-time systems, and complex analytical workflows.
 
@@ -31,7 +30,7 @@ Loman tracks the state of your computations and their dependencies, enabling int
 
 ## ✨ Features
 
-> **Build smarter computation graphs with automatic dependency tracking**
+**Build smarter computation graphs with automatic dependency tracking**
 
 - 🔄 **Smart Recalculation**: Only compute what's changed - save time and resources
 - 📊 **Dependency Tracking**: Automatic graph-based dependency management
