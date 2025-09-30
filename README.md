@@ -113,11 +113,11 @@ cd loman
 pip install -e .
 ```
 
-> **Note**: Use `-e` flag for editable installation during development
+**Note**: Use `-e` flag for editable installation during development
 
 ## 🛠️ Development
 
-> **For contributors and advanced users**
+**For contributors and advanced users**
 
 Loman uses modern Python development tools for a smooth developer experience:
 
@@ -153,18 +153,16 @@ task coverage
 
 ## ☁️ Try Loman in Codespaces
 
-**Instant development environment in your browser**
-
-Want to try Loman without any local setup? Click the Codespaces badge above or use the button below to launch a fully configured development environment in your browser:
-
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/janusassetallocation/loman?quickstart=1)
+
+**Instant development environment in your browser** Click the button to launch a fully configured development environment in your browser.
 
 ### What's Included
 
 - 🐍 **Python 3.13** - Latest Python with all dependencies pre-installed
 - 🛠️ **Development Tools** - pytest, ruff, mypy, pre-commit hooks ready to go
 - 📓 **Interactive Notebooks** - Marimo notebooks for exploring examples
-- ⚡ **Zero Setup** - Everything configured with our dev container
+- ⚡ **Zero Setup** - Everything configured ready to go
 - 🎯 **VS Code Extensions** - Python, testing, and productivity extensions pre-installed
 
 
