@@ -123,17 +123,13 @@ Loman uses modern Python development tools for a smooth developer experience:
 
 ```bash
 # 📦 Install development dependencies  
-task install
+make install
 
 # 🧪 Run tests with coverage
-task test
+make test
 
 # ✨ Format and lint code
-task fmt
-task lint
-
-# 📓 View test coverage report
-task coverage
+make check
 ```
 
 ### Development Tools
