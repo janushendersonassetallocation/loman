@@ -8,6 +8,7 @@
 [![PyPI - License](https://img.shields.io/pypi/l/loman.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Github - Test Status](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/janushendersonassetallocation/loman/actions/workflows/ci.yml)
 [![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
+[![Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/janusassetallocation/loman)
 
 🧠 **Smart computation management** - Only recalculate what's necessary when data changes
 
