@@ -3,7 +3,7 @@
 
 # Loman
 
-### Manage complex calculation flows with robust DAG-based dependency tracking in Python
+### Manage complex calculation flow via robust DAG-based dependency logic in Python
 
 
 [![Python Version](https://img.shields.io/badge/python-3.10--3.13-blue.svg)](https://pypi.python.org/pypi/loman)
@@ -13,11 +13,11 @@
 [![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
 [![Codespaces](https://img.shields.io/badge/Codespaces-Open-blue.svg?logo=github)](https://codespaces.new/janusassetallocation/loman)
 
+</div>
+
 🧠 **Smart computation management** - Only recalculate what's necessary
 
 Loman tracks the state of your computations and their dependencies, enabling intelligent partial recalculations that save time and computational resources. Perfect for data pipelines, real-time systems, and complex analytical workflows.
-
-</div>
 
 ## Table of Contents
 
@@ -154,11 +154,11 @@ task coverage
 
 ## ☁️ Try Loman in Codespaces
 
-> **Instant development environment in your browser**
+**Instant development environment in your browser**
 
 Want to try Loman without any local setup? Click the Codespaces badge above or use the button below to launch a fully configured development environment in your browser:
 
-[![Open in GitHub Codespaces](https://img.shields.io/badge/Open%20in-Codespaces-blue?style=for-the-badge&logo=github)](https://codespaces.new/janusassetallocation/loman)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/janusassetallocation/loman?quickstart=1)
 
 ### What's Included
 
