@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools >= 77.0.3"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "loman"
@@ -23,6 +23,7 @@ license-files = ["LICEN[CS]E*"]
 dependencies = [
     "decorator",
     "matplotlib",
+    "numpy",
     "pydotplus",
     "dill >= 0.2.5",
     "networkx >= 2.0",
@@ -34,7 +35,38 @@ test = [
     "attrs",
     "pytest"
 ]
-
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.12.0",
+    "pre-commit>=3.0",
+    "mypy>=1.0",
+    "marimo>=0.15",
+]
 
 [project.urls]
 Homepage = "https://github.com/janusassetallocation/loman"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/loman"]
+
+[tool.deptry]
+known_first_party = ["loman"]
+pep621_dev_dependency_groups = ["test", "dev"]
+per_rule_ignores = {DEP002 = ["pytest", "pytest-cov", "ruff", "pre-commit", "mypy", "marimo", "attrs"], DEP004 = ["attrs"]}
+
+[tool.deptry.package_module_name_map]
+pre-commit = "pre_commit"
+pytest-cov = "pytest_cov"
+matplotlib = "matplotlib"
+pydotplus = "pydotplus"
+decorator = "decorator"
+networkx = "networkx"
+marimo = "marimo"
+pandas = "pandas"
+pytest = "pytest"
+attrs = "attrs"
+numpy = "numpy"
+mypy = "mypy"
+ruff = "ruff"
+dill = "dill"

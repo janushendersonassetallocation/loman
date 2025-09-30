@@ -1,0 +1,35 @@
+# This file is part of the tschm/.config-templates repository
+# (https://github.com/tschm/.config-templates).
+#
+# Workflow: Deptry
+# Purpose: This workflow identifies missing and obsolete dependencies in the project.
+#          It helps maintain a clean dependency tree by detecting unused packages and
+#          implicit dependencies that should be explicitly declared.
+name: "DEPTRY"
+
+# Trigger: This workflow runs on every push and on pull requests to the main branch
+on:
+  push:
+  pull_request:
+    # Only run on pull requests targeting the main branch
+    branches: [ main ]
+
+# Permissions: Only read access to repository contents is needed
+permissions:
+    contents: read
+
+jobs:
+  deptry_analysis:
+    name: Check dependencies with deptry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Use the composite action to setup the project and check for pyproject.toml
+      - name: Setup the project
+        id: setup
+        uses: ./.github/actions/setup-project
+
+      - name: Run deptry
+        if: steps.setup.outputs.pyproject_exists == 'true'
+        run: task quality:deptry

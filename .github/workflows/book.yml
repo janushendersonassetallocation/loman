@@ -1,0 +1,74 @@
+# This file is part of the tschm/.config-templates repository
+# (https://github.com/tschm/.config-templates).
+#
+# Workflow: Book
+# Purpose: This workflow builds and deploys comprehensive documentation for the project.
+#          It combines API documentation, test coverage reports, test results, and
+#          interactive notebooks into a single GitHub Pages site.
+#
+# Trigger: This workflow runs on every push to the main branch
+#
+# Components:
+#   - 📓 Process Marimo notebooks
+#   - 📖 Generate API documentation with pdoc
+#   - 🧪 Run tests and generate coverage reports
+#   - 🚀 Deploy combined documentation to GitHub Pages
+
+name: "BOOK"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  book:
+    runs-on: "ubuntu-latest"
+
+    environment:
+      name: github-pages  # 👈 this is the critical missing piece
+
+    permissions:
+      contents: read
+      pages: write            # Permission to deploy to Pages
+      id-token: write         # Permission to verify deployment origin
+
+    steps:
+      # Check out the repository code
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      # Use the composite action to set up the project
+      - name: Setup the project
+        uses: ./.github/actions/setup-project
+
+      - name: "Make the docs"
+        run: |
+          task docs:docs
+
+      - name: "Make the tests"
+        run: |
+          task docs:test
+
+      - name: "Make the notebooks"
+        run: |
+          task docs:marimushka
+
+      - name: "Make the book"
+        run: |
+          task docs:book
+
+      # Step 5: Package all artifacts for GitHub Pages deployment
+      # This prepares the combined outputs for deployment by creating a single artifact
+      - name: Upload static files as artifact
+        uses: actions/upload-pages-artifact@v4  # Official GitHub Pages artifact upload action
+        with:
+          path: _book/  # Path to the directory containing all artifacts to deploy
+
+      # Step 6: Deploy the packaged artifacts to GitHub Pages
+      # This step publishes the content to GitHub Pages
+      - name: Deploy to GitHub Pages
+        if: ${{ !github.event.repository.fork }}
+        uses: actions/deploy-pages@v4  # Official GitHub Pages deployment action
