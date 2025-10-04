@@ -15,25 +15,26 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(r"""
+    mo.md(
+        r"""
     # Example: Using Loman to price Interest Rate Swaps
 
     This example demonstrates calibrating interest rate curves to market
     prices and using them to price portfolios of swaps using the Loman
     framework.
-    """)
+    """
+    )
     return
 
 
 @app.cell
 def _():
-    import matplotlib.pyplot as plt
     import numpy as np
     from scipy.integrate import quad
 
     import loman
 
-    return loman, np, plt, quad
+    return loman, np, quad
 
 
 @app.cell
@@ -43,7 +44,7 @@ def _(mo):
 
 
 @app.cell
-def _(np, plt, quad):
+def _(np, quad):
     class BaseIRCurve:
         def r_quad(self, s, t):
             b = np.broadcast(s, t)
@@ -114,7 +115,7 @@ def _(np):
         fixed_pv, float_pv = swap_leg_pvs(a, b, p, projection_curve, discount_curve)
         return float_pv / fixed_pv
 
-    return sched, swap_leg_pvs, swap_rate
+    return swap_leg_pvs, swap_rate
 
 
 @app.cell
@@ -165,7 +166,7 @@ def _(comp, swap_leg_pvs):
         return swap.notional * (float_pv - swap.rate * fixed_pv)
 
     comp.add_node("portfolio", value=[Swap(10000000, 5, 10, 0.025, 0.25), Swap(-5000000, 2.5, 12.5, 0.02, 0.25)])
-    return Swap, namedtuple, swap_pv
+    return (swap_pv,)
 
 
 @app.cell
@@ -181,13 +182,15 @@ def _(comp, swap_pv):
 
 @app.cell
 def _(mo):
-    mo.md(r"""
+    mo.md(
+        r"""
     ## Conclusion
 
     This demonstrates the basic functionality of using Loman for interest
     rate derivatives pricing. The full notebook would include calibration,
     dual curve bootstrapping, and risk calculations.
-    """)
+    """
+    )
     return
 
 
