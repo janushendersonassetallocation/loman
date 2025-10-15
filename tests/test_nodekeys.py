@@ -34,6 +34,12 @@ def test_join_nodekeys(base_path, join_parts, expected_path):
     assert result == expected_path
 
 
+def test_add_op():
+    res = to_nodekey("/A")
+    res1 = to_nodekey("/B/C")
+    assert (res+res1) == to_nodekey("/A/B/C")
+
+
 TEST_JOIN_DATA_2 = [
     (["A", "B"], "A/B"),
     (["A", "B", "C"], "A/B/C"),
