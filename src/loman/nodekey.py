@@ -85,6 +85,10 @@ class NodeKey:
             return self
         return NodeKey(self.parts + tuple(parts))
 
+    def __truediv__(self, other: Name) -> "NodeKey":
+        """Join this node key with other to create a new node key."""
+        return self.join(other)
+
     def is_descendent_of(self, other: "NodeKey") -> bool:
         """Check if this node key is a descendant of another node key."""
         n_self_parts = len(self.parts)

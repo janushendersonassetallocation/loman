@@ -34,6 +34,17 @@ def test_join_nodekeys(base_path, join_parts, expected_path):
     assert result == expected_path
 
 
+TEST_ADD_DATA = [
+    (to_nodekey("/A"), "B", to_nodekey("/A/B")),
+    (to_nodekey("/A"), to_nodekey("B/C"), to_nodekey("/A/B/C")),
+]
+
+
+@pytest.mark.parametrize("this,other,path_expected", TEST_ADD_DATA)
+def test_div_op(this, other, path_expected):
+    assert this / other == path_expected
+
+
 TEST_JOIN_DATA_2 = [
     (["A", "B"], "A/B"),
     (["A", "B", "C"], "A/B/C"),
