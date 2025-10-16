@@ -1282,7 +1282,7 @@ class Computation:
             bar  States.UPTODATE      2           NaN
             foo  States.UPTODATE      1           NaN
         """
-        with translate_nx_exceptions():
+        with translate_nx_exceptions(self.dag):
             idx = nx.topological_sort(self.dag)
             df = pd.DataFrame(index=idx)
         df[NodeAttributes.STATE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.STATE))

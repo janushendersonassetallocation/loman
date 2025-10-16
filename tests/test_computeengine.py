@@ -664,18 +664,18 @@ def test_args_and_kwds():
     }
 
 
-@pytest.mark.parametrize("comp_lambda", [
-    lambda comp: comp.compute_all(),
-    lambda comp: comp.compute("a"),
-    lambda comp: comp.to_df(),
+@pytest.mark.parametrize("comp_lambda,ex_msg", [
+    (lambda comp: comp.compute_all(), "Calculating a for the second time"),
+    (lambda comp: comp.compute("a"), "DAG cycle: a->b, b->c, c->a"),
+    (lambda comp: comp.to_df(), "DAG cycle: a->b, b->c, c->a"),
 ])
-def test_dag_loop_handling(comp_lambda):
+def test_dag_loop_handling(comp_lambda, ex_msg):
     comp = Computation()
     comp.add_node("a", lambda c: c + 1)
     comp.add_node("b", lambda a: a + 1)
     comp.add_node("c", lambda b: b + 1)
     comp.insert("a", 1)
-    with pytest.raises(LoopDetectedError):
+    with pytest.raises(LoopDetectedError, match=ex_msg):
         comp_lambda(comp)
 
 
