@@ -39,7 +39,8 @@ def translate_nx_exceptions(g: nx.Graph = None):
             try:
                 cycle_lst = nx.find_cycle(g)
             except nx.NetworkXNoCycle:
-                raise nx.NetworkXUnfeasible() from e
+                # there must non-cycle reason NetworkXUnfeasible, leave as is
+                raise e
         args = []
         if cycle_lst:
             lst = [f"{n_src}->{n_tgt}" for n_src, n_tgt in cycle_lst]
