@@ -1,4 +1,7 @@
 """Exception classes for the loman computation engine."""
+from contextlib import contextmanager
+
+import networkx as nx
 
 
 class ComputationError(Exception):
@@ -20,6 +23,29 @@ class LoopDetectedError(ComputationError):
     """Exception raised when a dependency loop is detected."""
 
     pass
+
+@contextmanager
+def translate_nx_exceptions(g: nx.Graph = None):
+    """Transalates nx exceptions to loman API ones.
+
+    :param g: if specified, LoopDetectedError will include DAG loop details
+    :raises: LoopDetectedError for nx.NetworkXUnfeasible
+    """
+    try:
+        yield
+    except nx.NetworkXUnfeasible as e:
+        cycle_lst = None
+        if g is not None:
+            try:
+                cycle_lst = nx.find_cycle(g)
+            except nx.NetworkXNoCycle:
+                raise nx.NetworkXUnfeasible() from e
+        args = []
+        if cycle_lst:
+            lst = [f"{n_src}->{n_tgt}" for n_src, n_tgt in cycle_lst]
+            args = [f"DAG cycle: {', '.join(lst)}"]
+        raise LoopDetectedError(*args) from e
+
 
 
 class NonExistentNodeError(ComputationError):

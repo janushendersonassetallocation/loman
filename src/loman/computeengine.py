@@ -27,6 +27,7 @@ from .exception import (
     MapException,
     NodeAlreadyExistsException,
     NonExistentNodeException,
+    translate_nx_exceptions,
 )
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
@@ -1003,8 +1004,10 @@ class Computation:
                 raise Exception(f"Cannot compute {node_key} because {n} is placeholder")
 
         ancestors.add(node_key)
-        nodes_sorted = nx.topological_sort(g)
-        return [n for n in nodes_sorted if n in ancestors]
+        with translate_nx_exceptions(g):
+            nodes_sorted = nx.topological_sort(g)
+            # nx exception during iteration, see topological_sort docstring for details
+            return [n for n in nodes_sorted if n in ancestors]
 
     def _get_calc_node_names(self, name: Name) -> Names:
         node_key = to_nodekey(name)
@@ -1279,7 +1282,9 @@ class Computation:
             bar  States.UPTODATE      2           NaN
             foo  States.UPTODATE      1           NaN
         """
-        df = pd.DataFrame(index=nx.topological_sort(self.dag))
+        with translate_nx_exceptions():
+            idx = nx.topological_sort(self.dag)
+            df = pd.DataFrame(index=idx)
         df[NodeAttributes.STATE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.STATE))
         df[NodeAttributes.VALUE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.VALUE))
         df_timing = pd.DataFrame.from_dict(nx.get_node_attributes(self.dag, "timing"), orient="index")
