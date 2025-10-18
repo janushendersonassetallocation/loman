@@ -187,7 +187,7 @@ def test_block_add_to_comp():
     inner_comp.add_node("a", value=10)
     inner_comp.add_node("b", lambda a: a * 2)
     outer_comp = Computation()
-    Block(inner_comp).add_to_comp(outer_comp, 'blk', None, True)
-    outer_comp.compute('blk/b')
-    assert outer_comp.nodes() == ['blk/a', 'blk/b']
-    assert outer_comp.v['blk/b'] == 20
+    Block(inner_comp).add_to_comp(outer_comp, "blk", None, True)
+    outer_comp.compute("blk/b")
+    assert outer_comp.nodes() == ["blk/a", "blk/b"]
+    assert outer_comp.v["blk/b"] == 20
