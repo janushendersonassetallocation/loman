@@ -1,6 +1,7 @@
 import pytest
 
 from loman import *
+from loman.computeengine import Block
 
 
 def test_simple_block():
@@ -179,3 +180,14 @@ def test_computation_factory_with_blocks():
     assert comp.v.foo.d == 22
     assert comp.v.bar.d == 31
     assert comp.v.output == 22 + 31
+
+
+def test_block_add_to_comp():
+    inner_comp = Computation()
+    inner_comp.add_node("a", value=10)
+    inner_comp.add_node("b", lambda a: a * 2)
+    outer_comp = Computation()
+    Block(inner_comp).add_to_comp(outer_comp, 'blk', None, True)
+    outer_comp.compute('blk/b')
+    assert outer_comp.nodes() == ['blk/a', 'blk/b']
+    assert outer_comp.v['blk/b'] == 20
