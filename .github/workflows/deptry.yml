@@ -11,8 +11,8 @@ name: "DEPTRY"
 on:
   push:
   pull_request:
-    # Only run on pull requests targeting the main branch
-    branches: [ main ]
+    # Only run on pull requests targeting the main / master branches
+    branches: [ main, master ]
 
 # Permissions: Only read access to repository contents is needed
 permissions:
