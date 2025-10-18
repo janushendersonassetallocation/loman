@@ -66,7 +66,7 @@ def _(np, quad):
             return np.sum(amts * dfs)
 
         def plot(self):
-            # This method will be usable once swap_rate is defined
+            # This will be usable once swap_rate is defined
             pass
 
     return (BaseIRCurve,)
