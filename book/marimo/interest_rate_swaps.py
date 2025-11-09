@@ -11,10 +11,14 @@ __generated_with = "0.17.6"
 app = marimo.App(width="medium")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
+    import warnings
+
     import marimo as mo
 
+    # Suppress RuntimeWarnings for division operations globally
+    warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*invalid value encountered.*")
     return (mo,)
 
 
