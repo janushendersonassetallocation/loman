@@ -84,3 +84,27 @@ def test_df_not_equal():
     a = pd.DataFrame({"a": [1.0, np.nan]})
     b = pd.DataFrame({"a": [1.0, 1.0]})
     assert not value_eq(a, b)
+
+
+def test_numpy_arrays_equal():
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([1.0, 2.0, 3.0])
+    assert value_eq(a, b)
+
+
+def test_numpy_arrays_not_equal():
+    a = np.array([1.0, 2.0, 3.0])
+    b = np.array([1.0, 2.0, 4.0])
+    assert not value_eq(a, b)
+
+
+def test_numpy_arrays_with_nan_equal():
+    a = np.array([1.0, np.nan, 3.0])
+    b = np.array([1.0, np.nan, 3.0])
+    assert value_eq(a, b)
+
+
+def test_numpy_arrays_with_nan_not_equal():
+    a = np.array([1.0, np.nan, 3.0])
+    b = np.array([1.0, 2.0, 3.0])
+    assert not value_eq(a, b)

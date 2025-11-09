@@ -27,7 +27,8 @@ dependencies = [
     "pydotplus",
     "dill >= 0.2.5",
     "networkx >= 2.0",
-    "pandas >= 0.19.2"
+    "pandas >= 0.19.2",
+    "scipy>=1.13.1",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +44,10 @@ dev = [
     "mypy>=1.0",
     "marimo>=0.15",
 ]
+notebook = [
+    "scipy",
+    "marimo>=0.15",
+]
 
 [project.urls]
 Homepage = "https://github.com/janusassetallocation/loman"
@@ -52,7 +57,7 @@ packages = ["src/loman"]
 
 [tool.deptry]
 known_first_party = ["loman"]
-pep621_dev_dependency_groups = ["test", "dev"]
+pep621_dev_dependency_groups = ["test", "dev", "notebook"]
 per_rule_ignores = {DEP002 = ["pytest", "pytest-cov", "ruff", "pre-commit", "mypy", "marimo", "attrs"], DEP004 = ["attrs"]}
 
 [tool.deptry.package_module_name_map]
