@@ -82,6 +82,9 @@ def _():
 
 @app.cell
 def _():
+    import scipy
+
+    scipy.__version__
     return
 
 
@@ -173,7 +176,7 @@ def _(FlatIRCurve, np, swap_rate):
             0, usd_libor_ts, 0.25, usd_libor_curve, usd_libor_curve
         ),
     )
-    comp.draw()
+    comp.draw(graph_attr={"size": "12"})
     return (comp,)
 
 
@@ -305,7 +308,7 @@ def _(comp, swap_pv):
         "portfolio_val",
         lambda portfolio, usd_libor_curve: [swap_pv(swap, usd_libor_curve, usd_libor_curve) for swap in portfolio],
     )
-    comp.draw()
+    comp.draw(graph_attr={"size": "12"})
     return
 
 
@@ -539,7 +542,7 @@ def _(comp, namedtuple, np, swap_pv):
             swap_pv(swap, curveset[swap.projection_curve], curveset[swap.discount_curve]) for swap in portfolio
         ],
     )
-    comp.draw()
+    comp.draw(graph_attr={"size": "12"})
     return
 
 
@@ -642,7 +645,7 @@ def _(comp, create_perturbed_curve, np):
 
     comp.add_node("curveset", create_curveset_perturbed)
 
-    comp.draw()
+    comp.draw(graph_attr={"size": "12"})
     return
 
 
