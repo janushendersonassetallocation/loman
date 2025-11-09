@@ -34,9 +34,12 @@ def _(mo):
     Because the focus will be on using Loman, we'll adopt deliberately simplifying assumptions; time is a float, day count and business day conventions are ignored, quarters are exactly 0.25 years long and so on.
 
     Our interest rate curves can be used for two things: discounting and projecting rates. To do this, we define a continuously-compounded forward rate $r(t)$, so that the discount rate from a payment at time $t$ to a time $s$ is
-    \begin{equation} df(s,t) = \exp\left[-\int_s^t r(\tau) d\tau\right] \end{equation}
+
+    $$df(s,t) = \exp\left[-\int_s^t r(\tau) d\tau\right]$$
+
     and zero/FRA rates are defined by
-    \begin{equation} df(s,t) = \frac{1}{1+\text{FRA}(s,t)(t-s)}. \end{equation}
+
+    $$df(s,t) = \frac{1}{1+\text{FRA}(s,t)(t-s)}.$$
 
     Our BaseIRCurve class leaves the definition of $r$ blank, but otherwise fleshes out the methods we'll need, including methods to PV a set of cashflows, and also to plot the continuously-compounded forward rate, 3M FRA rates, and spot swap rates (once we define swap_rate, further below).
     """)
@@ -78,14 +81,6 @@ def _():
             plt.legend()
 
     return BaseIRCurve, np, plt
-
-
-@app.cell
-def _():
-    import scipy
-
-    scipy.__version__
-    return
 
 
 @app.cell(hide_code=True)
@@ -344,7 +339,8 @@ def _(FlatIRCurve, comp, np):
 def _(mo):
     mo.md(r"""
     Now we need a function to calculate LIBOR-OIS spreads from our two curves using
-    \begin{equation} PV_\text{LIBOR float leg} = PV_\text{OIS float leg} + s \times PV_\text{OIS 1bp fixed leg} \end{equation}
+
+    $$PV_\text{LIBOR float leg} = PV_\text{OIS float leg} + s \times PV_\text{OIS 1bp fixed leg}$$
     """)
     return
 
