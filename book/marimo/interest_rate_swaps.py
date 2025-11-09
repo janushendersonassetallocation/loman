@@ -18,7 +18,7 @@ def _():
     return (mo,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Example: Using Loman to price Interest Rate Swaps
@@ -81,7 +81,7 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     The FlatIRCurve class fills out the definitions of r and r_quad. $r(t)$ is piece-wise flat, and hence its integral is piecewise linear. Together with the methods defined by BaseIRCurve we will now have a basic but functional interest rate curve.
@@ -110,7 +110,7 @@ def _(BaseIRCurve, np):
     return (FlatIRCurve,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Finally, we'll need to set up some functions to calculate quarterly FRAs and discount them to calculate PVs of the fixed and floating legs of swaps, as well as the swap rate.
@@ -143,7 +143,7 @@ def _(np):
     return swap_leg_pvs, swap_rate
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Calibrating a LIBOR curve
@@ -173,7 +173,7 @@ def _(FlatIRCurve, np, swap_rate):
     return (comp,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     If we calculate all the nodes in Loman, we can plot the curve. Because we set all the continuously compounding rates to 3%, it's not a very interesting curve yet.
@@ -194,7 +194,7 @@ def _(comp, np, plt, swap_rate):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Now, to help calibrate our curve, we add a node that is market swap rates (**usd_libor_mkt_swap_rates**), and calculate the difference between the rates our curve is producing, and the market rates we are trying to fit to, in **usd_libor_fitting_error**.
@@ -215,7 +215,7 @@ def _(comp, np):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     To calibrate our curve, we use a minimizer from scipy. Our objective function is to insert a trial set of continuously-compounded rates into the input **usd_libor_c_rates**, calculate the error vector **usd_libor_fitting_error** using Loman, and then return the sum of the squares (scaled appropriately for the solver). Our initial guess is taken from the current set of rates in **usd_libor_c_rates**.
@@ -236,7 +236,7 @@ def _(comp, np):
     return minimize, res
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     The solver indicates that it rans successfully with 275 evaluations, so we insert its solution set of input rates into the computation (solvers aren't required that their last evaluation be the solution value), re-compute everything, and plot the resulting curve. We also show the market swap rates so we can see our calibration was successful.
@@ -261,7 +261,7 @@ def _(comp, np, plt, res, swap_rate):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Valuing a Portfolio of Interest Rate Swaps
@@ -287,7 +287,7 @@ def _(comp, swap_leg_pvs):
     return namedtuple, swap_pv
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     To value our portfolio, we simply apply our valuation function to each position in our portfolio, and Loman gives us an array back, with the value of each position
@@ -312,7 +312,7 @@ def _(comp):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Dual Bootstrap Curves
@@ -333,7 +333,7 @@ def _(FlatIRCurve, comp, np):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Now we need a function to calculate LIBOR-OIS spreads from our two curves using
@@ -352,7 +352,7 @@ def _(swap_leg_pvs):
     return (swap_spread,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     We use that function to calculate LIBOR-OIS spreads using our two curves, as well as another fitting error vector that we will use in calibration.
@@ -376,7 +376,7 @@ def _(comp, np, swap_spread):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     We should also update our LIBOR swap rate calculation to use our OIS curve for discounting:
@@ -395,7 +395,7 @@ def _(comp, np, swap_rate):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Finally, for our calibration, it would be more convenient if we could just insert one vector, containing both LIBOR and OIS inputs, and have those feed through into **usd_libor_c_rates** and **usd_ois_c_rates**. Thanks to Loman, we can do this by giving them a common parent node. If we later want to insert values directly into **usd_libor_c_rates** and **usd_ois_c_rates**, then we can do that too, even though they are calculation nodes. We also define a node  **usd_fitting_error** to collect the fitting error vectors.
@@ -418,7 +418,7 @@ def _(comp, np):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Complicated.
@@ -449,7 +449,7 @@ def _(comp, res_dual):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Finally, we can plot LIBOR-OIS spreads from our dual boot-strapped curve, as well as LIBOR and OIS swap rates, to check the calibration.
@@ -496,7 +496,7 @@ def _(comp, np, plt, swap_rate):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Revisiting Portfolio Valuation
@@ -539,7 +539,7 @@ def _(comp, namedtuple, np, swap_pv):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     Finally, we can see that our valuation is close but materially different to the previous LIBOR-only curve's result (86,395 and -274,086), exactly as we expect.
@@ -554,7 +554,7 @@ def _(comp):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     # Risks
@@ -593,7 +593,7 @@ def _(BaseIRCurve, FlatIRCurve, np):
     return (create_perturbed_curve,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     To test this is working, we can see what happens when we bump the continuously-compounded rate by 5% between years 5 and 10 for example.
@@ -613,7 +613,7 @@ def _(comp, create_perturbed_curve, np, plt, swap_rate):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     That looks as we expect, so we can go ahead and add our new nodes:
@@ -642,7 +642,7 @@ def _(comp, create_perturbed_curve, np):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     We can iterate over each year, and see the sensitivity of the portfolio to a change of 1bp in the forward swap rate for that year:
@@ -672,7 +672,7 @@ def _(comp, np, plt, swap_rate):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## Conclusion
