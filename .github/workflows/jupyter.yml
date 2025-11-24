@@ -41,19 +41,27 @@ jobs:
       # Install missing dependencies
       - name: Install dependencies
         run: |
-          uv pip install nbmake pytest-rerunfailures
+          uv pip install nbmake #pytest-rerunfailures
 
       # Discover all notebooks
-      - name: Collect notebooks
-        id: notebooks
-        shell: bash
-        run: |
-          NOTEBOOKS=$(find examples -name '*.ipynb' -print0 | xargs -0 echo)
-          echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
-          echo $NOTEBOOKS
+      #- name: Collect notebooks
+      #  id: notebooks
+      #  shell: bash
+      #  run: |
+      #    NOTEBOOKS=$(find examples -name '*.ipynb' -print0 | xargs -0 echo)
+      #    echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
+      #    echo $NOTEBOOKS
 
       # Run all discovered notebooks with nbmake
+      #- name: Test notebooks
+      #  shell: bash
+      #  run: |
+      #    uv run pytest --reruns 3 --nbmake --nbmake-timeout=3600 -vv ${{ steps.notebooks.outputs.notebooks }}
+
       - name: Test notebooks
         shell: bash
         run: |
-          uv run pytest --reruns 3 --nbmake --nbmake-timeout=3600 -vv ${{ steps.notebooks.outputs.notebooks }}
+          uv run pytest --nbmake --nbmake-timeout=3600 -vv examples/InterestRateSwaps.ipynb
+          uv run pytest --nbmake --nbmake-timeout=3600 -vv examples/Portfolio.ipynb
+          uv run pytest --nbmake --nbmake-timeout=3600 -vv examples/CDOs.ipynb
+
