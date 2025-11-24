@@ -58,7 +58,7 @@ packages = ["src/loman"]
 [tool.deptry]
 known_first_party = ["loman"]
 pep621_dev_dependency_groups = ["test", "dev"]
-per_rule_ignores = {DEP002 = ["pytest", "pytest-cov", "ruff", "pre-commit", "mypy", "marimo", "attrs"], DEP004 = ["attrs"]}
+per_rule_ignores = {DEP002 = ["mypy", "marimo", "attrs", "scipy"], DEP004 = ["attrs"]}
 
 [tool.deptry.package_module_name_map]
 pre-commit = "pre_commit"
