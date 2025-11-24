@@ -61,16 +61,18 @@ comp.add_node('e', lambda c: c + 1)            # e depends on c
 # Smart computation - only calculates what's needed
 comp.compute('d')  # Will not compute 'e' unnecessarily!
 
-# Inspect a computed value
-print(comp.value('d'))  # -> 4
+# Inspect intermediate values
+comp.to_dict()
+# {'a': 1, 'b': 2, 'c': 2, 'd': 4, 'e': None}
 
-# Visualize the computation graph (no console output)
+# Visualize the computation graph
 comp.draw()  # Creates the graph shown above
 ```
 
 ```result
-4
+
 ```
+
 
 📚 **Explore More**: Check out our [Interactive Examples](examples/) including:
 - 💰 Interest Rate Swap Pricing
