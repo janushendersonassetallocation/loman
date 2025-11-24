@@ -41,7 +41,7 @@ jobs:
         id: notebooks
         shell: bash
         run: |
-          NOTEBOOKS=$(find cookbook -name '*.ipynb' -print0 | xargs -0 echo)
+          NOTEBOOKS=$(find examples -name '*.ipynb' -print0 | xargs -0 echo)
           echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
 
       # Run all discovered notebooks with nbmake
