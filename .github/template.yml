@@ -9,3 +9,5 @@ include: |
     .pre-commit-config.yaml
     Makefile
     Taskfile.yml
+exclude: |
+  .github/workflows/docker.yml
