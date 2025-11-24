@@ -3,8 +3,8 @@
 import itertools
 import types
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def apply1(f, xs, *args, **kwds):
@@ -119,7 +119,7 @@ def value_eq(a, b):
                 b_arr = np.asarray(b)
                 if a_arr.shape != b_arr.shape:
                     return False
-                eq = (a_arr == b_arr)
+                eq = a_arr == b_arr
                 # align NaN handling
                 with np.errstate(invalid="ignore"):
                     both_nan = np.isnan(a_arr) & np.isnan(b_arr)

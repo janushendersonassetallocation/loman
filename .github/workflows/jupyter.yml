@@ -51,6 +51,7 @@ jobs:
         run: |
           NOTEBOOKS=$(find examples -name '*.ipynb' -print0 | xargs -0 echo)
           echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
+          echo $NOTEBOOKS
 
       # Run all discovered notebooks with nbmake
       - name: Test notebooks
