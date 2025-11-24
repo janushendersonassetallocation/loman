@@ -58,10 +58,18 @@ jobs:
       #  run: |
       #    uv run pytest --reruns 3 --nbmake --nbmake-timeout=3600 -vv ${{ steps.notebooks.outputs.notebooks }}
 
-      - name: Test notebooks
+      - name: Test notebooks InterestRateSwaps.ipynb
         shell: bash
         run: |
           uv run pytest --nbmake --nbmake-timeout=3600 -vv examples/InterestRateSwaps.ipynb
+
+      - name: Test notebooks Portfolio.ipynb
+        shell: bash
+        run: |
           uv run pytest --nbmake --nbmake-timeout=3600 -vv examples/Portfolio.ipynb
+
+      - name: Test notebooks CDOs.ipynb
+        shell: bash
+        run: |
           uv run pytest --nbmake --nbmake-timeout=3600 -vv examples/CDOs.ipynb
 
