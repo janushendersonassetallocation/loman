@@ -36,6 +36,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
 
+      # Install missing dependencies
+      - name: Install dependencies
+        run: |
+          uv pip install nbmake pytest-rerunfailures
+
       # Discover all notebooks
       - name: Collect notebooks
         id: notebooks
