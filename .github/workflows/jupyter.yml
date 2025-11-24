@@ -1,0 +1,51 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: jupyter
+
+on:
+  push:
+    branches: ["main","master"]
+  pull_request:
+    branches: ["main","master"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notebooks:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [ '3.11', '3.12', '3.13', '3.14' ]
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+
+      # Use the composite action to set up the project
+      - name: Setup the project
+        id: setup
+        uses: ./.github/actions/setup-project
+        with:
+          python-version: ${{ matrix.python-version }}
+
+
+      # Discover all notebooks
+      - name: Collect notebooks
+        id: notebooks
+        shell: bash
+        run: |
+          NOTEBOOKS=$(find cookbook -name '*.ipynb' -print0 | xargs -0 echo)
+          echo "notebooks=$NOTEBOOKS" >> $GITHUB_OUTPUT
+
+      # Run all discovered notebooks with nbmake
+      - name: Test notebooks
+        shell: bash
+        run: |
+          uv run pytest --reruns 3 --nbmake --nbmake-timeout=3600 -vv ${{ steps.notebooks.outputs.notebooks }}
