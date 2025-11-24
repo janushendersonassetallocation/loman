@@ -516,6 +516,7 @@ def create_root_graph(graph_attr, node_attr, edge_attr):
         can produce a DOT syntax error near ',' if we pass a raw string.
         We defensively quote string values that contain commas or whitespace.
     """
+
     def _normalize_attr_value(v):
         # Keep numeric values as-is
         if isinstance(v, (int, float)):
