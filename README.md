@@ -66,7 +66,7 @@ comp.to_dict()
 # {'a': 1, 'b': 2, 'c': 2, 'd': 4, 'e': None}
 
 # Visualize the computation graph
-comp.draw_graphviz()  # Creates the graph shown above
+comp.draw()  # Creates the graph shown above
 ```
 
 ```result
