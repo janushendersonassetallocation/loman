@@ -508,15 +508,39 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
 
 
 def create_root_graph(graph_attr, node_attr, edge_attr):
-    """Create root Graphviz graph with specified attributes."""
+    """Create root Graphviz graph with specified attributes.
+
+    Notes:
+        Graphviz attributes like size expect a quoted string when containing
+        commas (e.g. "10,8"). Some pydotplus setters don't auto-quote, which
+        can produce a DOT syntax error near ',' if we pass a raw string.
+        We defensively quote string values that contain commas or whitespace.
+    """
+
+    def _normalize_attr_value(v):
+        # Keep numeric values as-is
+        if isinstance(v, (int, float)):
+            return v
+        s = str(v)
+        # If already quoted, keep
+        if len(s) >= 2 and ((s[0] == '"' and s[-1] == '"') or (s[0] == "'" and s[-1] == "'")):
+            return s
+        # Quote if contains comma, whitespace, or special characters
+        if any(c in s for c in [",", " ", "\t", "\n"]) or s == "":
+            return f'"{s}"'
+        return s
+
     root_graph = pydotplus.Dot()
     if graph_attr is not None:
         for k, v in graph_attr.items():
-            root_graph.set(k, v)
+            root_graph.set(k, _normalize_attr_value(v))
     if node_attr is not None:
-        root_graph.set_node_defaults(**node_attr)
+        # For node/edge defaults, normalize each value too
+        node_defaults = {k: _normalize_attr_value(v) for k, v in node_attr.items()}
+        root_graph.set_node_defaults(**node_defaults)
     if edge_attr is not None:
-        root_graph.set_edge_defaults(**edge_attr)
+        edge_defaults = {k: _normalize_attr_value(v) for k, v in edge_attr.items()}
+        root_graph.set_edge_defaults(**edge_defaults)
     return root_graph
 
 

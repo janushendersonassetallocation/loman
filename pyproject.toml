@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Loman tracks state of computations, and the dependencies between them, allowing full and partial recalculations."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -27,7 +27,8 @@ dependencies = [
     "pydotplus",
     "dill >= 0.2.5",
     "networkx >= 2.0",
-    "pandas >= 0.19.2"
+    "pandas >= 0.19.2",
+    "scipy>=1.16.3"
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,10 @@ dev = [
     "pre-commit>=3.0",
     "mypy>=1.0",
     "marimo>=0.15",
+    "scipy>=1.16.3",
+    #"yahoo-finance>=1.4.0",
+    #"beautifulsoup4>=4.14.2",
+    #"requests>=2.32.5"
 ]
 
 [project.urls]
@@ -53,7 +58,7 @@ packages = ["src/loman"]
 [tool.deptry]
 known_first_party = ["loman"]
 pep621_dev_dependency_groups = ["test", "dev"]
-per_rule_ignores = {DEP002 = ["pytest", "pytest-cov", "ruff", "pre-commit", "mypy", "marimo", "attrs"], DEP004 = ["attrs"]}
+per_rule_ignores = {DEP002 = ["mypy", "marimo", "attrs", "scipy"], DEP004 = ["attrs"]}
 
 [tool.deptry.package_module_name_map]
 pre-commit = "pre_commit"
