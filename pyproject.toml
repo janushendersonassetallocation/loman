@@ -43,7 +43,8 @@ dev = [
     "mypy>=1.0",
     "marimo>=0.15",
     "scipy>=1.16.3",
-    "yahoo-finance>=1.4.0"
+    "yahoo-finance>=1.4.0",
+    "beautifulsoup4>=4.14.2"
 ]
 
 [project.urls]
