@@ -69,6 +69,11 @@ comp.get_value_dict()
 comp.draw_graphviz()  # Creates the graph shown above
 ```
 
+```result
+
+```
+
+
 📚 **Explore More**: Check out our [Interactive Examples](examples/) including:
 - 💰 Interest Rate Swap Pricing
 - 📈 Portfolio Valuation  
