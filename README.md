@@ -54,24 +54,27 @@ from loman import Computation
 comp = Computation()
 comp.add_node('a', value=1)                    # Input node
 comp.add_node('b', lambda a: a + 1)            # b depends on a
-comp.add_node('c', lambda a, b: 2 * a)         # c depends on a and b  
+comp.add_node('c', lambda a, b: 2 * a)         # c depends on a and b
 comp.add_node('d', lambda b, c: b + c)         # d depends on b and c
 comp.add_node('e', lambda c: c + 1)            # e depends on c
 
 # Smart computation - only calculates what's needed
 comp.compute('d')  # Will not compute 'e' unnecessarily!
 
-# Inspect intermediate values
-comp.get_value_dict()
-# {'a': 1, 'b': 2, 'c': 2, 'd': 4, 'e': None}
+# Inspect a computed value
+print(comp.value('d'))  # -> 4
 
-# Visualize the computation graph
-comp.draw_graphviz()  # Creates the graph shown above
+# Visualize the computation graph (no console output)
+comp.draw()  # Creates the graph shown above
+```
+
+```result
+4
 ```
 
 📚 **Explore More**: Check out our [Interactive Examples](examples/) including:
 - 💰 Interest Rate Swap Pricing
-- 📈 Portfolio Valuation  
+- 📈 Portfolio Valuation
 - 🏦 CDO Modeling
 
 ## Why Loman?
@@ -84,9 +87,9 @@ Loman transforms how you build and maintain complex data processing pipelines by
   - Only recalculate affected downstream computations
   - Control which outputs are computed and when
   - Monitor status of all components in your pipeline
-  
+
 - 📦 **Batch Processing**: Build robust daily/periodic processes
-  - Serialize computation state for easy inspection and debugging  
+  - Serialize computation state for easy inspection and debugging
   - Replace inputs or override intermediate values without full recomputation
   - Recover from failures efficiently by resuming from last good state
 
@@ -122,7 +125,7 @@ pip install -e .
 Loman uses modern Python development tools for a smooth developer experience:
 
 ```bash
-# 📦 Install development dependencies  
+# 📦 Install development dependencies
 make install
 
 # 🧪 Run tests with coverage
@@ -135,7 +138,7 @@ make check
 ### Development Tools
 
 - **Testing**: pytest with coverage reporting
-- **Formatting**: ruff for code formatting and linting  
+- **Formatting**: ruff for code formatting and linting
 - **Task Management**: Taskfile for build automation
 - **Quality**: Pre-commit hooks for code quality
 

@@ -4,6 +4,7 @@ import itertools
 import types
 
 import pandas as pd
+import numpy as np
 
 
 def apply1(f, xs, *args, **kwds):
@@ -92,14 +93,43 @@ pandas_types = (pd.Series, pd.DataFrame)
 
 
 def value_eq(a, b):
-    """Compare two values for equality, handling pandas objects specially."""
+    """Compare two values for equality, handling pandas and numpy objects safely.
+
+    - Uses .equals for pandas Series/DataFrame
+    - For numpy arrays, returns a single boolean using np.array_equal (treats NaNs as equal)
+    - Falls back to == and coerces to bool when possible
+    """
     if a is b:
         return True
+
+    # pandas objects: use robust equality
     if isinstance(a, pandas_types):
         return a.equals(b)
     if isinstance(b, pandas_types):
         return b.equals(a)
+
+    # numpy arrays: perform elementwise equality reduction
     try:
-        return a == b
+        if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+            try:
+                return np.array_equal(a, b, equal_nan=True)
+            except TypeError:
+                # Fallback if equal_nan not available
+                a_arr = np.asarray(a)
+                b_arr = np.asarray(b)
+                if a_arr.shape != b_arr.shape:
+                    return False
+                eq = (a_arr == b_arr)
+                # align NaN handling
+                with np.errstate(invalid="ignore"):
+                    both_nan = np.isnan(a_arr) & np.isnan(b_arr)
+                return bool(np.all(eq | both_nan))
+
+        # Default comparison; ensure a single boolean
+        result = a == b
+        # If result is an array-like truth value, reduce safely
+        if isinstance(result, (np.ndarray,)):
+            return bool(np.all(result))
+        return bool(result)
     except Exception:
         return False
