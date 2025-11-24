@@ -42,7 +42,8 @@ dev = [
     "pre-commit>=3.0",
     "mypy>=1.0",
     "marimo>=0.15",
-    "scipy>=1.16.3"
+    "scipy>=1.16.3",
+    "yahoo-finance>=1.4.0"
 ]
 
 [project.urls]
