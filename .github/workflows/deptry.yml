@@ -22,7 +22,7 @@ on:
     branches: [ main, master ]
 
 jobs:
-  deptry_analysis:
+  deptry:
     name: Check dependencies with deptry
     runs-on: ubuntu-latest
     container:
