@@ -107,8 +107,11 @@ def value_eq(a, b):
         return a.equals(b)
     if isinstance(b, pandas_types):
         return b.equals(a)
-
-    # numpy arrays: perform elementwise equality reduction
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        try:
+            return np.array_equal(a, b, equal_nan=True)
+        except Exception:
+            return False
     try:
         if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
             try:

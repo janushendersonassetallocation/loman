@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from time import sleep
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -1181,6 +1182,24 @@ def test_insert_same_value_df():
     assert comp.s.b == States.UPTODATE
 
     comp.insert("a", pd.DataFrame([[1, 2], [3, 4]], columns=["a", "b"]), force=True)
+    assert comp.s.b != States.UPTODATE
+
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE
+
+
+def test_insert_same_value_numpy_array():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1)
+    comp.insert("a", np.array([1.0, 2.0, 3.0]))
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE
+
+    comp.insert("a", np.array([1.0, 2.0, 3.0]))
+    assert comp.s.b == States.UPTODATE
+
+    comp.insert("a", np.array([1.0, 2.0, 3.0]), force=True)
     assert comp.s.b != States.UPTODATE
 
     comp.compute_all()
