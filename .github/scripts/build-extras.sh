@@ -33,9 +33,7 @@ set -euo pipefail
 
 echo "Running build-extras.sh..."
 
-# Add your custom installation commands here
-# Examples:
-# sudo apt-get update
-# sudo apt-get install -y graphviz
+sudo apt-get update
+sudo apt-get install -y graphviz
 
 echo "Build extras setup complete."
