@@ -1,8 +1,8 @@
 template-repository: "tschm/.config-templates"
 template-branch: "main"
 include: |
-    .devcontainer
-    .github
+    .devcontainer/
+    .github/
     /tests
     .editorconfig
     .pre-commit-config.yaml
