@@ -1,0 +1,98 @@
+# Github Actions workflow to build and optionally publish a devcontainer image
+#
+# This file is part of the tschm/.config-templates repository
+# (https://github.com/tschm/.config-templates).
+#
+# Workflow: DEVCONTAINER
+#
+# Purpose:
+#   Build a devcontainer image (optionally multi-platform) and optionally publish it
+#   to a container registry. Designed to be reusable via workflow_call so callers
+#   can override image name, registry, platforms, and whether to publish.
+#
+# Inputs:
+#   - publish:   boolean (default: false)
+#                Whether to push the built image to the registry.
+#   - registry:  string  (default: ghcr.io)
+#                Container registry to use for publishing (e.g. ghcr.io, docker.io).
+#   - image_name:string  (default: devcontainer)
+#                Full image name or repository/image suffix to tag the built image.
+#   - config_file: string (default: .devcontainer/devcontainer.json)
+#                Path to the devcontainer.json file to build the image from.
+#   - image_tags: string (default: latest,${{ github.sha }})
+#                Comma-separated list of tags to apply to the built image.
+# Components / Steps:
+#   - Checkout repository
+#   - Login to the configured container registry (uses the caller's secrets)
+#   - Get lowercase repository owner for image naming
+#   - Build (and optionally push) the devcontainer image using devcontainers/ci
+#
+# Notes / Recommendations:
+#   - Callers should provide secrets (tokens) via the calling workflow's `secrets`.
+#   - Keep the default registry as a sensible default; callers can override via inputs.
+#   - Use the `image_name` input to change image name per-repo or per-call.
+#   - For publishing to GHCR use the repo owner and secrets.GITHUB_TOKEN or a PAT
+#     with packages:write permission as the calling workflow's secrets.
+#
+name: REUSABLE DEVCONTAINER BUILD
+permissions:
+  contents: read
+  packages: write
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: 'Whether to publish the built image to the registry'
+        required: false
+        default: false
+        type: boolean
+      registry:
+        description: 'Container registry to publish the image to'
+        required: false
+        default: 'ghcr.io'
+        type: string
+      image_name:
+        description: 'Name of the image to publish'
+        required: false
+        default: devcontainer
+        type: string
+      config_file:
+        description: 'Path to the devcontainer.json file'
+        required: false
+        default: '.devcontainer/devcontainer.json'
+        type: string
+      image_tags:
+        description: 'Tags to apply to the built image (comma-separated), defaults to latest and commit SHA'
+        required: false
+        default: latest,${{ github.sha }}
+        type: string
+
+jobs:
+  devcontainer-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Login to the chosen container registry. Caller should provide appropriate secrets.
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Convert repository owner to lowercase for Docker image naming
+      - name: Get lowercase repository owner
+        id: repo_owner
+        run: echo "owner_lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      # Build the devcontainer image. `devcontainers/ci` supports building and pushing.
+      - name: Build Devcontainer Image
+        uses: devcontainers/ci@v0.3
+        with:
+          configFile: ${{ inputs.config_file }}
+          push: ${{ inputs.publish && 'always' || 'never' }}
+          imageName: ${{ inputs.registry }}/${{ steps.repo_owner.outputs.owner_lc }}/${{ inputs.image_name }}
+          imageTag: ${{ inputs.image_tags }}

@@ -1,0 +1,47 @@
+name: DEVCONTAINER
+permissions:
+  contents: read
+
+# Building these containers is expensive initially, so only run on changes to devcontainer files
+on:
+  push:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/_devcontainer.yml"
+      - ".github/workflows/devcontainer.yml"
+
+  pull_request:
+    branches: [ main, master ]  
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/_devcontainer.yml"
+      - ".github/workflows/devcontainer.yml"
+jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.set_image_name.outputs.image_name }}
+    steps:
+      - name: Set Image Name
+        id: set_image_name
+        run: |
+          # Get repo name from github.repository (owner/repo)
+          FULL_REPO="${{ github.repository }}"
+          REPO_NAME="${FULL_REPO#*/}"
+          # Remove leading dot if present
+          CLEAN_NAME="${REPO_NAME#.}"
+          echo "image_name=${CLEAN_NAME}/devcontainer" >> $GITHUB_OUTPUT
+
+  devcontainer-build:
+    needs: configuration
+    name: Build Devcontainer Image
+    uses: ./.github/workflows/_devcontainer.yml
+    with:
+      publish: false
+      registry: ghcr.io
+      image_name: ${{ needs.configuration.outputs.image_name }}
+      image_tags: ${{ github.head_ref || github.ref_name }}-${{ github.sha }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
