@@ -3,12 +3,10 @@ template-branch: "main"
 include: |
     .devcontainer
     .github
-    taskfiles
-    tests
+    /tests
     .editorconfig
     .pre-commit-config.yaml
     Makefile
-    Taskfile.yml
 exclude: |
   .github/scripts/build-extras.sh
   .github/workflows/docker.yml
