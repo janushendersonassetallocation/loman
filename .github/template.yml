@@ -3,7 +3,7 @@ template-branch: "main"
 include: |
     .devcontainer/
     .github/
-    /tests
+    tests/
     .editorconfig
     .pre-commit-config.yaml
     Makefile
