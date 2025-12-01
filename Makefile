@@ -17,7 +17,7 @@ RESET := \033[0m
 .DEFAULT_GOAL := help
 
 # Declare phony targets (they don't produce files)
-.PHONY: install-uv install clean test marimo marimushka book fmt deptry docs help all
+.PHONY: install-uv install clean test marimo marimushka book fmt deptry docs release release-dry-run post-release help all
 
 UV_INSTALL_DIR := ./bin
 UV_BIN := ${UV_INSTALL_DIR}/uv
@@ -146,6 +146,54 @@ fmt: install-uv ## check the pre-commit hooks and the linting
 
 all: fmt deptry book ## Run everything
 	echo "Run fmt, deptry, test and book"
+
+##@ Release
+release: install-uv ## bump version and create release tag (usage: make release VERSION=1.2.3 or BUMP=patch [BRANCH=main])
+	@if [ -z "$(VERSION)" ] && [ -z "$(BUMP)" ]; then \
+	  printf "${RED}[ERROR] VERSION or BUMP is required.${RESET}\n"; \
+	  printf "Examples:\n"; \
+	  printf "  make release VERSION=1.2.3\n"; \
+	  printf "  make release BUMP=patch\n"; \
+	  printf "  make release BUMP=minor\n"; \
+	  printf "  make release BUMP=major\n"; \
+	  printf "  make release BUMP=patch BRANCH=main\n"; \
+	  exit 1; \
+	fi
+	@ARGS=""; \
+	if [ -n "$(BRANCH)" ]; then ARGS="$$ARGS --branch $(BRANCH)"; fi; \
+	if [ -n "$(BUMP)" ]; then \
+	  UV_BIN="${UV_BIN}" /bin/sh .github/scripts/release.sh --bump "$(BUMP)" $$ARGS; \
+	else \
+	  UV_BIN="${UV_BIN}" /bin/sh .github/scripts/release.sh "$(VERSION)" $$ARGS; \
+	fi
+
+release-dry-run: install-uv ## preview release changes without applying (usage: make release-dry-run VERSION=1.2.3 or BUMP=patch [BRANCH=main])
+	@if [ -z "$(VERSION)" ] && [ -z "$(BUMP)" ]; then \
+	  printf "${RED}[ERROR] VERSION or BUMP is required.${RESET}\n"; \
+	  printf "Examples:\n"; \
+	  printf "  make release-dry-run VERSION=1.2.3\n"; \
+	  printf "  make release-dry-run BUMP=patch\n"; \
+	  printf "  make release-dry-run BUMP=patch BRANCH=main\n"; \
+	  exit 1; \
+	fi
+	@ARGS="--dry-run"; \
+	if [ -n "$(BRANCH)" ]; then ARGS="$$ARGS --branch $(BRANCH)"; fi; \
+	if [ -n "$(BUMP)" ]; then \
+	  UV_BIN="${UV_BIN}" /bin/sh .github/scripts/release.sh --bump "$(BUMP)" $$ARGS; \
+	else \
+	  UV_BIN="${UV_BIN}" /bin/sh .github/scripts/release.sh "$(VERSION)" $$ARGS; \
+	fi
+
+post-release: install-uv ## perform post-release tasks (usage: make post-release)
+	@if [ -x ".github/scripts/post-release.sh" ]; then \
+		printf "${BLUE}[INFO] Running post-release script...${RESET}\n"; \
+		./.github/scripts/post-release.sh; \
+	elif [ -f ".github/scripts/post-release.sh" ]; then \
+		printf "${BLUE}[INFO] Running post-release script...${RESET}\n"; \
+		/bin/sh .github/scripts/post-release.sh; \
+	else \
+		printf "${BLUE}[INFO] No post-release script found, skipping...${RESET}\n"; \
+	fi
 
 ##@ Meta
 help: ## Display this help message
