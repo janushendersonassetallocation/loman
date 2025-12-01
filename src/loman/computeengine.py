@@ -1204,8 +1204,9 @@ class Computation:
 
             >>> comp = Computation()
             >>> comp.add_node('a', tags=['foo', 'bar'])
-            >>> comp.t.a
-            {'__serialize__', 'bar', 'foo'}
+            >>> sorted(comp.t.a)
+            ['__serialize__', 'bar', 'foo']
+
         :param name: Name or names of the node to get the tags of
         :return:
         """
@@ -1233,9 +1234,10 @@ class Computation:
         """Get the tags associated with a node.
 
             >>> comp = Computation()
-            >>> comp.add_node('a', styles='dot')
+            >>> comp.add_node('a', style='dot')
             >>> comp.style.a
             'dot'
+
         :param name: Name or names of the node to get the tags of
         :return:
         """
@@ -1271,13 +1273,14 @@ class Computation:
 
         ::
 
+            >>> import loman
             >>> comp = loman.Computation()
             >>> comp.add_node('foo', value=1)
             >>> comp.add_node('bar', value=2)
-            >>> comp.to_df()
-                           state  value  is_expansion
-            bar  States.UPTODATE      2           NaN
-            foo  States.UPTODATE      1           NaN
+            >>> comp.to_df()  # doctest: +NORMALIZE_WHITESPACE
+                           state  value
+            foo  States.UPTODATE      1
+            bar  States.UPTODATE      2
         """
         df = pd.DataFrame(index=nx.topological_sort(self.dag))
         df[NodeAttributes.STATE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.STATE))
@@ -1292,11 +1295,12 @@ class Computation:
 
         ::
 
+            >>> import loman
             >>> comp = loman.Computation()
             >>> comp.add_node('foo', value=1)
             >>> comp.add_node('bar', value=2)
-            >>> comp.to_dict()
-            {'bar': 2, 'foo': 1}
+            >>> comp.to_dict()  # doctest: +ELLIPSIS
+            {NodeKey('foo'): 1, NodeKey('bar'): 2}
         """
         return nx.get_node_attributes(self.dag, NodeAttributes.VALUE)
 
