@@ -8,5 +8,5 @@ include: |
     .pre-commit-config.yaml
     Makefile
 exclude: |
-  .github/scripts/build-extras.sh
+  .github/scripts/customisations/build-extras.sh
   .github/workflows/docker.yml
