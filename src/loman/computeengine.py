@@ -28,6 +28,7 @@ from .exception import (
     NodeAlreadyExistsException,
     NonExistentNodeException,
 )
+from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
@@ -1003,7 +1004,7 @@ class Computation:
                 raise Exception(f"Cannot compute {node_key} because {n} is placeholder")
 
         ancestors.add(node_key)
-        nodes_sorted = nx.topological_sort(g)
+        nodes_sorted = topological_sort(g)
         return [n for n in nodes_sorted if n in ancestors]
 
     def _get_calc_node_names(self, name: Name) -> Names:
@@ -1282,7 +1283,7 @@ class Computation:
             foo  States.UPTODATE      1
             bar  States.UPTODATE      2
         """
-        df = pd.DataFrame(index=nx.topological_sort(self.dag))
+        df = pd.DataFrame(index=topological_sort(self.dag))
         df[NodeAttributes.STATE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.STATE))
         df[NodeAttributes.VALUE] = pd.Series(nx.get_node_attributes(self.dag, NodeAttributes.VALUE))
         df_timing = pd.DataFrame.from_dict(nx.get_node_attributes(self.dag, "timing"), orient="index")

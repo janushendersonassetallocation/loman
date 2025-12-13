@@ -2,7 +2,9 @@
 
 import functools
 
+import networkx as nx
 from loman.util import apply_n
+from loman.exception import LoopDetectedError
 
 
 def contract_node_one(g, n):
@@ -16,3 +18,21 @@ def contract_node_one(g, n):
 def contract_node(g, ns):
     """Remove multiple nodes from graph and connect their predecessors to successors."""
     apply_n(functools.partial(contract_node_one, g), ns)
+
+
+def topological_sort(g):
+    try:
+        return list(nx.topological_sort(g))
+    except nx.NetworkXUnfeasible as e:
+        cycle_lst = None
+        if g is not None:
+            try:
+                cycle_lst = nx.find_cycle(g)
+            except nx.NetworkXNoCycle:
+                # there must non-cycle reason NetworkXUnfeasible, leave as is
+                raise e
+        args = []
+        if cycle_lst:
+            lst = [f"{n_src}->{n_tgt}" for n_src, n_tgt in cycle_lst]
+            args = [f"DAG cycle: {', '.join(lst)}"]
+        raise LoopDetectedError(*args) from e

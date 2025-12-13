@@ -675,6 +675,35 @@ def test_avoid_infinite_loop_compute_all():
         comp.compute_all()
 
 
+def test_dag_loop_handling_compute_all():
+    comp = Computation()
+    comp.add_node("a", lambda c: c + 1)
+    comp.add_node("b", lambda a: a + 1)
+    comp.add_node("c", lambda b: b + 1)
+    comp.insert("a", 1)
+    with pytest.raises(LoopDetectedError, match="Calculating a for the second time"):
+        comp.compute_all()
+
+def test_dag_loop_handling_compute():
+    comp = Computation()
+    comp.add_node("a", lambda c: c + 1)
+    comp.add_node("b", lambda a: a + 1)
+    comp.add_node("c", lambda b: b + 1)
+    comp.insert("a", 1)
+    with pytest.raises(LoopDetectedError, match="DAG cycle: a->b, b->c, c->a"):
+        comp.compute("a")
+
+
+def test_dag_loop_handling_to_df():
+    comp = Computation()
+    comp.add_node("a", lambda c: c + 1)
+    comp.add_node("b", lambda a: a + 1)
+    comp.add_node("c", lambda b: b + 1)
+    comp.insert("a", 1)
+    with pytest.raises(LoopDetectedError, match="DAG cycle: a->b, b->c, c->a"):
+        comp.to_df()
+
+
 def test_views():
     comp = Computation()
     comp.add_node("a")
