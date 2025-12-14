@@ -1,6 +1,3 @@
-# This file is part of the tschm/.config-templates repository
-# (https://github.com/tschm/.config-templates).
-#
 # GitHub Actions workflow: repository structure advisory checks
 # Purpose: Soft-check the presence of common scaffolding (src/, tests/, and key dotfiles)
 # and print WARN messages if something is missing. This workflow is advisory:
