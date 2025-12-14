@@ -21,6 +21,35 @@ def contract_node(g, ns):
 
 
 def topological_sort(g):
+    """
+    Performs a topological sort on a directed acyclic graph (DAG).
+
+    This function attempts to compute the topological order of the nodes in
+    the given graph `g`. If the graph contains a cycle, it raises a
+    `LoopDetectedError` with details about the detected cycle, making it
+    informative for debugging purposes.
+
+    Parameters:
+    g : networkx.DiGraph
+        A directed graph to be sorted. Must be provided as an instance of
+        `networkx.DiGraph`. The function assumes the graph is acyclic unless
+        a cycle is detected.
+
+    Returns:
+    list
+        A list of nodes in topologically sorted order, if the graph has no
+        cycles.
+
+    Raises:
+    LoopDetectedError
+        If the graph contains a cycle, a `LoopDetectedError` is raised with
+        information about the detected cycle if available. The detected cycle
+        is presented as a list of directed edges forming the cycle.
+
+    NetworkXUnfeasible
+        If topological sorting fails due to reasons other than cyclic
+        dependencies in the graph.
+    """
     try:
         return list(nx.topological_sort(g))
     except nx.NetworkXUnfeasible as e:
