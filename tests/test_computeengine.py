@@ -684,6 +684,7 @@ def test_dag_loop_handling_compute_all():
     with pytest.raises(LoopDetectedError, match="Calculating a for the second time"):
         comp.compute_all()
 
+
 def test_dag_loop_handling_compute():
     comp = Computation()
     comp.add_node("a", lambda c: c + 1)
