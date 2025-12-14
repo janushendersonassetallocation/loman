@@ -21,8 +21,7 @@ def contract_node(g, ns):
 
 
 def topological_sort(g):
-    """
-    Performs a topological sort on a directed acyclic graph (DAG).
+    """Performs a topological sort on a directed acyclic graph (DAG).
 
     This function attempts to compute the topological order of the nodes in
     the given graph `g`. If the graph contains a cycle, it raises a
