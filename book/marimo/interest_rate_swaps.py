@@ -3,6 +3,20 @@
 This notebook demonstrates calibrating interest rate curves to market prices
 and using them to price portfolios of swaps.
 """
+
+# /// script
+# dependencies = [
+#     "marimo==0.18.4",
+#     "numpy",
+#     "scipy",
+#     "matplotlib",
+# ]
+#
+# [tool.uv.sources]
+# loman = { path = "../..", editable=true }
+#
+# ///
+
 # ruff: noqa: E501, N806
 
 import marimo

@@ -3,6 +3,20 @@
 This notebook demonstrates the Andersen-Sidenius-Basu semi-analytic method
 for CDO tranche valuation with loss distribution calculations.
 """
+
+# /// script
+# dependencies = [
+#     "marimo==0.18.4",
+#     "numpy",
+#     "scipy",
+#     "matplotlib",
+# ]
+#
+# [tool.uv.sources]
+# loman = { path = "../..", editable=true }
+#
+# ///
+
 # ruff: noqa: E501, N806
 
 import marimo
