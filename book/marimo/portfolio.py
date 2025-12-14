@@ -5,6 +5,19 @@ This example demonstrates portfolio valuation for equities, futures, and cash.
 
 # ruff: noqa: E501, N806
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "marimo==0.17.6",
+#     "numpy",
+#     "pandas",
+#     "loman",
+# ]
+#
+# [tool.uv.sources]
+# loman = { path = "../..", editable = true }
+# ///
+
 import marimo
 
 __generated_with = "0.17.6"
