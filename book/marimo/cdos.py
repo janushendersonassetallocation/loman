@@ -9,7 +9,10 @@ for CDO tranche valuation with loss distribution calculations.
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "marimo",
+#     "marimo==0.17.6",
+#     "numpy",
+#     "scipy",
+#     "matplotlib",
 #     "loman",
 # ]
 #
