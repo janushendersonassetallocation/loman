@@ -3,8 +3,9 @@
 import functools
 
 import networkx as nx
-from loman.util import apply_n
+
 from loman.exception import LoopDetectedError
+from loman.util import apply_n
 
 
 def contract_node_one(g, n):
