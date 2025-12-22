@@ -7,6 +7,8 @@ include:
     - .editorconfig
     - .pre-commit-config.yaml
     - Makefile
+    - presentation
+    - book
 exclude: 
     - .github/scripts/customisations/build-extras.sh
     - .github/workflows/docker.yml
