@@ -10,6 +10,7 @@
 .github/CONFIG.md
 .github/TOKEN_SETUP.md
 .github/actions/setup-project/action.yml
+.github/dependabot.yml
 .github/renovate.json
 .github/scripts/book.sh
 .github/scripts/bump.sh
@@ -17,6 +18,7 @@
 .github/scripts/marimushka.sh
 .github/scripts/release.sh
 .github/scripts/update-readme-help.sh
+.github/template.yml
 .github/workflows/book.yml
 .github/workflows/ci.yml
 .github/workflows/deptry.yml
@@ -24,11 +26,14 @@
 .github/workflows/marimo.yml
 .github/workflows/pre-commit.yml
 .github/workflows/release.yml
+.github/workflows/rhiza.yml
 .github/workflows/scripts/version_matrix.py
 .github/workflows/scripts/version_max.py
+.github/workflows/security.yml
 .github/workflows/sync.yml
 .pre-commit-config.yaml
 Makefile
+tests/Makefile.tests
 tests/test_rhiza/README.md
 tests/test_rhiza/conftest.py
 tests/test_rhiza/test_bump_script.py
