@@ -18,7 +18,6 @@
 .github/scripts/marimushka.sh
 .github/scripts/release.sh
 .github/scripts/update-readme-help.sh
-.github/template.yml
 .github/workflows/book.yml
 .github/workflows/ci.yml
 .github/workflows/deptry.yml
@@ -33,8 +32,16 @@
 .github/workflows/sync.yml
 .pre-commit-config.yaml
 Makefile
+book/Makefile.book
+book/minibook-templates/custom.html.jinja2
+book/pdoc-templates/module.html.jinja2
+presentation/Makefile.presentation
 tests/Makefile.tests
 tests/test_rhiza/README.md
+tests/test_rhiza/benchmarks/.gitignore
+tests/test_rhiza/benchmarks/README.md
+tests/test_rhiza/benchmarks/__init__.py
+tests/test_rhiza/benchmarks/analyze_benchmarks.py
 tests/test_rhiza/conftest.py
 tests/test_rhiza/test_bump_script.py
 tests/test_rhiza/test_docstrings.py
