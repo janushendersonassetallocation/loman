@@ -50,7 +50,7 @@ jobs:
           lfs: true
 
       - name: Setup the project
-        uses: ./.github/actions/setup-project
+        uses: ./.github/rhiza/actions/setup-project
         with:
           python-version: ${{ matrix.python-version }}
           uv-extra-index-url: ${{ secrets.UV_EXTRA_INDEX_URL }}

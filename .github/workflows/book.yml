@@ -48,7 +48,7 @@ jobs:
 
       # Use the composite action to set up the project
       - name: Setup the project
-        uses: ./.github/actions/setup-project
+        uses: ./.github/rhiza/actions/setup-project
         with:
           python-version: ${{ steps.get-python.outputs.python-version }}
           uv-extra-index-url: ${{ secrets.UV_EXTRA_INDEX_URL }}

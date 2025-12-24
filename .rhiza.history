@@ -7,11 +7,9 @@
 .devcontainer/bootstrap.sh
 .devcontainer/devcontainer.json
 .editorconfig
-.github/CONFIG.md
-.github/TOKEN_SETUP.md
-.github/actions/setup-project/action.yml
 .github/dependabot.yml
 .github/renovate.json
+.github/rhiza/actions/setup-project/action.yml
 .github/scripts/book.sh
 .github/scripts/bump.sh
 .github/scripts/customisations/post-release.sh
@@ -28,7 +26,6 @@
 .github/workflows/rhiza.yml
 .github/workflows/scripts/version_matrix.py
 .github/workflows/scripts/version_max.py
-.github/workflows/security.yml
 .github/workflows/sync.yml
 .pre-commit-config.yaml
 Makefile
@@ -36,11 +33,11 @@ book/Makefile.book
 book/minibook-templates/custom.html.jinja2
 book/pdoc-templates/module.html.jinja2
 presentation/Makefile.presentation
+presentation/README.md
 tests/Makefile.tests
 tests/test_rhiza/README.md
 tests/test_rhiza/benchmarks/.gitignore
 tests/test_rhiza/benchmarks/README.md
-tests/test_rhiza/benchmarks/__init__.py
 tests/test_rhiza/benchmarks/analyze_benchmarks.py
 tests/test_rhiza/conftest.py
 tests/test_rhiza/test_bump_script.py
