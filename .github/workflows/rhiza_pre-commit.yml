@@ -33,7 +33,7 @@ jobs:
       - name: Get Python version
         id: get-python
         run: |
-          echo "python-version=$(python ./.github/workflows/scripts/version_max.py)" >> "$GITHUB_OUTPUT"
+          echo "python-version=$(python ./.github/rhiza/utils/version_max.py)" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/rhiza/actions/setup-project
         with:
