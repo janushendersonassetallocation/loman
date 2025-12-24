@@ -1,6 +1,6 @@
 #!/bin/bash
-# This file is part of the jebel-quant/rhiza repository
-# (https://github.com/jebel-quant/rhiza).
+# This file is part of the tschm/.config-templates repository
+# (https://github.com/tschm/.config-templates).
 #
 # Optional hook script for installing extra dependencies
 #
@@ -15,7 +15,7 @@
 #
 # How to use:
 #   1. Add your custom installation commands below
-#   2. Make sure the script is executable: chmod +x .github/rhiza/scripts/customisations/build-extras.sh
+#   2. Make sure the script is executable: chmod +x .github/scripts/customisations/build-extras.sh
 #   3. Commit to your repository
 #
 # Examples:
@@ -26,7 +26,7 @@
 # Note: If you customize this file in your repository, add it to the exclude list
 #       in action.yml to prevent it from being overwritten by template updates:
 #       exclude: |
-#         .github/rhiza/scripts/customisations/build-extras.sh
+#         .github/scripts/customisations/build-extras.sh
 #
 
 set -euo pipefail
@@ -37,12 +37,12 @@ echo "Running build-extras.sh..."
 
 # Example: graphviz
 # Good practice to check if already installed.
-#
-# if ! command -v dot &> /dev/null; then
-#     echo "graphviz not found, installing..."
-#     sudo apt-get update && sudo apt-get install -y graphviz
-# else
-#     echo "graphviz is already installed, skipping installation."
-# fi
+
+if ! command -v dot &> /dev/null; then
+    echo "graphviz not found, installing..."
+    sudo apt-get update && sudo apt-get install -y graphviz
+else
+    echo "graphviz is already installed, skipping installation."
+fi
 
 echo "Build extras setup complete."
