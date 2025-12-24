@@ -38,8 +38,8 @@ UV_BIN := ${UV_INSTALL_DIR}/uv
 UVX_BIN := ${UV_INSTALL_DIR}/uvx
 MARIMO_FOLDER := book/marimo
 SOURCE_FOLDER := src
-SCRIPTS_FOLDER := .github/scripts
-CUSTOM_SCRIPTS_FOLDER := .github/scripts/customisations
+SCRIPTS_FOLDER := .github/rhiza/scripts
+CUSTOM_SCRIPTS_FOLDER := .github/rhiza/scripts/customisations
 
 export UV_NO_MODIFY_PATH := 1
 export UV_VENV_CLEAR := 1

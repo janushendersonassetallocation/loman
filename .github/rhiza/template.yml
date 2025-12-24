@@ -8,11 +8,9 @@ include:
     - .pre-commit-config.yaml
     - Makefile
     - presentation
-    - book
+    - book/Makefile.book
 exclude: 
-    - .github/scripts/customisations/build-extras.sh
-    - .github/workflows/docker.yml
+    - .github/rhiza/scripts/customisations/build-extras.sh
+    - .github/workflows/rhiza_docker.yml
     - .github/rhiza/CONFIG.md
     - .github/rhiza/TOKEN_SETUP.md
-    - book/marimo/rhiza.py
-    - book/marimo/README.md
