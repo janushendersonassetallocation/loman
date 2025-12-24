@@ -12,3 +12,5 @@ include:
 exclude: 
     - .github/scripts/customisations/build-extras.sh
     - .github/workflows/docker.yml
+    - .github/rhiza/CONFIG.md
+    - .github/rhiza/TOKEN_SETUP.md
