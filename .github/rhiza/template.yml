@@ -15,3 +15,4 @@ exclude:
     - .github/rhiza/CONFIG.md
     - .github/rhiza/TOKEN_SETUP.md
     - book/marimo/rhiza.py
+    - book/marimo/README.md
