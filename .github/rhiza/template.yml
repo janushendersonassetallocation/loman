@@ -10,7 +10,7 @@ include:
     - presentation
     - book/Makefile.book
 exclude: 
-    - .github/scripts/customisations/build-extras.sh
+    - .github/rhiza/scripts/customisations/build-extras.sh
     - .github/workflows/rhiza_docker.yml
     - .github/rhiza/CONFIG.md
     - .github/rhiza/TOKEN_SETUP.md

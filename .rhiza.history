@@ -12,7 +12,6 @@
 .github/rhiza/actions/setup-project/action.yml
 .github/rhiza/scripts/book.sh
 .github/rhiza/scripts/bump.sh
-.github/rhiza/scripts/customisations/build-extras.sh
 .github/rhiza/scripts/customisations/post-release.sh
 .github/rhiza/scripts/marimushka.sh
 .github/rhiza/scripts/release.sh
@@ -23,7 +22,6 @@
 .github/workflows/rhiza_ci.yml
 .github/workflows/rhiza_deptry.yml
 .github/workflows/rhiza_devcontainer.yml
-.github/workflows/rhiza_docker.yml
 .github/workflows/rhiza_marimo.yml
 .github/workflows/rhiza_pre-commit.yml
 .github/workflows/rhiza_release.yml
@@ -32,8 +30,6 @@
 .pre-commit-config.yaml
 Makefile
 book/Makefile.book
-book/minibook-templates/custom.html.jinja2
-book/pdoc-templates/module.html.jinja2
 presentation/Makefile.presentation
 presentation/README.md
 tests/Makefile.tests
