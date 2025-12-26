@@ -28,7 +28,7 @@ jobs:
       - id: versions
         run: |
           # Generate Python versions JSON from the script
-          JSON=$(python ./.github/rhiza/utils/version_matrix.py)
+          JSON=$(python ./.rhiza/utils/version_matrix.py)
           echo "list=$JSON" >> "$GITHUB_OUTPUT"
 
       - name: Debug matrix
