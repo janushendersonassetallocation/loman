@@ -1,0 +1,17 @@
+template-repository: jebel-quant/rhiza
+template-branch: main
+include:
+- .devcontainer/
+- .github/
+- tests/
+- .editorconfig
+- .pre-commit-config.yaml
+- Makefile
+- presentation
+- book/Makefile.book
+- .rhiza
+exclude:
+- .github/rhiza/scripts/customisations/build-extras.sh
+- .github/workflows/rhiza_docker.yml
+- .github/rhiza/CONFIG.md
+- .github/rhiza/TOKEN_SETUP.md
