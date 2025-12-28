@@ -3,13 +3,13 @@ template-branch: main
 include:
 - .devcontainer/
 - .github/
+- .rhiza/
+- presentation/
 - tests/
+- book/Makefile.book
 - .editorconfig
 - .pre-commit-config.yaml
 - Makefile
-- presentation
-- book/Makefile.book
-- .rhiza
 exclude:
 - .github/rhiza/scripts/customisations/build-extras.sh
 - .github/workflows/rhiza_docker.yml
