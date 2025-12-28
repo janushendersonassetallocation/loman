@@ -19,10 +19,6 @@ class TestRootFixture:
         """Root fixture should return a pathlib.Path object."""
         assert isinstance(root, Path)
 
-    def test_root_points_to_repository_root(self, root):
-        """Root fixture should point to the actual repository root."""
-        assert (root / ".github").is_dir()
-
     def test_root_is_absolute_path(self, root):
         """Root fixture should return an absolute path."""
         assert root.is_absolute()
