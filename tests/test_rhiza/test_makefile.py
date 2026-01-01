@@ -50,6 +50,9 @@ def setup_tmp_makefile(logger, root, tmp_path: Path):
 
     # Copy the main Makefile into the temporary working directory
     shutil.copy(root / "Makefile", tmp_path / "Makefile")
+    shutil.copy(root / ".rhiza.env", tmp_path / ".rhiza.env")
+
+    logger.debug("Copied Makefile from %s to %s", root / "Makefile", tmp_path / "Makefile")
 
     # Copy split Makefiles if they exist (maintaining directory structure)
     for split_file in SPLIT_MAKEFILES:
