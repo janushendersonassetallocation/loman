@@ -33,11 +33,13 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "attrs",
-    "pytest"
+    "pytest",
 ]
 dev = [
     "pytest>=7.0",
-    "pytest-cov>=4.0",
+    "pytest-cov>=7.0",
+    "pytest-html>=4.0",
+    "python-dotenv==1.2.1",
     "ruff>=0.12.0",
     "pre-commit>=3.0",
     "mypy>=1.0",
