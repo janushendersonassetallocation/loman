@@ -4,6 +4,7 @@
 # Template branch: main
 #
 # Files under template control:
+.devcontainer/README.md
 .devcontainer/bootstrap.sh
 .devcontainer/devcontainer.json
 .editorconfig
@@ -19,6 +20,8 @@
 .github/workflows/rhiza_sync.yml
 .github/workflows/rhiza_validate.yml
 .pre-commit-config.yaml
+.rhiza/docs/CONFIG.md
+.rhiza/docs/TOKEN_SETUP.md
 .rhiza/scripts/book.sh
 .rhiza/scripts/bump.sh
 .rhiza/scripts/customisations/post-release.sh
@@ -42,6 +45,7 @@ tests/test_rhiza/test_docstrings.py
 tests/test_rhiza/test_git_repo_fixture.py
 tests/test_rhiza/test_makefile.py
 tests/test_rhiza/test_marimushka_script.py
+tests/test_rhiza/test_notebooks.py
 tests/test_rhiza/test_readme.py
 tests/test_rhiza/test_release_script.py
 tests/test_rhiza/test_structure.py
