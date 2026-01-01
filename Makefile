@@ -36,6 +36,7 @@ RESET := \033[0m
 UV_INSTALL_DIR ?= ./bin
 UV_BIN := ${UV_INSTALL_DIR}/uv
 UVX_BIN := ${UV_INSTALL_DIR}/uvx
+VENV ?= .venv
 
 export UV_NO_MODIFY_PATH := 1
 export UV_VENV_CLEAR := 1
@@ -77,10 +78,10 @@ install-extras: ## run custom build script (if exists)
 
 install: install-uv install-extras ## install
 	# Create the virtual environment only if it doesn't exist
-	@if [ ! -d ".venv" ]; then \
-	  ${UV_BIN} venv $(if $(PYTHON_VERSION),--python $(PYTHON_VERSION)) || { printf "${RED}[ERROR] Failed to create virtual environment${RESET}\n"; exit 1; }; \
+	@if [ ! -d "${VENV}" ]; then \
+	  ${UV_BIN} venv $(if $(PYTHON_VERSION),--python $(PYTHON_VERSION)) ${VENV} || { printf "${RED}[ERROR] Failed to create virtual environment${RESET}\n"; exit 1; }; \
 	else \
-	  printf "${BLUE}[INFO] Using existing virtual environment at .venv, skipping creation${RESET}\n"; \
+	  printf "${BLUE}[INFO] Using existing virtual environment at ${VENV}, skipping creation${RESET}\n"; \
 	fi
 
 	# Check if there is requirements.txt file in the tests folder
@@ -101,19 +102,29 @@ install: install-uv install-extras ## install
 	  printf "${YELLOW}[WARN] No pyproject.toml found, skipping install${RESET}\n"; \
 	fi
 
-sync: install-uv ## sync with template repository as defined in .github/template.yml
-	@${UVX_BIN} "rhiza>=0.7.1" materialize --force .
+sync: ## sync with template repository as defined in .github/template.yml
+	@if git remote get-url origin 2>/dev/null | grep -iq 'jebel-quant/rhiza'; then \
+		printf "${BLUE}[INFO] Skipping sync in rhiza repository (no template.yml by design)${RESET}\n"; \
+	else \
+		$(MAKE) install-uv; \
+		${UVX_BIN} "rhiza>=0.7.1" materialize --force .; \
+	fi
 
-validate: install-uv ## validate project structure against template repository as defined in .github/template.yml
-	@${UVX_BIN} "rhiza>=0.7.1" validate .
+validate: ## validate project structure against template repository as defined in .github/template.yml
+	@if git remote get-url origin 2>/dev/null | grep -iq 'jebel-quant/rhiza'; then \
+		printf "${BLUE}[INFO] Skipping validate in rhiza repository (no template.yml by design)${RESET}\n"; \
+	else \
+		$(MAKE) install-uv; \
+		${UVX_BIN} "rhiza>=0.7.1" validate .; \
+	fi
 
 clean: ## Clean project artifacts and stale local branches
 	@printf "%bCleaning project...%b\n" "$(BLUE)" "$(RESET)"
 
-	# Remove ignored files/directories, but keep .env files
+	# Remove ignored files/directories, but keep .env files, tested with futures project
 	@git clean -d -X -f \
-		-e .env \
-		-e '.env.*'
+		-e '!.env' \
+		-e '!.env.*'
 
 	# Remove build & test artifacts
 	@rm -rf \
