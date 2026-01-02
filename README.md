@@ -5,29 +5,29 @@
 
 ### Manage complex calculation flow via robust DAG-based dependency logic in Python
 
-**Smart computation management** - Only recalculate what's necessary
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python versions](https://img.shields.io/badge/Python-3.11%20•%203.12%20•%203.13%20•%203.14-blue?logo=python)](https://www.python.org/)
 [![PyPI - Version](https://img.shields.io/pypi/v/loman.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Wheel](https://img.shields.io/pypi/wheel/loman.svg)](https://pypi.python.org/pypi/loman)
-[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg?logo=ruff)](https://github.com/astral-sh/ruff)
-[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch)
-[![CodeFactor](https://www.codefactor.io/repository/github/janushendersonassetallocation/loman/badge)](https://www.codefactor.io/repository/github/janushendersonassetallocation/loman)
+[![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
 
 ![Github](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=white)
 ![MAC OS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)
+
+[![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg?logo=ruff)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch)
 
 [![CI](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_ci.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_ci.yml)
 [![PRE-COMMIT](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_pre-commit.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_pre-commit.yml)
 [![DEPTRY](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_deptry.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_deptry.yml)
 [![MARIMO](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_marimo.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_marimo.yml)
 [![DEVCONTAINER](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_devcontainer.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_devcontainer.yml)
-[![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/janusassetallocation/loman)
+
+**Smart computation management** - Only recalculate what's necessary
 
 </div>
 
