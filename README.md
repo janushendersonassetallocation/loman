@@ -205,8 +205,7 @@ Whether you're fixing bugs, adding features, or improving documentation, your he
 
 ### Acknowledgments 🙏
 
-- [Jebel-Quant/rhiza
-](https://github.com/Jebel-Quant/rhiza) for standardised CI/CD templates and project tooling
+- [Jebel-Quant/rhiza](https://github.com/Jebel-Quant/rhiza) for standardised CI/CD templates and project tooling
 
 ---
 
