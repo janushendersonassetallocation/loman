@@ -34,8 +34,8 @@ RESET := \033[0m
 	update-readme
 
 UV_INSTALL_DIR ?= ./bin
-UV_BIN := ${UV_INSTALL_DIR}/uv
-UVX_BIN := ${UV_INSTALL_DIR}/uvx
+UV_BIN ?= $(shell command -v uv 2>/dev/null || echo ${UV_INSTALL_DIR}/uv)
+UVX_BIN ?= $(shell command -v uvx 2>/dev/null || echo ${UV_INSTALL_DIR}/uvx)
 VENV ?= .venv
 
 export UV_NO_MODIFY_PATH := 1
@@ -54,11 +54,13 @@ install-uv: ## ensure uv/uvx is installed
 	# Ensure the ${UV_INSTALL_DIR} folder exists
 	@mkdir -p ${UV_INSTALL_DIR}
 
-	# Install uv/uvx only if they are not already present
-	@if [ -x "${UV_INSTALL_DIR}/uv" ] && [ -x "${UV_INSTALL_DIR}/uvx" ]; then \
+	# Install uv/uvx only if they are not already present in PATH or in the install dir
+	@if command -v uv >/dev/null 2>&1 && command -v uvx >/dev/null 2>&1; then \
+	  :; \
+	elif [ -x "${UV_INSTALL_DIR}/uv" ] && [ -x "${UV_INSTALL_DIR}/uvx" ]; then \
 	  printf "${BLUE}[INFO] uv and uvx already installed in ${UV_INSTALL_DIR}, skipping.${RESET}\n"; \
 	else \
-	  printf "${BLUE}[INFO] Installing uv and uvx...${RESET}\n"; \
+	  printf "${BLUE}[INFO] Installing uv and uvx into ${UV_INSTALL_DIR}...${RESET}\n"; \
 	  if ! curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR="${UV_INSTALL_DIR}" sh >/dev/null 2>&1; then \
 	    printf "${RED}[ERROR] Failed to install uv${RESET}\n"; \
 	    exit 1; \
@@ -84,22 +86,33 @@ install: install-uv install-extras ## install
 	  printf "${BLUE}[INFO] Using existing virtual environment at ${VENV}, skipping creation${RESET}\n"; \
 	fi
 
-	# Check if there is requirements.txt file in the tests folder
-	@if [ -f "tests/requirements.txt" ]; then \
-	  ${UV_BIN} pip install -r tests/requirements.txt || { printf "${RED}[ERROR] Failed to install test requirements${RESET}\n"; exit 1; }; \
-	fi
-
 	# Install the dependencies from pyproject.toml (if it exists)
 	@if [ -f "pyproject.toml" ]; then \
 	  if [ -f "uv.lock" ]; then \
 	    printf "${BLUE}[INFO] Installing dependencies from lock file${RESET}\n"; \
-	    ${UV_BIN} sync --all-extras --frozen || { printf "${RED}[ERROR] Failed to install dependencies${RESET}\n"; exit 1; }; \
+	    ${UV_BIN} sync --all-extras --all-groups --frozen || { printf "${RED}[ERROR] Failed to install dependencies${RESET}\n"; exit 1; }; \
 	  else \
 	    printf "${YELLOW}[WARN] uv.lock not found. Generating lock file and installing dependencies...${RESET}\n"; \
 	    ${UV_BIN} sync --all-extras || { printf "${RED}[ERROR] Failed to install dependencies${RESET}\n"; exit 1; }; \
 	  fi; \
 	else \
 	  printf "${YELLOW}[WARN] No pyproject.toml found, skipping install${RESET}\n"; \
+	fi
+
+	# Install dev dependencies from .rhiza/requirements/*.txt files
+	@if [ -d ".rhiza/requirements" ] && ls .rhiza/requirements/*.txt >/dev/null 2>&1; then \
+	  for req_file in .rhiza/requirements/*.txt; do \
+	    if [ -f "$$req_file" ]; then \
+	      printf "${BLUE}[INFO] Installing requirements from $$req_file${RESET}\n"; \
+	      ${UV_BIN} pip install -r "$$req_file" || { printf "${RED}[ERROR] Failed to install requirements from $$req_file${RESET}\n"; exit 1; }; \
+	    fi; \
+	  done; \
+	fi
+
+	# Check if there is requirements.txt file in the tests folder (legacy support)
+	@if [ -f "tests/requirements.txt" ]; then \
+	  printf "${BLUE}[INFO] Installing requirements from tests/requirements.txt${RESET}\n"; \
+	  ${UV_BIN} pip install -r tests/requirements.txt || { printf "${RED}[ERROR] Failed to install test requirements${RESET}\n"; exit 1; }; \
 	fi
 
 sync: ## sync with template repository as defined in .github/template.yml
@@ -150,10 +163,16 @@ marimo: install ## fire up Marimo server
 
 ##@ Quality and Formatting
 deptry: install-uv ## Run deptry
-	@if [ -d src ]; then \
-		$(UVX_BIN) deptry src; \
-	else \
-		$(UVX_BIN) deptry .; \
+	@if [ -d ${SOURCE_FOLDER} ]; then \
+		$(UVX_BIN) deptry ${SOURCE_FOLDER}; \
+	fi
+
+	@if [ -d ${MARIMO_FOLDER} ]; then \
+		if [ -d ${SOURCE_FOLDER} ]; then \
+			$(UVX_BIN) deptry ${MARIMO_FOLDER} ${SOURCE_FOLDER} --ignore DEP004; \
+		else \
+		  	$(UVX_BIN) deptry ${MARIMO_FOLDER} --ignore DEP004; \
+		fi \
 	fi
 
 fmt: install-uv ## check the pre-commit hooks and the linting
@@ -196,6 +215,9 @@ customisations: ## list available customisation scripts
 
 update-readme: ## update README.md with current Makefile help output
 	@/bin/sh "${SCRIPTS_FOLDER}/update-readme-help.sh"
+
+version-matrix: install-uv ## Emit the list of supported Python versions from pyproject.toml
+	@${UV_BIN} run .rhiza/utils/version_matrix.py
 
 # debugger tools
 custom-%: ## run a custom script (usage: make custom-scriptname)
