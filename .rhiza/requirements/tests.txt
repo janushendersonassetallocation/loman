@@ -1,0 +1,4 @@
+# Test dependencies for rhiza
+pytest==9.0.2
+pytest-cov>=7.0.0
+pytest-html>=4.1.1

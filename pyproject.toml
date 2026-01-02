@@ -28,30 +28,15 @@ dependencies = [
     "dill >= 0.2.5",
     "networkx >= 2.0",
     "pandas >= 0.19.2",
+    "attrs >= 25.0"
 ]
 
-[project.optional-dependencies]
-test = [
-    "attrs",
-    "pytest",
-]
+[dependency-groups]
 dev = [
-    "pytest>=7.0",
-    "pytest-cov>=7.0",
-    "pytest-html>=4.0",
-    "python-dotenv==1.2.1",
     "ruff>=0.12.0",
-    "pre-commit>=3.0",
     "mypy>=1.0",
     "marimo>=0.15",
     "scipy>=1.16.3",
-    #"yahoo-finance>=1.4.0",
-    #"beautifulsoup4>=4.14.2",
-    #"requests>=2.32.5"
-]
-notebook = [
-    "scipy>=1.16.3",
-    "marimo>=0.15",
 ]
 
 [project.urls]
@@ -59,11 +44,6 @@ Homepage = "https://github.com/janusassetallocation/loman"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loman"]
-
-[tool.deptry]
-known_first_party = ["loman"]
-pep621_dev_dependency_groups = ["test", "dev", "notebook"]
-per_rule_ignores = {DEP002 = ["pytest", "pytest-cov", "ruff", "pre-commit", "mypy", "marimo", "attrs"], DEP004 = ["attrs"]}
 
 [tool.deptry.package_module_name_map]
 pre-commit = "pre_commit"
