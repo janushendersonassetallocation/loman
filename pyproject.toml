@@ -46,15 +46,12 @@ Homepage = "https://github.com/janusassetallocation/loman"
 packages = ["src/loman"]
 
 [tool.deptry.package_module_name_map]
-pre-commit = "pre_commit"
-pytest-cov = "pytest_cov"
 matplotlib = "matplotlib"
 pydotplus = "pydotplus"
 decorator = "decorator"
 networkx = "networkx"
 marimo = "marimo"
 pandas = "pandas"
-pytest = "pytest"
 scipy = "scipy"
 attrs = "attrs"
 numpy = "numpy"
