@@ -356,6 +356,66 @@ class Computation:
     def _get_tags_for_state(self, tag: str):
         return set(node_keys_to_names(self._tag_map[tag]))
 
+    def _process_function_args(self, node_key, node, args):
+        """Process positional arguments for a function node."""
+        args_count = 0
+        if args:
+            args_count = len(args)
+            for i, arg in enumerate(args):
+                if isinstance(arg, ConstantValue):
+                    node[NodeAttributes.ARGS][i] = arg.value
+                else:
+                    input_vertex_name = arg
+                    input_vertex_node_key = to_nodekey(input_vertex_name)
+                    if not self.dag.has_node(input_vertex_node_key):
+                        self.dag.add_node(input_vertex_node_key, **{NodeAttributes.STATE: States.PLACEHOLDER})
+                        self._state_map[States.PLACEHOLDER].add(input_vertex_node_key)
+                    self.dag.add_edge(
+                        input_vertex_node_key, node_key, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)}
+                    )
+        return args_count
+
+    def _build_param_map(self, func, node_key, args_count, kwds, inspect):
+        """Build parameter map for function node."""
+        param_map = {}
+        default_names = []
+
+        if inspect:
+            signature = get_signature(func)
+            if not signature.has_var_args:
+                for param_name in signature.kwd_params[args_count:]:
+                    if kwds is not None and param_name in kwds:
+                        param_source = kwds[param_name]
+                    else:
+                        param_source = node_key.parent.join_parts(param_name)
+                    param_map[param_name] = param_source
+            if signature.has_var_kwds and kwds is not None:
+                for param_name, param_source in kwds.items():
+                    param_map[param_name] = param_source
+            default_names = signature.default_params
+        else:
+            if kwds is not None:
+                for param_name, param_source in kwds.items():
+                    param_map[param_name] = param_source
+
+        return param_map, default_names
+
+    def _process_function_kwds(self, node_key, node, param_map, default_names):
+        """Process keyword arguments for a function node."""
+        for param_name, param_source in param_map.items():
+            if isinstance(param_source, ConstantValue):
+                node[NodeAttributes.KWDS][param_name] = param_source.value
+            else:
+                in_node_name = param_source
+                in_node_key = to_nodekey(in_node_name)
+                if not self.dag.has_node(in_node_key):
+                    if param_name in default_names:
+                        continue
+                    else:
+                        self.dag.add_node(in_node_key, **{NodeAttributes.STATE: States.PLACEHOLDER})
+                        self._state_map[States.PLACEHOLDER].add(in_node_key)
+                self.dag.add_edge(in_node_key, node_key, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
+
     def add_node(
         self,
         name: Name,
@@ -440,53 +500,9 @@ class Computation:
 
         if func:
             node[NodeAttributes.FUNC] = func
-            args_count = 0
-            if args:
-                args_count = len(args)
-                for i, arg in enumerate(args):
-                    if isinstance(arg, ConstantValue):
-                        node[NodeAttributes.ARGS][i] = arg.value
-                    else:
-                        input_vertex_name = arg
-                        input_vertex_node_key = to_nodekey(input_vertex_name)
-                        if not self.dag.has_node(input_vertex_node_key):
-                            self.dag.add_node(input_vertex_node_key, **{NodeAttributes.STATE: States.PLACEHOLDER})
-                            self._state_map[States.PLACEHOLDER].add(input_vertex_node_key)
-                        self.dag.add_edge(
-                            input_vertex_node_key, node_key, **{EdgeAttributes.PARAM: (_ParameterType.ARG, i)}
-                        )
-            param_map = {}
-            if inspect:
-                signature = get_signature(func)
-                if not signature.has_var_args:
-                    for param_name in signature.kwd_params[args_count:]:
-                        if kwds is not None and param_name in kwds:
-                            param_source = kwds[param_name]
-                        else:
-                            param_source = node_key.parent.join_parts(param_name)
-                        param_map[param_name] = param_source
-                if signature.has_var_kwds and kwds is not None:
-                    for param_name, param_source in kwds.items():
-                        param_map[param_name] = param_source
-                default_names = signature.default_params
-            else:
-                if kwds is not None:
-                    for param_name, param_source in kwds.items():
-                        param_map[param_name] = param_source
-                default_names = []
-            for param_name, param_source in param_map.items():
-                if isinstance(param_source, ConstantValue):
-                    node[NodeAttributes.KWDS][param_name] = param_source.value
-                else:
-                    in_node_name = param_source
-                    in_node_key = to_nodekey(in_node_name)
-                    if not self.dag.has_node(in_node_key):
-                        if param_name in default_names:
-                            continue
-                        else:
-                            self.dag.add_node(in_node_key, **{NodeAttributes.STATE: States.PLACEHOLDER})
-                            self._state_map[States.PLACEHOLDER].add(in_node_key)
-                    self.dag.add_edge(in_node_key, node_key, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
+            args_count = self._process_function_args(node_key, node, args)
+            param_map, default_names = self._build_param_map(func, node_key, args_count, kwds, inspect)
+            self._process_function_kwds(node_key, node, param_map, default_names)
             self._set_descendents(node_key, States.STALE)
 
         if has_value:
@@ -1515,6 +1531,12 @@ class Computation:
     @staticmethod
     def read_dill(file_):
         """Deserialize a computation from a file or file-like object.
+
+        .. warning::
+            This method uses dill.load() which can execute arbitrary code.
+            Only load files from trusted sources. Never load data from
+            untrusted or unauthenticated sources as it may lead to arbitrary
+            code execution.
 
         :param file_: If string, writes to a file
         :type file_: File-like object, or string

@@ -362,10 +362,10 @@ def test_copy_2():
 
 def test_insert_many():
     comp = Computation()
-    l = list(range(100))
-    random.shuffle(l)
+    node_list = list(range(100))
+    random.shuffle(node_list)
     prev = None
-    for x in l:
+    for x in node_list:
         if prev is None:
             comp.add_node(x)
         else:
@@ -412,9 +412,9 @@ def test_insert_from():
 
 
 def test_insert_from_large():
-    def make_chain(comp, f, l):
+    def make_chain(comp, f, node_list):
         prev = None
-        for i in l:
+        for i in node_list:
             if prev is None:
                 comp.add_node(i)
             else:

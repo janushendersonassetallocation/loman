@@ -1,6 +1,7 @@
 """Visualization tools for computation graphs using Graphviz."""
 
 import os
+import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
@@ -388,9 +389,10 @@ class GraphView:
         """Open the visualization in a PDF viewer."""
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(self.viz_dot.create_pdf())
-            if sys.platform != "win32":
-                os.system(f"open {f.name}")
-            os.startfile(f.name)
+            if sys.platform == "win32":
+                os.startfile(f.name)
+            else:
+                subprocess.run(["open", f.name], check=False)
 
     def _repr_svg_(self):
         return self.svg()
@@ -449,8 +451,8 @@ def create_viz_dag(
     return viz_dag
 
 
-def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
-    """Convert a visualization DAG to a PyDot graph for rendering."""
+def _group_nodes_and_edges(viz_dag):
+    """Group nodes and edges by their groups."""
     root = NodeKey.root()
 
     node_groups = {}
@@ -463,8 +465,11 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
         group = data.get("_group", root)
         edge_groups.setdefault(group, []).append((name1, name2))
 
-    subgraphs = {root: create_root_graph(graph_attr, node_attr, edge_attr)}
+    return root, node_groups, edge_groups
 
+
+def _create_pydot_nodes(viz_dag, node_groups, subgraphs, root):
+    """Create PyDot nodes for each group."""
     for group, names in node_groups.items():
         c = subgraphs[root] if group is root else create_subgraph(group)
 
@@ -477,6 +482,9 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
 
         subgraphs[group] = c
 
+
+def _ensure_parent_subgraphs(subgraphs):
+    """Ensure all parent subgraphs exist in the hierarchy."""
     groups = list(subgraphs.keys())
     for group in groups:
         group1 = group
@@ -488,6 +496,9 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
                 break
             subgraphs[group1] = create_subgraph(group1)
 
+
+def _link_subgraphs(subgraphs):
+    """Link subgraphs to their parents."""
     for group, subgraph in subgraphs.items():
         if group.is_root:
             continue
@@ -498,11 +509,26 @@ def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotp
                 break
         subgraphs[parent].add_subgraph(subgraph)
 
+
+def _add_edges_to_subgraphs(edge_groups, subgraphs):
+    """Add edges to their respective subgraphs."""
     for group, edges in edge_groups.items():
         c = subgraphs[group]
         for name1, name2 in edges:
             edge = pydotplus.Edge(name1, name2)
             c.add_edge(edge)
+
+
+def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
+    """Convert a visualization DAG to a PyDot graph for rendering."""
+    root, node_groups, edge_groups = _group_nodes_and_edges(viz_dag)
+
+    subgraphs = {root: create_root_graph(graph_attr, node_attr, edge_attr)}
+
+    _create_pydot_nodes(viz_dag, node_groups, subgraphs, root)
+    _ensure_parent_subgraphs(subgraphs)
+    _link_subgraphs(subgraphs)
+    _add_edges_to_subgraphs(edge_groups, subgraphs)
 
     return subgraphs[root]
 
