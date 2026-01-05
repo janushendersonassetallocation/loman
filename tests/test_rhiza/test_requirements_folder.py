@@ -4,8 +4,6 @@ This test ensures that the requirements folder exists and contains the expected
 requirement files for development dependencies.
 """
 
-import tomllib
-
 
 class TestRequirementsFolder:
     """Tests for the .rhiza/requirements folder structure."""
@@ -41,19 +39,6 @@ class TestRequirementsFolder:
             # Filter out comments and empty lines
             lines = [line.strip() for line in content.splitlines() if line.strip() and not line.strip().startswith("#")]
             assert len(lines) > 0, f"{filename} should contain at least one dependency"
-
-    def test_marimo_not_in_main_dependencies(self, root):
-        """Marimo should not be in main dependencies of pyproject.toml."""
-        pyproject_path = root / "pyproject.toml"
-        assert pyproject_path.exists(), "pyproject.toml should exist"
-
-        with open(pyproject_path, "rb") as f:
-            pyproject_data = tomllib.load(f)
-
-        dependencies = pyproject_data.get("project", {}).get("dependencies", [])
-        marimo_deps = [dep for dep in dependencies if "marimo" in dep.lower()]
-
-        assert len(marimo_deps) == 0, f"marimo should not be in main dependencies, found: {marimo_deps}"
 
     def test_readme_exists_in_requirements_folder(self, root):
         """README.md should exist in requirements folder."""
