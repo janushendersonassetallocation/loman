@@ -20,6 +20,10 @@
 .github/workflows/rhiza_sync.yml
 .github/workflows/rhiza_validate.yml
 .pre-commit-config.yaml
+.rhiza/.cfg.toml
+.rhiza/customisations/Makefile.customisations
+.rhiza/customisations/scripts/build-extras.sh
+.rhiza/customisations/scripts/post-release.sh
 .rhiza/docs/CONFIG.md
 .rhiza/docs/TOKEN_SETUP.md
 .rhiza/requirements/README.md
@@ -28,8 +32,6 @@
 .rhiza/requirements/tests.txt
 .rhiza/requirements/tools.txt
 .rhiza/scripts/book.sh
-.rhiza/scripts/bump.sh
-.rhiza/scripts/customisations/post-release.sh
 .rhiza/scripts/generate-coverage-badge.sh
 .rhiza/scripts/install-dev-deps.sh
 .rhiza/scripts/marimushka.sh
@@ -46,7 +48,6 @@ tests/test_rhiza/benchmarks/.gitignore
 tests/test_rhiza/benchmarks/README.md
 tests/test_rhiza/benchmarks/analyze_benchmarks.py
 tests/test_rhiza/conftest.py
-tests/test_rhiza/test_bump_script.py
 tests/test_rhiza/test_coverage_badge.py
 tests/test_rhiza/test_docstrings.py
 tests/test_rhiza/test_git_repo_fixture.py
