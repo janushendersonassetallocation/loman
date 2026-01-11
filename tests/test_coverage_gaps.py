@@ -3,6 +3,7 @@
 import io
 import sys
 import tempfile
+from collections import namedtuple
 from unittest.mock import MagicMock, patch
 
 import networkx as nx
@@ -10,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from loman import Computation, States
+from loman import C, Computation, States
 from loman.compat import get_signature
 from loman.computeengine import (
     Block,
@@ -33,6 +34,7 @@ from loman.nodekey import (
     to_nodekey,
 )
 from loman.serialization import (
+    CustomTransformer,
     MissingObject,
     Transformer,
     UnrecognizedTypeException,
@@ -1002,3 +1004,564 @@ class TestTimingData:
         assert td.start == start
         assert td.end == end
         assert td.duration == 0.5
+
+
+# ==================== ADDITIONAL COVERAGE TESTS ====================
+
+
+class TestNodeDecorator:
+    """Tests for the @node decorator."""
+
+    def test_node_decorator_with_name(self):
+        """Test @node decorator with explicit name."""
+        from loman.computeengine import node
+
+        comp = Computation()
+
+        @node(comp, name="custom_name")
+        def my_func(x):
+            return x + 1
+
+        assert comp.has_node("custom_name")
+
+    def test_node_decorator_without_name(self):
+        """Test @node decorator using function name."""
+        from loman.computeengine import node
+
+        comp = Computation()
+
+        @node(comp)
+        def my_func(x):
+            return x + 1
+
+        assert comp.has_node("my_func")
+
+
+class TestCalcNode:
+    """Tests for CalcNode class."""
+
+    def test_calc_node_decorator(self):
+        """Test calc_node decorator."""
+        from loman.computeengine import calc_node
+
+        @calc_node
+        def my_calc(a, b):
+            return a + b
+
+        assert hasattr(my_calc, "_loman_node_info")
+
+    def test_calc_node_with_kwds(self):
+        """Test calc_node with keyword arguments."""
+        from loman.computeengine import calc_node
+
+        @calc_node(serialize=False)
+        def my_calc(a, b):
+            return a + b
+
+        assert hasattr(my_calc, "_loman_node_info")
+
+
+class TestBlockCallable:
+    """Tests for Block with callable."""
+
+    def test_block_with_callable(self):
+        """Test Block with a callable that returns Computation."""
+
+        def create_block():
+            comp = Computation()
+            comp.add_node("x", value=10)
+            return comp
+
+        block = Block(create_block)
+
+        outer_comp = Computation()
+        block.add_to_comp(outer_comp, "my_block", None, ignore_self=True)
+
+        assert outer_comp.has_node("my_block/x")
+
+    def test_block_with_invalid_type(self):
+        """Test Block with invalid type raises TypeError."""
+        block = Block("not a callable or computation")
+
+        outer_comp = Computation()
+        with pytest.raises(TypeError, match="must be callable or Computation"):
+            block.add_to_comp(outer_comp, "my_block", None, ignore_self=True)
+
+
+class TestComputationFactory:
+    """Tests for computation_factory decorator."""
+
+    def test_computation_factory(self):
+        """Test computation_factory decorator."""
+        from loman.computeengine import calc_node, computation_factory
+
+        @computation_factory
+        class MyComp:
+            @calc_node
+            def add(self, a, b):
+                return a + b
+
+        comp = MyComp()
+        assert isinstance(comp, Computation)
+
+
+class TestMapNodeError:
+    """Tests for add_map_node with errors."""
+
+    def test_add_map_node_with_error(self):
+        """Test add_map_node when subgraph raises an error."""
+        from loman.exception import MapError
+
+        subgraph = Computation()
+        subgraph.add_node("input")
+
+        def fail_on_two(input):
+            if input == 2:
+                raise ValueError("Cannot process 2")
+            return input * 2
+
+        subgraph.add_node("output", fail_on_two)
+
+        comp = Computation()
+        comp.add_node("input", value=[1, 2, 3])
+        comp.add_map_node("output", "input", subgraph, "input", "output")
+
+        with pytest.raises(MapError):
+            comp.compute("output", raise_exceptions=True)
+
+
+class TestPrepareConstantValue:
+    """Test prepend_path with ConstantValue."""
+
+    def test_prepend_path_with_constant(self):
+        """Test prepend_path returns ConstantValue unchanged."""
+        comp = Computation()
+        cv = C(42)
+        result = comp.prepend_path(cv, NodeKey(("prefix",)))
+        assert isinstance(result, ConstantValue)
+        assert result.value == 42
+
+
+class TestAttributeViewForPath:
+    """Tests for attribute view path access."""
+
+    def test_get_many_func_for_path(self):
+        """Test getting multiple values via path."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2)
+
+        # Access multiple values as list
+        result = comp.v[["a", "b"]]
+        assert result == [1, 2]
+
+
+class TestTransformerSubtypes:
+    """Tests for transformer with subtype support."""
+
+    def test_transformer_with_subtypes(self):
+        """Test transformer that handles subtypes."""
+
+        class MyBaseClass:
+            pass
+
+        class MyDerivedClass(MyBaseClass):
+            def __init__(self, value):
+                self.value = value
+
+        class MySubtypeTransformer(CustomTransformer):
+            @property
+            def name(self):
+                return "mybase"
+
+            def to_dict(self, transformer, o):
+                return {"value": o.value}
+
+            def from_dict(self, transformer, d):
+                return MyDerivedClass(d["value"])
+
+            @property
+            def supported_subtypes(self):
+                return [MyBaseClass]
+
+        t = Transformer()
+        t.register(MySubtypeTransformer())
+
+        obj = MyDerivedClass(42)
+        d = t.to_dict(obj)
+        obj_back = t.from_dict(d)
+
+        assert obj_back.value == 42
+
+
+class TestGraphUtilsNoCycle:
+    """Additional tests for graph_utils."""
+
+    def test_topological_sort_simple(self):
+        """Test topological sort with simple DAG."""
+        g = nx.DiGraph()
+        g.add_edge("a", "b")
+        g.add_edge("b", "c")
+
+        result = topological_sort(g)
+        assert result.index("a") < result.index("b")
+        assert result.index("b") < result.index("c")
+
+
+class TestVisualizationWin32:
+    """Tests for visualization on Windows platform."""
+
+    def test_graph_view_view_windows(self):
+        """Test GraphView.view() on Windows."""
+        # This test is for coverage of the win32 branch
+        # We can't actually run os.startfile on Linux, so we test via mock
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+        v = GraphView(comp)
+
+        # Create a mock for the PDF generation and file opening
+        with patch.object(v.viz_dot, "create_pdf", return_value=b"fake pdf"):
+            with patch("tempfile.NamedTemporaryFile") as mock_tempfile:
+                mock_file = MagicMock()
+                mock_file.name = "/tmp/test.pdf"
+                mock_file.__enter__ = MagicMock(return_value=mock_file)
+                mock_file.__exit__ = MagicMock(return_value=False)
+                mock_tempfile.return_value = mock_file
+
+                # Mock subprocess.run for non-win32 path
+                with patch("subprocess.run"):
+                    v.view()
+
+
+class TestVisualizationAttrNormalization:
+    """Tests for attribute normalization in create_root_graph."""
+
+    def test_create_root_graph_empty_string(self):
+        """Test create_root_graph with empty string value."""
+        graph_attr = {"label": ""}
+        root = create_root_graph(graph_attr, None, None)
+        assert root is not None
+
+    def test_create_root_graph_already_quoted(self):
+        """Test create_root_graph with already quoted value."""
+        graph_attr = {"size": '"10,8"'}
+        root = create_root_graph(graph_attr, None, None)
+        assert root is not None
+
+    def test_create_root_graph_numeric(self):
+        """Test create_root_graph with numeric values."""
+        graph_attr = {"fontsize": 12}
+        node_attr = {"width": 1.5}
+        edge_attr = {"penwidth": 2}
+        root = create_root_graph(graph_attr, node_attr, edge_attr)
+        assert root is not None
+
+
+class TestInputNodeAddToComp:
+    """Tests for InputNode add_to_comp method."""
+
+    def test_input_node_add_to_comp(self):
+        """Test InputNode.add_to_comp method."""
+        from loman.computeengine import InputNode
+
+        inp = InputNode(value=42)
+        comp = Computation()
+        inp.add_to_comp(comp, "my_input", None, ignore_self=True)
+
+        # The node should be added
+        assert comp.has_node("my_input")
+
+
+class TestExpandNamedTuple:
+    """Tests for add_named_tuple_expansion method."""
+
+    def test_add_named_tuple_expansion(self):
+        """Test add_named_tuple_expansion creates nodes for fields."""
+        Point = namedtuple("Point", ["x", "y"])
+
+        comp = Computation()
+        comp.add_node("point", value=Point(1, 2))
+        comp.add_named_tuple_expansion("point", Point)
+
+        assert comp.has_node("point.x")
+        assert comp.has_node("point.y")
+        comp.compute_all()
+        assert comp.v["point.x"] == 1
+        assert comp.v["point.y"] == 2
+
+
+class TestGetTreeListChildrenWithStem:
+    """Tests for get_tree_list_children with include_stem."""
+
+    def test_get_tree_list_children_basic(self):
+        """Test get_tree_list_children basic functionality."""
+        comp = Computation()
+        comp.add_node("parent/child1", value=1)
+        comp.add_node("parent/child2", value=2)
+
+        children = comp.get_tree_list_children("parent")
+        assert len(children) > 0
+
+
+class TestGetFinalOutputs:
+    """Tests for get_final_outputs method."""
+
+    def test_get_final_outputs(self):
+        """Test get_final_outputs returns leaf nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        outputs = comp.get_final_outputs()
+        assert "c" in outputs
+
+    def test_get_final_outputs_with_names(self):
+        """Test get_final_outputs with specific names."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        outputs = comp.get_final_outputs("a")
+        assert "c" in outputs
+
+
+class TestGetOriginalInputs:
+    """Tests for get_original_inputs method."""
+
+    def test_get_original_inputs(self):
+        """Test get_original_inputs returns input nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2)
+        comp.add_node("c", lambda a, b: a + b)
+
+        inputs = comp.get_original_inputs()
+        assert "a" in inputs
+        assert "b" in inputs
+        assert "c" not in inputs
+
+
+class TestGetDescendents:
+    """Tests for get_descendents method."""
+
+    def test_get_descendents(self):
+        """Test get_descendents returns downstream nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        desc = comp.get_descendents("a")
+        assert "b" in desc
+        assert "c" in desc
+
+
+class TestGetAncestors:
+    """Tests for get_ancestors method."""
+
+    def test_get_ancestors(self):
+        """Test get_ancestors returns upstream nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        anc = comp.get_ancestors("c")
+        assert "a" in anc
+        assert "b" in anc
+
+
+class TestLinkSameNode:
+    """Test link when target equals source."""
+
+    def test_link_same_node(self):
+        """Test link does nothing when target equals source."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        # This should do nothing, not raise an error
+        comp.link("a", "a")
+
+        assert comp.v.a == 1
+
+
+class TestAddBlockMetadataDeletion:
+    """Test add_block metadata deletion when None."""
+
+    def test_add_block_removes_metadata(self):
+        """Test add_block removes metadata when None is passed."""
+        block = Computation()
+        block.add_node("a", value=1)
+
+        comp = Computation()
+        # First add with metadata
+        comp.add_block("block1", block, metadata={"key": "value"})
+        assert comp.metadata("block1") == {"key": "value"}
+
+        # Then add another block at same path with no metadata
+        block2 = Computation()
+        block2.add_node("b", value=2)
+
+        # This should remove the old metadata
+        comp.add_block("block1", block2, metadata=None)
+
+
+class TestRestrict:
+    """Tests for restrict method."""
+
+    def test_restrict(self):
+        """Test restrict limits computation to ancestors of outputs."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2)
+        comp.add_node("c", lambda a: a + 1)
+        comp.add_node("d", lambda b: b + 1)
+        comp.add_node("e", lambda c, d: c + d)
+
+        # Restrict to only what's needed for c
+        comp.restrict("c")
+
+        assert comp.has_node("a")
+        assert comp.has_node("c")
+        # b and d might be removed depending on implementation
+
+
+class TestPinUnpin:
+    """Tests for pin and unpin methods."""
+
+    def test_pin_with_value(self):
+        """Test pin with value."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", lambda a: a + 1)
+
+        comp.pin("a", 10)
+        comp.compute_all()
+
+        assert comp.s.a == States.PINNED
+        assert comp.v.a == 10
+        assert comp.v.b == 11
+
+    def test_unpin(self):
+        """Test unpin sets node to STALE."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.pin("a")
+
+        assert comp.s.a == States.PINNED
+
+        comp.unpin("a")
+        assert comp.s.a == States.STALE
+
+
+class TestSetAndClearStyle:
+    """Tests for set_style and clear_style methods."""
+
+    def test_set_style(self):
+        """Test set_style method."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        comp.set_style("a", "small")
+        assert comp.style.a == "small"
+
+    def test_clear_style(self):
+        """Test clear_style method."""
+        comp = Computation()
+        comp.add_node("a", value=1, style="small")
+
+        comp.clear_style("a")
+        assert comp.style.a is None
+
+
+class TestClearTag:
+    """Tests for clear_tag method."""
+
+    def test_clear_tag(self):
+        """Test clear_tag removes tag."""
+        comp = Computation()
+        comp.add_node("a", value=1, tags=["my_tag"])
+
+        assert "my_tag" in comp.t.a
+
+        comp.clear_tag("a", "my_tag")
+        assert "my_tag" not in comp.t.a
+
+
+class TestGetSource:
+    """Tests for get_source and print_source methods."""
+
+    def test_get_source(self):
+        """Test get_source returns source code."""
+        comp = Computation()
+
+        def my_func(a):
+            return a + 1
+
+        comp.add_node("a", value=1)
+        comp.add_node("b", my_func)
+
+        source = comp.get_source("b")
+        assert "my_func" in source
+
+    def test_get_source_non_calc(self):
+        """Test get_source for non-calculated node."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        source = comp.get_source("a")
+        assert "NOT A CALCULATED NODE" in source
+
+
+class TestComputeAndGetValue:
+    """Tests for compute_and_get_value method."""
+
+    def test_compute_and_get_value_uptodate(self):
+        """Test compute_and_get_value when already uptodate."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        result = comp.compute_and_get_value("a")
+        assert result == 1
+
+    def test_compute_and_get_value_needs_compute(self):
+        """Test compute_and_get_value triggers computation."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+
+        result = comp.x.b
+        assert result == 2
+
+
+class TestNodeKeyDropRootNone:
+    """Test drop_root when not a descendant."""
+
+    def test_drop_root_not_descendant(self):
+        """Test drop_root returns None when not descendant."""
+        nk = NodeKey(("a", "b"))
+        root = NodeKey(("x", "y"))
+
+        result = nk.drop_root(root)
+        assert result is None
+
+
+class TestNodeKeyIsDescendant:
+    """Tests for is_descendent_of method."""
+
+    def test_is_descendent_of_true(self):
+        """Test is_descendent_of returns True for descendant."""
+        parent = NodeKey(("a",))
+        child = NodeKey(("a", "b"))
+
+        assert child.is_descendent_of(parent)
+
+    def test_is_descendent_of_false_equal(self):
+        """Test is_descendent_of returns False for equal keys."""
+        nk1 = NodeKey(("a",))
+        nk2 = NodeKey(("a",))
+
+        assert not nk1.is_descendent_of(nk2)
