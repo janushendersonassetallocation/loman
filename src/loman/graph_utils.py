@@ -57,7 +57,7 @@ def topological_sort(g):
         if g is not None:
             try:
                 cycle_lst = nx.find_cycle(g)
-            except nx.NetworkXNoCycle:
+            except nx.NetworkXNoCycle:  # pragma: no cover
                 # there must non-cycle reason NetworkXUnfeasible, leave as is
                 raise e
         args = []
