@@ -603,7 +603,7 @@ class TestVisualization:
         v = GraphView(comp)
 
         mock_file = MagicMock()
-        mock_file.name = "/tmp/test.pdf"
+        mock_file.name = "/tmp/test.pdf"  # nosec B108 - mock path for testing
         mock_file.__enter__ = MagicMock(return_value=mock_file)
         mock_file.__exit__ = MagicMock(return_value=False)
         mock_tempfile.return_value = mock_file
@@ -1233,7 +1233,7 @@ class TestVisualizationWin32:
         with patch.object(v.viz_dot, "create_pdf", return_value=b"fake pdf"):
             with patch("tempfile.NamedTemporaryFile") as mock_tempfile:
                 mock_file = MagicMock()
-                mock_file.name = "/tmp/test.pdf"
+                mock_file.name = "/tmp/test.pdf"  # nosec B108 - mock path for testing
                 mock_file.__enter__ = MagicMock(return_value=mock_file)
                 mock_file.__exit__ = MagicMock(return_value=False)
                 mock_tempfile.return_value = mock_file
@@ -2114,7 +2114,7 @@ class TestViewFunctionOpenBranch:
 
         # Create a mock file object
         mock_file = mocker.MagicMock()
-        mock_file.name = "/tmp/test.pdf"
+        mock_file.name = "/tmp/test.pdf"  # nosec B108 - mock path for testing
         mock_file.__enter__ = mocker.MagicMock(return_value=mock_file)
         mock_file.__exit__ = mocker.MagicMock(return_value=False)
         mock_tempfile.return_value = mock_file
@@ -3007,7 +3007,7 @@ class TestComputeengineRemainingCoverage:
 
         # Read back
         with open(file_path, "rb") as f:
-            loaded = dill.load(f)
+            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data
 
         # Check structure
         assert loaded.has_node("a")

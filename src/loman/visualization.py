@@ -390,9 +390,9 @@ class GraphView:
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(self.viz_dot.create_pdf())
             if sys.platform == "win32":
-                os.startfile(f.name)  # pragma: no cover
+                os.startfile(f.name)  # pragma: no cover  # nosec B606
             else:
-                subprocess.run(["open", f.name], check=False)  # pragma: no cover
+                subprocess.run(["open", f.name], check=False)  # pragma: no cover  # nosec B603 B607
 
     def _repr_svg_(self):
         return self.svg()
