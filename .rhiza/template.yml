@@ -4,15 +4,19 @@ include:
 - .devcontainer/
 - .github/
 - .rhiza/
-- book/Makefile.book
+- book/
 - tests/
 - .editorconfig
 - .pre-commit-config.yaml
 - Makefile
-- presentation
+- presentation/
 exclude:
 - .github/workflows/rhiza_docker.yml
-- .rhiza/scripts/customisations/build-extras.sh
 - .rhiza/CONFIG.md
 - .rhiza/TOKEN_SETUP.md
 - .rhiza/make.d
+- book/marimo/notebooks/
+- book/minibook-templates/
+- book/pdoc-templates/
+- book/README.md
+- book/marimo/README.md
