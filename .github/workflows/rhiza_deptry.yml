@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Run deptry
-        run: make deptry
+        run: make -f .rhiza/rhiza.mk deptry
         # NOTE: make deptry is good style because it encapsulates the folders to check
         # (e.g. src and book/marimo) and keeps CI in sync with local development.
         # Since we use a 'uv' container, the Makefile is optimized to use the

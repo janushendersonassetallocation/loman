@@ -15,7 +15,7 @@ This example demonstrates portfolio valuation for equities, futures, and cash.
 # ]
 #
 # [tool.uv.sources]
-# loman = { path = "../..", editable = true }
+# loman = { path = "../../..", editable = true }
 # ///
 
 import marimo
