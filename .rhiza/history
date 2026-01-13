@@ -39,6 +39,8 @@
 .rhiza/scripts/release.sh
 .rhiza/utils/version_matrix.py
 Makefile
+book/book.mk
+book/marimo/marimo.mk
 presentation/README.md
 presentation/presentation.mk
 tests/test_rhiza/README.md
