@@ -52,12 +52,9 @@ jobs:
           # will just use .python-version?
           uv sync --all-extras --all-groups --frozen
 
-      - name: Install dev dependencies
-        run: bash .rhiza/scripts/install-dev-deps.sh
-
       - name: "Make the book"
         run: |
-          make book
+          make -f .rhiza/rhiza.mk book
 
       # Step 5: Package all artifacts for GitHub Pages deployment
       # This prepares the combined outputs for deployment by creating a single artifact

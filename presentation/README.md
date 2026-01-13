@@ -269,7 +269,7 @@ While Marp doesn't directly export to PowerPoint, you can:
 
 To create additional presentations:
 1. Create a new Markdown file (e.g., `WORKSHOP.md`)
-2. Add new targets to `presentation/Makefile.presentation` following the existing pattern:
+2. Add new targets to `presentation/presentation.mk` following the existing pattern:
    ```makefile
    workshop: ## generate workshop slides from WORKSHOP.md using Marp
    	@printf "${BLUE}[INFO] Checking for Marp CLI...${RESET}\n"
@@ -309,13 +309,13 @@ This presentation system is part of the Rhiza template collection. When you inte
 
 The presentation targets are included in the main Makefile through:
 ```makefile
--include presentation/Makefile.presentation
+-include presentation/presentation.mk
 ```
 
 ## Contributing
 
 If you improve the presentation system:
-1. Update `Makefile.presentation` for new features
+1. Update `presentation.mk` for new features
 2. Update this README with documentation
 3. Update `PRESENTATION.md` with examples
 4. Test all three commands: `presentation`, `presentation-pdf`, `presentation-serve`

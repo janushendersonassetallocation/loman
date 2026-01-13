@@ -40,7 +40,9 @@ jobs:
       - name: Find notebooks and build matrix
         id: notebooks
         run: |
-          NOTEBOOK_DIR="book/marimo"
+          # Extract MARIMO_FOLDER from the project configuration (via Makefile)
+          NOTEBOOK_DIR=$(make -s -f Makefile -f - <<< 'print: ; @echo $(or $(MARIMO_FOLDER),marimo)' print)
+
           echo "Searching notebooks in: $NOTEBOOK_DIR"
           # Check if directory exists
           if [ ! -d "$NOTEBOOK_DIR" ]; then

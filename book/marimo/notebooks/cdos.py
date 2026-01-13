@@ -17,7 +17,7 @@ for CDO tranche valuation with loss distribution calculations.
 # ]
 #
 # [tool.uv.sources]
-# loman = { path = "../..", editable = true }
+# loman = { path = "../../..", editable = true }
 # ///
 
 import marimo

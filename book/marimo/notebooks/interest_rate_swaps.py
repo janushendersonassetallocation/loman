@@ -16,7 +16,7 @@ and using them to price portfolios of swaps.
 # ]
 #
 # [tool.uv.sources]
-# loman = { path = "../..", editable = true }
+# loman = { path = "../../..", editable = true }
 # ///
 
 import marimo
