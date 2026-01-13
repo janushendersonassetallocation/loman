@@ -8,6 +8,7 @@
 .devcontainer/bootstrap.sh
 .devcontainer/devcontainer.json
 .editorconfig
+.github/agents/agentic.mk
 .github/agents/analyser.md
 .github/agents/summarise.md
 .github/copilot-instructions.md
@@ -27,7 +28,6 @@
 .rhiza/.cfg.toml
 .rhiza/.env
 .rhiza/.gitignore
-.rhiza/agentic/agentic.mk
 .rhiza/docs/CONFIG.md
 .rhiza/docs/TOKEN_SETUP.md
 .rhiza/requirements/README.md
