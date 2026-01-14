@@ -846,10 +846,10 @@ class Computation:
         self.set_stale(node_key)
 
     def _get_descendents(self, node_key: NodeKey, stop_states: set[States] | None = None) -> set[NodeKey]:
-        if stop_states is not None and self.dag.nodes[node_key][NodeAttributes.STATE] in stop_states:
-            return set()
-        if stop_states is None:  # pragma: no cover
+        if stop_states is None:
             stop_states = set()
+        if self.dag.nodes[node_key][NodeAttributes.STATE] in stop_states:
+            return set()
         visited = set()
         to_visit = {node_key}
         while to_visit:
