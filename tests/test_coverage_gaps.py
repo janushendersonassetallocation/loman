@@ -603,7 +603,7 @@ class TestVisualization:
         v = GraphView(comp)
 
         mock_file = MagicMock()
-        mock_file.name = "/tmp/test.pdf"  # nosec B108 - mock path for testing
+        mock_file.name = tempfile.gettempdir() + "/test.pdf"  # nosec B108 - mock path for testing
         mock_file.__enter__ = MagicMock(return_value=mock_file)
         mock_file.__exit__ = MagicMock(return_value=False)
         mock_tempfile.return_value = mock_file
@@ -1233,7 +1233,7 @@ class TestVisualizationWin32:
         with patch.object(v.viz_dot, "create_pdf", return_value=b"fake pdf"):
             with patch("tempfile.NamedTemporaryFile") as mock_tempfile:
                 mock_file = MagicMock()
-                mock_file.name = "/tmp/test.pdf"  # nosec B108 - mock path for testing
+                mock_file.name = tempfile.gettempdir() + "/test.pdf"  # nosec B108 - mock path for testing
                 mock_file.__enter__ = MagicMock(return_value=mock_file)
                 mock_file.__exit__ = MagicMock(return_value=False)
                 mock_tempfile.return_value = mock_file
@@ -1990,9 +1990,9 @@ class TestMockAttrsImport:
     def test_attrs_not_available_branch(self):
         """Test the HAS_ATTRS = False branch is tested elsewhere."""
         # This tests the path when attrs IS available - which is always true
-        import loman.serialization.transformer as t
+        from loman.serialization.transformer import HAS_ATTRS
 
-        assert t.HAS_ATTRS is True
+        assert HAS_ATTRS is True
 
 
 class TestTransformerNoAttrs:
@@ -2114,7 +2114,7 @@ class TestViewFunctionOpenBranch:
 
         # Create a mock file object
         mock_file = mocker.MagicMock()
-        mock_file.name = "/tmp/test.pdf"  # nosec B108 - mock path for testing
+        mock_file.name = tempfile.gettempdir() + "/test.pdf"  # nosec B108 - mock path for testing
         mock_file.__enter__ = mocker.MagicMock(return_value=mock_file)
         mock_file.__exit__ = mocker.MagicMock(return_value=False)
         mock_tempfile.return_value = mock_file
@@ -2526,7 +2526,8 @@ class TestGraphViewEmpty:
         v = GraphView(comp)
         svg = v.svg()
         # Empty graph should still produce valid SVG
-        assert svg is None or "<svg" in svg
+        assert isinstance(svg, str)
+        assert "<svg" in svg
 
 
 class TestRenameMetadataClearBranch:
@@ -2595,8 +2596,8 @@ class TestShapeByType:
             NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.FUNC: lambda: 1}
         )
         result = formatter.format(NodeKey(("a",)), [node], False)
-        # Result may be None or dict - just test it doesn't raise
-        assert result is None or isinstance(result, dict)
+        # ShapeByType only returns shapes for nodes with values, not functions
+        assert result is None
 
     def test_shape_by_type_without_func(self):
         """Test ShapeByType with a value node (no function)."""
@@ -2609,8 +2610,8 @@ class TestShapeByType:
             NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.FUNC: None}
         )
         result = formatter.format(NodeKey(("a",)), [node], False)
-        # Result may be None or dict
-        assert result is None or isinstance(result, dict)
+        # ShapeByType only returns shapes for nodes with values
+        assert result is None
 
 
 class TestRectBlocks:
@@ -2624,8 +2625,18 @@ class TestRectBlocks:
 
         node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
         result = formatter.format(NodeKey(("a",)), [node], is_composite=True)
-        # Result may be None or dict
-        assert result is None or isinstance(result, dict)
+        # RectBlocks returns a dict for composite nodes
+        assert isinstance(result, dict)
+
+    def test_rect_blocks_non_composite(self):
+        """Test RectBlocks with non-composite node returns no blocks."""
+        from loman.visualization import Node, NodeAttributes, RectBlocks
+
+        formatter = RectBlocks()
+
+        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
+        result = formatter.format(NodeKey(("a",)), [node], is_composite=False)
+        assert result is None
 
 
 class TestGraphViewTransformations:
@@ -2665,8 +2676,8 @@ class TestStandardStylingOverrides:
             {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.STYLE: {"color": "red"}},
         )
         result = formatter.format(NodeKey(("a",)), [node], False)
-        # Result may be None or dict - just test it doesn't raise
-        assert result is None or isinstance(result, dict)
+        # When a node has an explicit style that's not small/dot, the formatter returns None
+        assert result is None
 
 
 # ==================== ADDITIONAL COVERAGE TESTS - ROUND 6 ====================
@@ -2902,7 +2913,7 @@ class TestComputeengineRemainingCoverage:
         # Get timing - should be available after computation
         timing = comp.get_timing("a")
         # Timing is a TimingData object or None
-        assert timing is not None or timing is None  # Just check it returns without error
+        assert timing is None or isinstance(timing, TimingData)
 
     def test_get_timing_list(self):
         """Test get_timing with multiple names."""
