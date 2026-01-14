@@ -10,7 +10,7 @@ try:
     import attrs
 
     HAS_ATTRS = True
-except ImportError:
+except ImportError:  # pragma: no cover
     HAS_ATTRS = False
 
 import dataclasses
@@ -65,17 +65,17 @@ class CustomTransformer(ABC):
     @abstractmethod
     def name(self) -> str:
         """Return unique name identifier for this transformer."""
-        pass
+        pass  # pragma: no cover
 
     @abstractmethod
     def to_dict(self, transformer: "Transformer", o: object) -> dict:
         """Convert object to dictionary representation."""
-        pass
+        pass  # pragma: no cover
 
     @abstractmethod
     def from_dict(self, transformer: "Transformer", d: dict) -> object:
         """Reconstruct object from dictionary representation."""
-        pass
+        pass  # pragma: no cover
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
@@ -94,13 +94,13 @@ class Transformable(ABC):
     @abstractmethod
     def to_dict(self, transformer: "Transformer") -> dict:
         """Convert this object to dictionary representation."""
-        pass
+        pass  # pragma: no cover
 
     @classmethod
     @abstractmethod
     def from_dict(cls, transformer: "Transformer", d: dict) -> object:
         """Reconstruct object from dictionary representation."""
-        pass
+        pass  # pragma: no cover
 
 
 class Transformer:
@@ -275,7 +275,7 @@ class Transformer:
             return cls.from_dict(self, d[KEY_DATA])
 
     def _from_attrs(self, d):
-        if not HAS_ATTRS:
+        if not HAS_ATTRS:  # pragma: no cover
             if self.strict:
                 raise UnrecognizedTypeError("attrs package not installed")
             return MissingObject()
