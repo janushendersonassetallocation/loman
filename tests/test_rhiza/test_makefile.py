@@ -98,7 +98,7 @@ def run_make(
     flags = "-sn" if dry_run else "-s"
     cmd.insert(1, flags)
     logger.info("Running command: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603
+    result = subprocess.run(cmd, capture_output=True, text=True)
     logger.debug("make exited with code %d", result.returncode)
     if result.stdout:
         logger.debug("make stdout (truncated to 500 chars):\n%s", result.stdout[:500])
@@ -113,9 +113,9 @@ def run_make(
 def setup_rhiza_git_repo():
     """Initialize a git repository and set remote to rhiza."""
     git = shutil.which("git") or "/usr/bin/git"
-    subprocess.run([git, "init"], check=True, capture_output=True)  # noqa: S603
+    subprocess.run([git, "init"], check=True, capture_output=True)
     subprocess.run(
-        [git, "remote", "add", "origin", "https://github.com/jebel-quant/rhiza"],  # noqa: S603
+        [git, "remote", "add", "origin", "https://github.com/jebel-quant/rhiza"],
         check=True,
         capture_output=True,
     )

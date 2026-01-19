@@ -55,6 +55,8 @@ def test_notebook_execution(notebook_path: Path):
 
     cmd = [
         uvx_cmd,
+        "--with",
+        "typing_extensions",  # Workaround: marimo's starlette dep needs this
         "marimo",
         "export",
         "html",

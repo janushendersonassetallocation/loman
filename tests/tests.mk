@@ -4,7 +4,7 @@
 # executing performance benchmarks.
 
 # Declare phony targets (they don't produce files)
-.PHONY: test benchmark
+.PHONY: test benchmark typecheck security mutate docs-coverage
 
 # Default directory for tests
 TESTS_FOLDER := tests
@@ -21,10 +21,46 @@ test: install ## run all tests
 
 	@if [ -d ${TESTS_FOLDER} ]; then \
 	  mkdir -p _tests/html-coverage _tests/html-report; \
-	  ${VENV}/bin/python -m pytest ${TESTS_FOLDER} --ignore=${TESTS_FOLDER}/benchmarks --cov=${SOURCE_FOLDER} --cov-report=term --cov-report=html:_tests/html-coverage --cov-report=json:_tests/coverage.json --html=_tests/html-report/report.html; \
+	  ${VENV}/bin/python -m pytest ${TESTS_FOLDER} \
+	  --ignore=${TESTS_FOLDER}/benchmarks \
+	  --cov=${SOURCE_FOLDER} \
+	  --cov-report=term \
+	  --cov-report=html:_tests/html-coverage \
+	  --cov-fail-under=90 \
+	  --cov-report=json:_tests/coverage.json \
+	  --html=_tests/html-report/report.html; \
 	else \
 	  printf "${YELLOW}[WARN] Test folder ${TESTS_FOLDER} not found, skipping tests${RESET}\n"; \
 	fi
+
+# The 'typecheck' target runs static type analysis using mypy.
+# 1. Checks if the source directory exists.
+# 2. Runs mypy on the source folder using the configuration in pyproject.toml.
+typecheck: install ## run mypy type checking
+	@if [ -d ${SOURCE_FOLDER} ]; then \
+	  printf "${BLUE}[INFO] Running mypy type checking...${RESET}\n"; \
+	  ${UVX_BIN} mypy ${SOURCE_FOLDER} --config-file pyproject.toml; \
+	else \
+	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping typecheck${RESET}\n"; \
+	fi
+
+# The 'security' target performs security vulnerability scans.
+# 1. Runs pip-audit to check for known vulnerabilities in dependencies.
+# 2. Runs bandit to find common security issues in the source code.
+security: install ## run security scans (pip-audit and bandit)
+	@printf "${BLUE}[INFO] Running pip-audit for dependency vulnerabilities...${RESET}\n"
+	@${UVX_BIN} pip-audit
+	@printf "${BLUE}[INFO] Running bandit security scan...${RESET}\n"
+	@${UVX_BIN} bandit -r ${SOURCE_FOLDER} -ll -q || true
+
+# The 'mutate' target performs mutation testing using mutmut.
+# 1. Runs mutmut to apply mutations to the source code and check if tests fail.
+# 2. Displays the results of the mutation testing.
+mutate: install ## run mutation testing with mutmut (slow, for CI or thorough testing)
+	@printf "${BLUE}[INFO] Running mutation testing with mutmut...${RESET}\n"
+	@printf "${YELLOW}[WARN] This may take a while...${RESET}\n"
+	@${UVX_BIN} mutmut run --paths-to-mutate=${SOURCE_FOLDER} || true
+	@${UVX_BIN} mutmut results
 
 # The 'benchmark' target runs performance benchmarks using pytest-benchmark.
 # 1. Installs benchmarking dependencies (pytest-benchmark, pygal).
@@ -42,5 +78,16 @@ benchmark: install ## run performance benchmarks
 	  ${VENV}/bin/python tests/test_rhiza/benchmarks/analyze_benchmarks.py ; \
 	else \
 	  printf "${YELLOW}[WARN] Benchmarks folder not found, skipping benchmarks${RESET}\n"; \
+	fi
+
+# The 'docs-coverage' target checks documentation coverage using interrogate.
+# 1. Checks if SOURCE_FOLDER exists.
+# 2. Runs interrogate on the source folder with verbose output.
+docs-coverage: install ## check documentation coverage with interrogate
+	@if [ -d "${SOURCE_FOLDER}" ]; then \
+	  printf "${BLUE}[INFO] Checking documentation coverage in ${SOURCE_FOLDER}...${RESET}\n"; \
+	  ${VENV}/bin/python -m interrogate -vv ${SOURCE_FOLDER}; \
+	else \
+	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping docs-coverage${RESET}\n"; \
 	fi
 

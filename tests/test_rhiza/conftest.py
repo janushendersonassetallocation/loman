@@ -201,4 +201,4 @@ def git_repo(root, tmp_path, monkeypatch):
     subprocess.run([GIT, "commit", "-m", "Initial commit"], check=True)
     subprocess.run([GIT, "push", "origin", "master"], check=True)
 
-    yield local_dir
+    return local_dir
