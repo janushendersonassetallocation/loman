@@ -5,7 +5,7 @@
 # Lines with `##` after a target are parsed into help text,
 # and lines starting with `##@` create section headers in the help output.
 #
-# Colors for pretty output in help messages
+# Colours for pretty output in help messages
 BLUE := \033[36m
 BOLD := \033[1m
 GREEN := \033[32m
@@ -22,6 +22,7 @@ RESET := \033[0m
 	clean \
 	deptry \
 	fmt \
+	mypy \
 	help \
 	install \
 	install-uv \
@@ -225,6 +226,11 @@ deptry: install-uv ## Run deptry
 
 fmt: install-uv ## check the pre-commit hooks and the linting
 	@${UVX_BIN} pre-commit run --all-files
+
+mypy: install ## run mypy analysis
+	@if [ -d ${SOURCE_FOLDER} ]; then \
+		${UV_BIN} run mypy ${SOURCE_FOLDER} --strict --config-file=pyproject.toml; \
+	fi
 
 ##@ Releasing and Versioning
 bump: pre-bump ## bump version

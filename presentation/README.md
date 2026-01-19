@@ -135,7 +135,7 @@ More content
 #### Key Directives
 
 - `---` — Creates a new slide
-- `<!-- _class: lead -->` — Centers content on the slide
+- `<!-- _class: lead -->` — Centres content on the slide
 - Front matter (between `---` at the start) — Configures presentation settings
 
 #### Styling
@@ -296,7 +296,7 @@ To create additional presentations:
 - **Marp Documentation**: [https://marpit.marp.app/](https://marpit.marp.app/)
 - **Marp CLI Documentation**: [https://github.com/marp-team/marp-cli](https://github.com/marp-team/marp-cli)
 - **Marpit Markdown**: [https://marpit.marp.app/markdown](https://marpit.marp.app/markdown)
-- **Theme Customization**: [https://marpit.marp.app/theme-css](https://marpit.marp.app/theme-css)
+- **Theme Customisation**: [https://marpit.marp.app/theme-css](https://marpit.marp.app/theme-css)
 
 ## Integration with Rhiza
 
