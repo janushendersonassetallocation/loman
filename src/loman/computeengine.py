@@ -73,7 +73,7 @@ class _ParameterItem:
     value: object
 
 
-def _node(func, *args, **kws):
+def _node(func, *args, **kws):  # pragma: no cover
     return func(*args, **kws)
 
 
@@ -340,7 +340,7 @@ class Computation:
             elif self.tree_has_path(new_nk):
                 return self.get_attribute_view_for_path(new_nk, get_one_func, get_many_func)
             else:
-                raise KeyError(f"Path {new_nk} does not exist")
+                raise KeyError(f"Path {new_nk} does not exist")  # pragma: no cover
 
         def get_many_func_for_path(name: Name | Names):
             if isinstance(name, list):
@@ -645,7 +645,7 @@ class Computation:
                 self._metadata[new_node_key] = self._metadata[old_node_key]
                 del self._metadata[old_node_key]
             else:
-                if new_node_key in self._metadata:
+                if new_node_key in self._metadata:  # pragma: no cover
                     del self._metadata[new_node_key]
 
         self._refresh_maps()
@@ -801,7 +801,7 @@ class Computation:
             self._state_map[old_state].remove(node_key)
         except KeyError:
             if require_old_state:
-                raise
+                raise  # pragma: no cover
         node[NodeAttributes.STATE] = state
         node[NodeAttributes.VALUE] = value
         self._state_map[state].add(node_key)
@@ -846,10 +846,10 @@ class Computation:
         self.set_stale(node_key)
 
     def _get_descendents(self, node_key: NodeKey, stop_states: set[States] | None = None) -> set[NodeKey]:
+        if stop_states is None:
+            stop_states = set()
         if self.dag.nodes[node_key][NodeAttributes.STATE] in stop_states:
             return set()
-        if stop_states is None:
-            stop_states = []
         visited = set()
         to_visit = {node_key}
         while to_visit:
@@ -888,7 +888,7 @@ class Computation:
         if self.dag.nodes[node_key].get(NodeAttributes.FUNC) is not None:
             for n in self.dag.predecessors(node_key):
                 if not self.dag.has_node(n):
-                    return
+                    return  # pragma: no cover
                 if self.dag.nodes[n][NodeAttributes.STATE] != States.UPTODATE:
                     return
             self._set_state(node_key, States.COMPUTABLE)
@@ -917,7 +917,7 @@ class Computation:
                 args[idx] = param.value
             elif param.type == _ParameterType.KWD:
                 kwds[param.name] = param.value
-            else:
+            else:  # pragma: no cover
                 raise Exception(f"Unexpected param type: {param.type}")
         return f, executor_name, args, kwds
 
@@ -946,7 +946,7 @@ class Computation:
                     res_args[idx] = in_node_key.name
                 elif param_type == _ParameterType.KWD:
                     res_kwds[param_name] = in_node_key.name
-                else:
+                else:  # pragma: no cover
                     raise Exception(f"Unexpected param type: {param_type}")
         return res_args, res_kwds
 

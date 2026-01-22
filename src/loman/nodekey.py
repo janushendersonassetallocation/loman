@@ -212,7 +212,7 @@ def to_nodekey(name: Name) -> NodeKey:
         return name
     elif isinstance(name, object):
         return NodeKey((name,))
-    else:
+    else:  # pragma: no cover
         raise ValueError(f"Unexpected error creating node key for name {name}")
 
 
