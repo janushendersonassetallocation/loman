@@ -10,6 +10,12 @@
 # Default output directory for Marimushka (HTML exports of notebooks)
 MARIMUSHKA_OUTPUT ?= _marimushka
 
+# Logo file for pdoc (relative to project root).
+# 1. Defaults to the Rhiza logo if present.
+# 2. Can be overridden in Makefile or local.mk (e.g. LOGO_FILE := my-logo.png)
+# 3. If set to empty string, no logo will be used.
+LOGO_FILE ?= assets/rhiza-logo.svg
+
 # ----------------------------
 # Book sections (declarative)
 # ----------------------------
@@ -55,8 +61,19 @@ docs:: install ## create documentation with pdoc
 	    else \
 	      printf "${BLUE}[INFO] Using provided docformat: $$DOCFORMAT${RESET}\n"; \
 	    fi; \
+	    LOGO_ARG=""; \
+	    if [ -n "$(LOGO_FILE)" ]; then \
+	      if [ -f "$(LOGO_FILE)" ]; then \
+	        MIME=$$(file --mime-type -b "$(LOGO_FILE)"); \
+	        DATA=$$(base64 < "$(LOGO_FILE)" | tr -d '\n'); \
+	        LOGO_ARG="--logo data:$$MIME;base64,$$DATA"; \
+	        printf "${BLUE}[INFO] Embedding logo: $(LOGO_FILE)${RESET}\n"; \
+	      else \
+	        printf "${YELLOW}[WARN] Logo file $(LOGO_FILE) not found, skipping${RESET}\n"; \
+	      fi; \
+	    fi; \
 	    ${UV_BIN} pip install pdoc && \
-	    PYTHONPATH="${SOURCE_FOLDER}" ${UV_BIN} run pdoc --docformat $$DOCFORMAT --output-dir _pdoc $$TEMPLATE_ARG $$PKGS; \
+	    PYTHONPATH="${SOURCE_FOLDER}" ${UV_BIN} run pdoc --docformat $$DOCFORMAT --output-dir _pdoc $$TEMPLATE_ARG $$LOGO_ARG $$PKGS; \
 	  fi; \
 	else \
 	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping docs${RESET}\n"; \

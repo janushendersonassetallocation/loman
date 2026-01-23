@@ -7,7 +7,7 @@
 #
 # Trigger: On push and pull requests to main/master branches.
 
-name: CI
+name: (RHIZA) CI
 
 permissions:
   contents: read
@@ -32,6 +32,8 @@ jobs:
           version: "0.9.26"
 
       - id: versions
+        env:
+          UV_EXTRA_INDEX_URL: ${{ secrets.uv-extra-index-url }}
         run: |
           # Generate Python versions JSON from the script
           JSON=$(make -f .rhiza/rhiza.mk -s version-matrix)
@@ -62,5 +64,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Run tests
+        env:
+          UV_EXTRA_INDEX_URL: ${{ secrets.uv-extra-index-url }}
         run: |
           make -f .rhiza/rhiza.mk test
