@@ -1332,8 +1332,8 @@ def test_get_calc_node_keys_raises_exception_for_uninitialized_node():
 
     real_ancestors = nx.ancestors
 
-    def change_ancestors_order(G, source):
-        results = list(real_ancestors(G, source))
+    def change_ancestors_order(g, source):
+        results = list(real_ancestors(g, source))
         
         # Sort results because we want 'b' to be last to reproduce the original bug 
         safe_key = to_nodekey("b") 
