@@ -3,7 +3,9 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from time import sleep
+from unittest.mock import patch
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
@@ -1314,3 +1316,34 @@ def test_get_source():
     src = comp.get_source("b")
     src_lines = [line.strip() for line in src.split("\n")]
     assert src_lines[1:] == ["", "@node(comp)", "def b(a):", "return a + 1", ""]
+
+
+# Helper class to allow ordered iteration while supporting .add
+class ListWithAdd(list):
+    def add(self, item):
+        self.append(item)
+
+
+def test_get_calc_node_keys_raises_exception_for_uninitialized_node():
+    comp = Computation()
+
+    # Since "a" is UNINITIALIZED, make sure _get_calc_node_keys call raises an exception
+    comp.add_node("a")
+    comp.add_node("b", value=1)
+    comp.add_node("c", lambda a, b: a + b, kwds={"a": "a", "b": "b"})
+
+    real_ancestors = nx.ancestors
+
+    def change_ancestors_order(g, source):
+        results = list(real_ancestors(g, source))
+
+        # Sort results because we want 'b' to be last to reproduce the original bug
+        safe_key = to_nodekey("b")
+        results.sort(key=lambda n: 1 if n == safe_key else 0)
+
+        return ListWithAdd(results)
+
+    # We expect this to raise an exception, that means the code is working an noticed the uninitialized node
+    with patch("loman.computeengine.nx.ancestors", side_effect=change_ancestors_order):
+        with pytest.raises(Exception, match="uninitialized"):
+            comp.compute("c")
