@@ -7,7 +7,6 @@ include:
 - book/
 - tests/
 - .editorconfig
-- .pre-commit-config.yaml
 - Makefile
 - presentation/
 exclude:
@@ -20,3 +19,4 @@ exclude:
 - book/pdoc-templates/
 - book/README.md
 - book/marimo/README.md
+- .pre-commit-config.yaml
