@@ -24,7 +24,6 @@
 .github/workflows/rhiza_mypy.yml
 .github/workflows/rhiza_pre-commit.yml
 .github/workflows/rhiza_release.yml
-.github/workflows/rhiza_security.yml
 .github/workflows/rhiza_sync.yml
 .github/workflows/rhiza_validate.yml
 .rhiza/.cfg.toml

@@ -11,6 +11,7 @@ include:
 - presentation/
 exclude:
 - .github/workflows/rhiza_docker.yml
+- .github/workflows/rhiza_security.yml
 - .rhiza/CONFIG.md
 - .rhiza/TOKEN_SETUP.md
 - .rhiza/make.d
