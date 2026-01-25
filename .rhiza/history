@@ -26,7 +26,6 @@
 .github/workflows/rhiza_release.yml
 .github/workflows/rhiza_sync.yml
 .github/workflows/rhiza_validate.yml
-.pre-commit-config.yaml
 .rhiza/.cfg.toml
 .rhiza/.env
 .rhiza/.gitignore
