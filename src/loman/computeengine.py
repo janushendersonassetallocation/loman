@@ -1014,6 +1014,9 @@ class Computation:
 
         ancestors = nx.ancestors(g, node_key)
         for n in ancestors:
+            node = self.dag.nodes[n]
+            state = node[NodeAttributes.STATE]
+
             if state == States.UNINITIALIZED and len(self.dag.pred[n]) == 0:
                 raise Exception(f"Cannot compute {node_key} because {n} uninitialized")
             if state == States.PLACEHOLDER:
