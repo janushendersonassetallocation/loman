@@ -7,6 +7,17 @@
 # Declare phony targets (they don't produce files)
 .PHONY: docs marimushka book
 
+# Define a default no-op marimushka target that will be used
+# when book/marimo/marimo.mk doesn't exist or doesn't define marimushka
+marimushka:: install-uv
+	@if [ ! -d "book/marimo" ]; then \
+	  printf "${BLUE}[INFO] No Marimo directory found, creating placeholder${RESET}\n"; \
+	  mkdir -p "${MARIMUSHKA_OUTPUT}"; \
+	  printf '%s\n' '<html><head><title>Marimo Notebooks</title></head>' \
+	    '<body><h1>Marimo Notebooks</h1><p>No notebooks found.</p></body></html>' \
+	    > "${MARIMUSHKA_OUTPUT}/index.html"; \
+	fi
+
 # Default output directory for Marimushka (HTML exports of notebooks)
 MARIMUSHKA_OUTPUT ?= _marimushka
 
@@ -86,6 +97,23 @@ docs:: install ## create documentation with pdoc
 book:: test docs marimushka ## compile the companion book
 	@printf "${BLUE}[INFO] Building combined documentation...${RESET}\n"
 	@rm -rf _book && mkdir -p _book
+
+	@if [ -f "_tests/coverage.json" ]; then \
+	  printf "${BLUE}[INFO] Generating coverage badge JSON...${RESET}\n"; \
+	  mkdir -p _book/tests; \
+	  ${UV_BIN} run python -c "\
+import json; \
+data = json.load(open('_tests/coverage.json')); \
+pct = int(data['totals']['percent_covered']); \
+color = 'brightgreen' if pct >= 90 else 'green' if pct >= 80 else 'yellow' if pct >= 70 else 'orange' if pct >= 60 else 'red'; \
+badge = {'schemaVersion': 1, 'label': 'coverage', 'message': f'{pct}%', 'color': color}; \
+json.dump(badge, open('_book/tests/coverage-badge.json', 'w'))"; \
+	  printf "${BLUE}[INFO] Coverage badge JSON:${RESET}\n"; \
+	  cat _book/tests/coverage-badge.json; \
+	  printf "\n"; \
+	else \
+	  printf "${YELLOW}[WARN] No coverage.json found, skipping badge generation${RESET}\n"; \
+	fi
 
 	@printf "{\n" > _book/links.json
 	@first=1; \
