@@ -7,6 +7,8 @@ include:
 - book/
 - tests/
 - .editorconfig
+# let's not include the pre-commit-config.yaml in an update
+# - .pre-commit-config.yaml
 - Makefile
 - presentation/
 exclude:
@@ -19,3 +21,5 @@ exclude:
 - book/pdoc-templates/
 - book/README.md
 - book/marimo/README.md
+# if we exclude the file Rhiza will not(!) remove the local file
+- .pre-commit-config.yaml
