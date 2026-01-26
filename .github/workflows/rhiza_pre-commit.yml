@@ -14,7 +14,7 @@
 # Components:
 #   - 🔍 Run pre-commit checks using reusable action
 
-name: "PRE-COMMIT"
+name: "(RHIZA) PRE-COMMIT"
 permissions:
   contents: read
 

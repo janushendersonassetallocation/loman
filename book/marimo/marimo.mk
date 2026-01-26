@@ -42,7 +42,7 @@ marimo: install ## fire up Marimo server
 # 1. Detects notebooks in the MARIMO_FOLDER.
 # 2. Converts them using 'marimushka export'.
 # 3. Generates a placeholder index.html if no notebooks are found.
-marimushka: install-uv ## export Marimo notebooks to HTML
+marimushka:: install-uv ## export Marimo notebooks to HTML
 	# Clean up previous marimushka output
 	rm -rf "${MARIMUSHKA_OUTPUT}";
 
