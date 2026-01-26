@@ -12,12 +12,10 @@ include:
 exclude:
 - .github/workflows/rhiza_docker.yml
 - .github/workflows/rhiza_security.yml
-- .rhiza/CONFIG.md
-- .rhiza/TOKEN_SETUP.md
+- .rhiza/docs
 - .rhiza/make.d
 - book/marimo/notebooks/
 - book/minibook-templates/
 - book/pdoc-templates/
 - book/README.md
 - book/marimo/README.md
-- .pre-commit-config.yaml
