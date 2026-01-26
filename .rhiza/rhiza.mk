@@ -5,7 +5,7 @@
 # Lines with `##` after a target are parsed into help text,
 # and lines starting with `##@` create section headers in the help output.
 #
-# Colors for pretty output in help messages
+# Colours for pretty output in help messages
 BLUE := \033[36m
 BOLD := \033[1m
 GREEN := \033[32m
@@ -22,6 +22,7 @@ RESET := \033[0m
 	clean \
 	deptry \
 	fmt \
+	mypy \
 	help \
 	install \
 	install-uv \
@@ -37,6 +38,7 @@ RESET := \033[0m
 	pre-validate \
 	release \
 	sync \
+	summarise-sync \
 	update-readme \
 	validate \
 	version-matrix
@@ -48,8 +50,12 @@ UVX_BIN ?= $(shell command -v uvx 2>/dev/null || echo ${INSTALL_DIR}/uvx)
 VENV ?= .venv
 
 # Read Python version from .python-version (single source of truth)
-PYTHON_VERSION ?= $(shell cat .python-version 2>/dev/null || echo "3.12")
+PYTHON_VERSION ?= $(shell cat .python-version 2>/dev/null || echo "3.13")
 export PYTHON_VERSION
+
+# Read Rhiza version from .rhiza/.rhiza-version (single source of truth for rhiza-tools)
+RHIZA_VERSION ?= $(shell cat .rhiza/.rhiza-version 2>/dev/null || echo "0.9.0")
+export RHIZA_VERSION
 
 export UV_NO_MODIFY_PATH := 1
 export UV_VENV_CLEAR := 1
@@ -110,16 +116,24 @@ sync: pre-sync ## sync with template repository as defined in .rhiza/template.ym
 		printf "${BLUE}[INFO] Skipping sync in rhiza repository (no template.yml by design)${RESET}\n"; \
 	else \
 		$(MAKE) install-uv; \
-		${UVX_BIN} "rhiza>=0.7.1" materialize --force .; \
+		${UVX_BIN} "rhiza>=$(RHIZA_VERSION)" materialize --force .; \
 	fi
 	@$(MAKE) post-sync
+
+summarise-sync: install-uv ## summarise differences created by sync with template repository
+	@if git remote get-url origin 2>/dev/null | grep -iqE 'jebel-quant/rhiza(\.git)?$$'; then \
+		printf "${BLUE}[INFO] Skipping summarise-sync in rhiza repository (no template.yml by design)${RESET}\n"; \
+	else \
+		$(MAKE) install-uv; \
+		${UVX_BIN} "rhiza>=$(RHIZA_VERSION)" summarise .; \
+	fi
 
 validate: pre-validate ## validate project structure against template repository as defined in .rhiza/template.yml
 	@if git remote get-url origin 2>/dev/null | grep -iqE 'jebel-quant/rhiza(\.git)?$$'; then \
 		printf "${BLUE}[INFO] Skipping validate in rhiza repository (no template.yml by design)${RESET}\n"; \
 	else \
 		$(MAKE) install-uv; \
-		${UVX_BIN} "rhiza>=0.7.1" validate .; \
+		${UVX_BIN} "rhiza>=$(RHIZA_VERSION)" validate .; \
 	fi
 	@$(MAKE) post-validate
 
@@ -212,19 +226,24 @@ clean: ## Clean project artifacts and stale local branches
 ##@ Quality and Formatting
 deptry: install-uv ## Run deptry
 	@if [ -d ${SOURCE_FOLDER} ]; then \
-		$(UVX_BIN) deptry ${SOURCE_FOLDER}; \
+		$(UVX_BIN) -p ${PYTHON_VERSION} deptry ${SOURCE_FOLDER}; \
 	fi
 
 	@if [ -d ${MARIMO_FOLDER} ]; then \
 		if [ -d ${SOURCE_FOLDER} ]; then \
-			$(UVX_BIN) deptry ${MARIMO_FOLDER} ${SOURCE_FOLDER} --ignore DEP004; \
+			$(UVX_BIN) -p ${PYTHON_VERSION} deptry ${MARIMO_FOLDER} ${SOURCE_FOLDER} --ignore DEP004; \
 		else \
-		  	$(UVX_BIN) deptry ${MARIMO_FOLDER} --ignore DEP004; \
+		  	$(UVX_BIN) -p ${PYTHON_VERSION} deptry ${MARIMO_FOLDER} --ignore DEP004; \
 		fi \
 	fi
 
 fmt: install-uv ## check the pre-commit hooks and the linting
-	@${UVX_BIN} pre-commit run --all-files
+	@${UVX_BIN} -p ${PYTHON_VERSION} pre-commit run --all-files
+
+mypy: install-uv ## run mypy analysis
+	@if [ -d ${SOURCE_FOLDER} ]; then \
+		${UVX_BIN} -p ${PYTHON_VERSION} mypy ${SOURCE_FOLDER} --strict --config-file=pyproject.toml; \
+	fi
 
 ##@ Releasing and Versioning
 bump: pre-bump ## bump version
