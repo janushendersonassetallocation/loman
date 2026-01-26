@@ -13,6 +13,7 @@ include:
 - presentation/
 exclude:
 - .github/workflows/rhiza_docker.yml
+- .github/workflows/rhiza_security.yml
 - .rhiza/docs
 - .rhiza/make.d
 - book/marimo/notebooks/

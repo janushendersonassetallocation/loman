@@ -10,7 +10,7 @@
 # Trigger: This workflow runs on every push and on pull requests to main/master
 #          branches (including from forks)
 
-name: "DEPTRY"
+name: "(RHIZA) DEPTRY"
 
 # Permissions: Only read access to repository contents is needed
 permissions:
@@ -36,5 +36,5 @@ jobs:
         run: make -f .rhiza/rhiza.mk deptry
         # NOTE: make deptry is good style because it encapsulates the folders to check
         # (e.g. src and book/marimo) and keeps CI in sync with local development.
-        # Since we use a 'uv' container, the Makefile is optimized to use the
+        # Since we use a 'uv' container, the Makefile is optimised to use the
         # pre-installed 'uv' and 'uvx' from the system PATH.
