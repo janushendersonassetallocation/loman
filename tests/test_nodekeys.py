@@ -115,3 +115,10 @@ def test_is_pattern():
     assert is_pattern(NodeKey(("abc", "*", "**", "def")))
     assert is_pattern(NodeKey(("**", "*", "def")))
     assert is_pattern(NodeKey(("abc", "**", "*")))
+
+
+def test_nodekey_ancestors():
+    """Test NodeKey ancestors method."""
+    nk = to_nodekey("foo/bar/baz")
+    result = set(x.name for x in nk.ancestors())
+    assert result == {"foo/bar/baz", "foo/bar", "foo", ""}

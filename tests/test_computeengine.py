@@ -10,18 +10,24 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import loman as lm
 from loman import (
     C,
     CannotInsertToPlaceholderNodeError,
     Computation,
+    ComputationFactory,
     LoopDetectedError,
     MapError,
     NonExistentNodeError,
     States,
+    block,
+    calc_node,
+    input_node,
     node,
 )
-from loman.computeengine import NodeData, NodeKey
+from loman.computeengine import Block, NodeData, NodeKey
 from loman.nodekey import to_nodekey
+from tests.standard_test_computations import BasicFourNodeComputation
 
 
 def test_basic():
@@ -1347,3 +1353,753 @@ def test_get_calc_node_keys_raises_exception_for_uninitialized_node():
     with patch("loman.computeengine.nx.ancestors", side_effect=change_ancestors_order):
         with pytest.raises(Exception, match="uninitialized"):
             comp.compute("c")
+
+
+# =============================================================================
+# Block Tests (from test_blocks.py)
+# =============================================================================
+
+
+def test_simple_block():
+    comp_inner = Computation()
+    comp_inner.add_node("a")
+    comp_inner.add_node("b", lambda a: a + 1)
+    comp_inner.add_node("c", lambda a: 2 * a)
+    comp_inner.add_node("d", lambda b, c: b + c)
+
+    comp = Computation()
+    comp.add_block("foo", comp_inner)
+    comp.add_block("bar", comp_inner)
+    comp.add_node("input_foo")
+    comp.add_node("input_bar")
+    comp.link("foo/a", "input_foo")
+    comp.link("bar/a", "input_bar")
+    comp.add_node("output", lambda x, y: x + y, kwds={"x": "foo/d", "y": "bar/d"})
+
+    comp.insert("input_foo", value=7)
+    comp.insert("input_bar", value=10)
+
+    comp.compute_all()
+
+    assert comp.v["foo/d"] == 22
+    assert comp.v["bar/d"] == 31
+    assert comp.v.output == 22 + 31
+
+
+def test_add_node_for_block_definition():
+    comp = Computation()
+    comp.add_node("foo/a")
+    comp.add_node("foo/b", lambda a: a + 1)
+    comp.add_node("foo/c", lambda a: 2 * a)
+    comp.add_node("foo/d", lambda b, c: b + c)
+    comp.insert("foo/a", value=7)
+    comp.compute_all()
+    assert comp.v["foo/d"] == 22
+
+
+def test_add_node_for_block_definition_with_kwds():
+    comp = Computation()
+    comp.add_node("foo_a/a")
+    comp.add_node("foo_b/b", lambda a: a + 1, kwds={"a": "foo_a/a"})
+    comp.add_node("foo_c/c", lambda a: 2 * a, kwds={"a": "foo_a/a"})
+    comp.add_node("foo_d/d", lambda b, c: b + c, kwds={"b": "foo_b/b", "c": "foo_c/c"})
+    comp.insert("foo_a/a", value=7)
+    comp.compute_all()
+    assert comp.v["foo_d/d"] == 22
+
+
+def test_add_block_with_links():
+    comp_inner = Computation()
+    comp_inner.add_node("a")
+    comp_inner.add_node("b", lambda a: a + 1)
+    comp_inner.add_node("c", lambda a: 2 * a)
+    comp_inner.add_node("d", lambda b, c: b + c)
+
+    comp = Computation()
+    comp.add_block("foo", comp_inner, links={"a": "input_foo"})
+    comp.add_block("bar", comp_inner, links={"a": "input_bar"})
+    comp.add_node("output", lambda x, y: x + y, kwds={"x": "foo/d", "y": "bar/d"})
+
+    comp.add_node("input_foo", value=7)
+    comp.add_node("input_bar", value=10)
+
+    comp.compute_all()
+
+    assert comp.v["foo/d"] == 22
+    assert comp.v["bar/d"] == 31
+    assert comp.v.output == 22 + 31
+
+
+def test_add_block_with_keep_values_false():
+    comp_inner = Computation()
+    comp_inner.add_node("a", value=7)
+    comp_inner.add_node("b", lambda a: a + 1)
+    comp_inner.add_node("c", lambda a: 2 * a)
+    comp_inner.add_node("d", lambda b, c: b + c)
+    comp_inner.compute_all()
+
+    comp = Computation()
+    comp.add_block("foo", comp_inner, keep_values=False, links={"a": "input_foo"})
+    comp.add_block("bar", comp_inner, keep_values=False, links={"a": "input_bar"})
+    comp.add_node("output", lambda x, y: x + y, kwds={"x": "foo/d", "y": "bar/d"})
+
+    comp.add_node("input_foo", value=7)
+    comp.add_node("input_bar", value=10)
+
+    comp.compute_all()
+
+    assert comp.v["foo/d"] == 22
+    assert comp.v["bar/d"] == 31
+    assert comp.v.output == 22 + 31
+
+
+def test_add_block_with_keep_values_true():
+    comp_inner = Computation()
+    comp_inner.add_node("a", value=7)
+    comp_inner.add_node("b", lambda a: a + 1)
+    comp_inner.add_node("c", lambda a: 2 * a)
+    comp_inner.add_node("d", lambda b, c: b + c)
+    comp_inner.compute_all()
+
+    comp = Computation()
+    comp.add_block("foo", comp_inner, keep_values=True)
+    comp.add_block("bar", comp_inner, keep_values=True, links={"a": "input_bar"})
+    comp.add_node("output", lambda x, y: x + y, kwds={"x": "foo/d", "y": "bar/d"})
+
+    comp.add_node("input_bar", value=10)
+
+    assert comp.v["foo/d"] == 22
+    assert comp.v["bar/d"] == 22
+
+    comp.compute_all()
+
+    assert comp.v["foo/d"] == 22
+    assert comp.v["bar/d"] == 31
+    assert comp.v.output == 22 + 31
+
+
+def test_block_accessors():
+    comp = Computation()
+    comp.add_node("foo1/bar1/baz1/a", value=1)
+
+    assert comp.v.foo1.bar1.baz1.a == 1
+    assert comp.v["foo1/bar1/baz1/a"] == 1
+    assert comp.v["foo1"].bar1.baz1.a == 1
+    assert comp.v.foo1["bar1"].baz1.a == 1
+
+    with pytest.raises(AttributeError):
+        comp.v.foo1.bar1.baz1.nonexistent
+
+    comp.add_node("foo1/bar1/baz1", value=2)
+
+    assert comp.v.foo1.bar1.baz1 == 2
+    with pytest.raises(AttributeError):
+        comp.v.foo1.bar1.nonexistent
+
+
+def test_computation_factory_with_blocks():
+    @ComputationFactory
+    class InnerComputation:
+        a = input_node()
+
+        @calc_node
+        def b(self, a):
+            return a + 1
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return b + c
+
+    @ComputationFactory
+    class OuterComputation:
+        input_foo = input_node()
+        input_bar = input_node()
+
+        foo = block(InnerComputation, links={"a": "input_foo"})
+        bar = block(InnerComputation, links={"a": "input_bar"})
+
+        @calc_node(kwds={"a": "foo/d", "b": "bar/d"})
+        def output(self, a, b):
+            return a + b
+
+    comp = OuterComputation()
+
+    comp.insert("input_foo", value=7)
+    comp.insert("input_bar", value=10)
+
+    comp.compute_all()
+
+    assert comp.v.foo.d == 22
+    assert comp.v.bar.d == 31
+    assert comp.v.output == 22 + 31
+
+
+def test_block_add_to_comp():
+    inner_comp = Computation()
+    inner_comp.add_node("a", value=10)
+    inner_comp.add_node("b", lambda a: a * 2)
+    outer_comp = Computation()
+    Block(inner_comp).add_to_comp(outer_comp, "blk", None, True)
+    outer_comp.compute("blk/b")
+    assert outer_comp.nodes() == ["blk/a", "blk/b"]
+    assert outer_comp.v["blk/b"] == 20
+
+
+# =============================================================================
+# Class Style Definition Tests (from test_class_style_definition.py)
+# =============================================================================
+
+
+def test_class_style_definition():
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(a):  # noqa: N805
+            return a + 1
+
+        @calc_node
+        def c(a):  # noqa: N805
+            return 2 * a
+
+        @calc_node
+        def d(b, c):  # noqa: N805
+            return b + c
+
+    comp = Computation.from_class(FooComp)
+    comp.compute_all()
+
+    assert comp.v.d == 10
+
+
+def test_class_style_definition_as_decorator():
+    @Computation.from_class
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(a):  # noqa: N805
+            return a + 1
+
+        @calc_node
+        def c(a):  # noqa: N805
+            return 2 * a
+
+        @calc_node
+        def d(b, c):  # noqa: N805
+            return b + c
+
+    FooComp.compute_all()
+
+    assert FooComp.v.d == 10
+
+
+def test_class_style_definition_as_factory_decorator():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(a):  # noqa: N805
+            return a + 1
+
+        @calc_node
+        def c(a):  # noqa: N805
+            return 2 * a
+
+        @calc_node
+        def d(b, c):  # noqa: N805
+            return b + c
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_class_style_definition_as_factory_decorator_with_args():
+    @ComputationFactory()
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(a):  # noqa: N805
+            return a + 1
+
+        @calc_node
+        def c(a):  # noqa: N805
+            return 2 * a
+
+        @calc_node
+        def d(b, c):  # noqa: N805
+            return b + c
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_ignore_self_by_default():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(self, a):
+            return a + 1
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return b + c
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_explicitly_use_self():
+    @ComputationFactory(ignore_self=False)
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(self, a):
+            return a + 1
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return b + c
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UNINITIALIZED
+
+    comp.add_node("self", value=None)
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_standard_computation_does_not_ignore_self():
+    def b(self, a):
+        return a + 1
+
+    def c(self, a):
+        return 2 * a
+
+    def d(self, b, c):
+        return b + c
+
+    comp = Computation()
+    comp.add_node("a", value=3)
+    comp.add_node("b", b)
+    comp.add_node("c", c)
+    comp.add_node("d", d)
+
+    comp.compute_all()
+    assert comp.s.d == States.UNINITIALIZED
+
+    comp.add_node("self", value=1)
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calc_node_ignore_self():
+    @ComputationFactory(ignore_self=False)
+    class FooComp:
+        a = input_node(value=3)
+
+        @calc_node
+        def b(a):  # noqa: N805
+            return a + 1
+
+        @calc_node(ignore_self=True)
+        def c(self, a):  # noqa: N805
+            return 2 * a
+
+        @calc_node
+        def d(b, c):  # noqa: N805
+            return b + c
+
+    comp = FooComp()
+    comp.add_node("self", value=None)  # Provide self node as required when ignore_self=False
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calling_methods_on_self():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        def add(self, x, y):
+            return x + y
+
+        @calc_node
+        def b(self, a):
+            return self.add(a, 1)
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return self.add(b, c)
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_methods_calling_methods_on_self_recursively():
+    @ComputationFactory
+    class FooComp:
+        a = input_node(value=3)
+
+        def really_add(self, x, y):
+            return x + y
+
+        def add(self, x, y):
+            return self.really_add(x, y)
+
+        @calc_node
+        def b(self, a):
+            return self.add(a, 1)
+
+        @calc_node
+        def c(self, a):
+            return 2 * a
+
+        @calc_node
+        def d(self, b, c):
+            return self.add(b, c)
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.d == States.UPTODATE and comp.v.d == 10
+
+
+def test_computation_factory_calc_node_no_args():
+    @ComputationFactory
+    class FooComp:
+        @calc_node
+        def a():
+            return 3
+
+    comp = FooComp()
+    comp.compute_all()
+    assert comp.s.a == States.UPTODATE and comp.v.a == 3
+
+
+# =============================================================================
+# Computation Structure Tests (from test_computeengine_structure.py)
+# =============================================================================
+
+
+def test_get_inputs():
+    comp = BasicFourNodeComputation()
+    assert set(comp.get_inputs("a")) == set()
+    assert set(comp.get_inputs("b")) == {"a"}
+    assert set(comp.get_inputs("c")) == {"a"}
+    assert set(comp.get_inputs("d")) == {"c", "b"}
+    assert list(map(set, comp.get_inputs(["a", "b", "c", "d"]))) == [set(), {"a"}, {"a"}, {"b", "c"}]
+
+
+def test_attribute_i():
+    comp = BasicFourNodeComputation()
+    assert set(comp.i.a) == set()
+    assert set(comp.i.b) == {"a"}
+    assert set(comp.i.c) == {"a"}
+    assert set(comp.i.d) == {"c", "b"}
+    assert set(comp.i["a"]) == set()
+    assert set(comp.i["b"]) == {"a"}
+    assert set(comp.i["c"]) == {"a"}
+    assert set(comp.i["d"]) == {"c", "b"}
+    assert list(map(set, comp.i[["a", "b", "c", "d"]])) == [set(), {"a"}, {"a"}, {"b", "c"}]
+
+
+def test_get_inputs_order():
+    comp = Computation()
+    input_nodes = list(("inp", i) for i in range(100))
+    comp.add_node(input_node for input_node in input_nodes)
+    random.shuffle(input_nodes)
+    comp.add_node("res", lambda *args: args, args=input_nodes, inspect=False)
+    assert comp.i.res == input_nodes
+
+
+def test_get_original_inputs():
+    comp = BasicFourNodeComputation()
+    assert set(comp.get_original_inputs()) == {"a"}
+    assert set(comp.get_original_inputs("a")) == {"a"}
+    assert set(comp.get_original_inputs("b")) == {"a"}
+    assert set(comp.get_original_inputs(["b", "c"])) == {"a"}
+
+    comp.add_node("a", lambda: 1)
+    assert set(comp.get_original_inputs()) == set()
+
+
+def test_get_outputs():
+    comp = BasicFourNodeComputation()
+    assert set(comp.get_outputs("a")) == {"c", "b"}
+    assert set(comp.get_outputs("b")) == {"d"}
+    assert set(comp.get_outputs("c")) == {"d"}
+    assert set(comp.get_outputs("d")) == set()
+    assert list(map(set, comp.get_outputs(["a", "b", "c", "d"]))) == [{"b", "c"}, {"d"}, {"d"}, set()]
+
+
+def test_attribute_o():
+    comp = BasicFourNodeComputation()
+    assert set(comp.o.a) == {"c", "b"}
+    assert set(comp.o.b) == {"d"}
+    assert set(comp.o.c) == {"d"}
+    assert set(comp.o.d) == set()
+    assert set(comp.o["a"]) == {"c", "b"}
+    assert set(comp.o["b"]) == {"d"}
+    assert set(comp.o["c"]) == {"d"}
+    assert set(comp.o["d"]) == set()
+    assert list(map(set, comp.o[["a", "b", "c", "d"]])) == [{"b", "c"}, {"d"}, {"d"}, set()]
+
+
+def test_get_final_outputs():
+    comp = BasicFourNodeComputation()
+    assert set(comp.get_final_outputs()) == {"d"}
+    assert set(comp.get_final_outputs("a")) == {"d"}
+    assert set(comp.get_final_outputs("b")) == {"d"}
+    assert set(comp.get_final_outputs(["b", "c"])) == {"d"}
+
+
+def test_restrict_1():
+    comp = BasicFourNodeComputation()
+    comp.restrict("c")
+    assert set(comp.nodes()) == {"a", "c"}
+
+
+def test_restrict_2():
+    comp = BasicFourNodeComputation()
+    comp.restrict(["b", "c"])
+    assert set(comp.nodes()) == {"a", "b", "c"}
+
+
+def test_restrict_3():
+    comp = BasicFourNodeComputation()
+    comp.restrict("d", ["b", "c"])
+    assert set(comp.nodes()) == {"b", "c", "d"}
+
+
+def test_rename_nodes():
+    comp = BasicFourNodeComputation()
+    comp.insert("a", 10)
+    comp.compute("b")
+
+    comp.rename_node("a", "alpha")
+    comp.rename_node("b", "beta")
+    comp.rename_node("c", "gamma")
+    comp.rename_node("d", "delta")
+    assert comp.s[["alpha", "beta", "gamma", "delta"]] == [
+        States.UPTODATE,
+        States.UPTODATE,
+        States.COMPUTABLE,
+        States.STALE,
+    ]
+
+    comp.compute("delta")
+    assert comp.s[["alpha", "beta", "gamma", "delta"]] == [
+        States.UPTODATE,
+        States.UPTODATE,
+        States.UPTODATE,
+        States.UPTODATE,
+    ]
+
+
+def test_rename_nodes_with_dict():
+    comp = BasicFourNodeComputation()
+    comp.insert("a", 10)
+    comp.compute("b")
+
+    comp.rename_node({"a": "alpha", "b": "beta", "c": "gamma", "d": "delta"})
+    assert comp.s[["alpha", "beta", "gamma", "delta"]] == [
+        States.UPTODATE,
+        States.UPTODATE,
+        States.COMPUTABLE,
+        States.STALE,
+    ]
+
+    comp.compute("delta")
+    assert comp.s[["alpha", "beta", "gamma", "delta"]] == [
+        States.UPTODATE,
+        States.UPTODATE,
+        States.UPTODATE,
+        States.UPTODATE,
+    ]
+
+
+def test_state_map_updated_with_placeholder():
+    comp = Computation()
+    comp.add_node("b", lambda a: a + 1)
+    assert comp.s.a == States.PLACEHOLDER
+    assert "a" in comp._get_names_for_state(States.PLACEHOLDER)
+
+
+def test_state_map_updated_with_placeholder_kwds():
+    comp = Computation()
+    comp.add_node("b", lambda x: x + 1, kwds={"x": "a"})
+    assert comp.s.a == States.PLACEHOLDER
+    assert "a" in comp._get_names_for_state(States.PLACEHOLDER)
+
+
+def test_state_map_updated_with_placeholder_args():
+    comp = Computation()
+    comp.add_node("b", lambda x: x + 1, args=["a"])
+    assert comp.s.a == States.PLACEHOLDER
+    assert "a" in comp._get_names_for_state(States.PLACEHOLDER)
+
+
+# =============================================================================
+# Converter Tests (from test_converters.py)
+# =============================================================================
+
+
+def test_conversion_on_add_node():
+    comp = Computation()
+    comp.add_node("a", value=1, converter=float)
+    assert comp.s.a == States.UPTODATE and isinstance(comp.v.a, float) and comp.v.a == 1.0
+
+
+def test_conversion_on_insert():
+    comp = Computation()
+    comp.add_node("a", converter=float)
+    comp.insert("a", 1)
+    assert comp.s.a == States.UPTODATE and isinstance(comp.v.a, float) and comp.v.a == 1.0
+
+
+def test_conversion_on_computation():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1, converter=float)
+    comp.insert("a", 1)
+    comp.compute_all()
+    assert comp.s.b == States.UPTODATE and isinstance(comp.v.b, float) and comp.v.b == 2.0
+
+
+def throw_exception(value):
+    raise ValueError("Error")
+
+
+def test_exception_on_add_node():
+    comp = Computation()
+    with pytest.raises(ValueError):
+        comp.add_node("a", value=1, converter=throw_exception)
+    assert comp.s.a == States.ERROR and isinstance(comp.v.a.exception, ValueError)
+
+
+def test_exception_on_insert():
+    comp = Computation()
+    comp.add_node("a", converter=throw_exception)
+    with pytest.raises(ValueError):
+        comp.insert("a", 1)
+    assert comp.s.a == States.ERROR and isinstance(comp.v.a.exception, ValueError)
+
+
+def test_exception_on_computation():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a + 1, converter=throw_exception)
+    comp.insert("a", 1)
+    comp.compute_all()
+    assert comp.s.b == States.ERROR
+    assert isinstance(comp.v.b.exception, ValueError)
+
+
+def test_exception_in_computation_with_converter():
+    comp = Computation()
+    comp.add_node("a")
+    comp.add_node("b", lambda a: a / 0, converter=float)
+    comp.insert("a", 1)
+    comp.compute_all()
+    assert comp.s.b == States.ERROR
+    assert isinstance(comp.v.b.exception, ZeroDivisionError)
+
+
+# =============================================================================
+# Metadata Tests (from test_metadata.py)
+# =============================================================================
+
+
+def test_simple_node_metadata():
+    comp = lm.Computation()
+    comp.add_node("foo", metadata={"test": "working"})
+    assert comp.metadata("foo")["test"] == "working"
+
+
+def test_simple_computation_metadata():
+    comp = lm.Computation(metadata={"test": "working"})
+    assert comp.metadata("")["test"] == "working"
+
+
+def test_setting_node_metadata():
+    comp = lm.Computation()
+    comp.add_node("foo")
+    comp.metadata("foo")["test"] = "working"
+    assert comp.metadata("foo")["test"] == "working"
+
+
+def test_setting_block_metadata():
+    comp = lm.Computation()
+    comp.add_node("foo/bar")
+    comp.metadata("foo")["test"] = "working"
+    assert comp.metadata("foo")["test"] == "working"
+
+
+def test_setting_computation_block_metadata():
+    """Test setting metadata on computation blocks."""
+    comp_inner = lm.Computation()
+    comp_inner.add_node("bar")
+
+    comp = lm.Computation()
+    comp.add_block("foo", comp_inner, metadata={"test": "working"})
+    assert comp.metadata("foo")["test"] == "working"
+
+
+# =============================================================================
+# Tree Function Tests (from test_loman_tree_functions.py)
+# =============================================================================
+
+
+def test_list_children():
+    comp = lm.Computation()
+    comp.add_node("foo1/bar1/baz1/a", value=1)
+    comp.add_node("foo1/bar1/baz2/a", value=1)
+
+    assert comp.get_tree_list_children("foo1/bar1") == {"baz1", "baz2"}
+
+
+def test_has_path_has_node():
+    comp = lm.Computation()
+    comp.add_node("foo1/bar1/baz1/a", value=1)
+
+    assert comp.has_node("foo1/bar1/baz1/a")
+    assert comp.tree_has_path("foo1/bar1/baz1/a")
+    assert not comp.has_node("foo1/bar1/baz1")
+    assert comp.tree_has_path("foo1/bar1/baz1")
+    assert not comp.has_node("foo1/bar1")
+    assert comp.tree_has_path("foo1/bar1")
+
+
+def test_tree_descendents():
+    comp = lm.Computation()
+    comp.add_node("foo/bar/baz")
+    comp.add_node("foo/bar2")
+    comp.add_node("beef/bar")
+
+    assert comp.get_tree_descendents() == {"foo", "foo/bar", "foo/bar/baz", "foo/bar2", "beef", "beef/bar"}

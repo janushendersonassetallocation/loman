@@ -253,3 +253,65 @@ class TestValueEq:
         """Test value_eq with mixed types."""
         assert value_eq(1, "1") is False
         assert value_eq([1, 2], (1, 2)) is False
+
+    def test_value_eq_lists_equal(self):
+        """Test value_eq for equal lists."""
+        a = [1, 2, 3]
+        b = [1, 2, 3]
+        assert value_eq(a, b)
+
+    def test_value_eq_lists_not_equal(self):
+        """Test value_eq for unequal lists."""
+        a = [1, 2, 3]
+        b = ["a", "b", "c"]
+        assert not value_eq(a, b)
+
+    def test_value_eq_dicts_equal(self):
+        """Test value_eq for equal dicts."""
+        a = {"x": 1, "y": 2}
+        b = {"x": 1, "y": 2}
+        assert value_eq(a, b)
+
+    def test_value_eq_dicts_not_equal(self):
+        """Test value_eq for unequal dicts."""
+        a = {"x": 1, "y": 2}
+        b = {"x": 1, "z": 2}
+        assert not value_eq(a, b)
+        b = {"x": 1, "y": 3}
+        assert not value_eq(a, b)
+
+    def test_value_eq_series_with_nan_equal(self):
+        """Test value_eq for pandas Series with NaN."""
+        a = pd.Series([1.0, np.nan])
+        b = pd.Series([1.0, np.nan])
+        assert value_eq(a, b)
+
+    def test_value_eq_series_with_nan_not_equal(self):
+        """Test value_eq for pandas Series with NaN mismatch."""
+        a = pd.Series([1.0, 1.0])
+        b = pd.Series([1.0, np.nan])
+        assert not value_eq(a, b)
+        a = pd.Series([1.0, np.nan])
+        b = pd.Series([1.0, 1.0])
+        assert not value_eq(a, b)
+
+    def test_value_eq_dataframe_with_nan_equal(self):
+        """Test value_eq for pandas DataFrame with NaN."""
+        a = pd.DataFrame({"a": [1.0, np.nan]})
+        b = pd.DataFrame({"a": [1.0, np.nan]})
+        assert value_eq(a, b)
+
+    def test_value_eq_dataframe_with_nan_not_equal(self):
+        """Test value_eq for pandas DataFrame with NaN mismatch."""
+        a = pd.DataFrame({"a": [1.0, 1.0]})
+        b = pd.DataFrame({"a": [1.0, np.nan]})
+        assert not value_eq(a, b)
+        a = pd.DataFrame({"a": [1.0, np.nan]})
+        b = pd.DataFrame({"a": [1.0, 1.0]})
+        assert not value_eq(a, b)
+
+    def test_value_eq_numpy_arrays_without_nan_not_equal(self):
+        """Test value_eq for numpy arrays without NaN not equal."""
+        a = np.array([1.0, np.nan, 3.0])
+        b = np.array([1.0, 2.0, 3.0])
+        assert not value_eq(a, b)
