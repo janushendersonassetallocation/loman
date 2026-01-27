@@ -6,15 +6,15 @@ class BasicFourNodeComputation:
     a = input_node()
 
     @calc_node
-    def b(a):
+    def b(a):  # noqa: N805
         return a + 1
 
     @calc_node
-    def c(a):
+    def c(a):  # noqa: N805
         return 2 * a
 
     @calc_node
-    def d(b, c):
+    def d(b, c):  # noqa: N805
         return b + c
 
 
