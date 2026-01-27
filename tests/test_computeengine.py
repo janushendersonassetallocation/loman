@@ -40,7 +40,7 @@ from loman.computeengine import (
 from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
 from loman.nodekey import to_nodekey
 from loman.visualization import GraphView
-from tests.standard_test_computations import BasicFourNodeComputation
+from tests.conftest import BasicFourNodeComputation
 
 
 def test_basic():

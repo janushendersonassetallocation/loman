@@ -35,7 +35,7 @@ from loman.visualization import (
     create_root_graph,
     create_subgraph,
 )
-from tests.standard_test_computations import (
+from tests.conftest import (
     BasicFourNodeComputation,
     create_example_block_computation,
 )
