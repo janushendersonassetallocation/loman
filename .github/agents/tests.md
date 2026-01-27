@@ -35,6 +35,7 @@ If tests reveal that source code needs modification:
 Tests MUST have a one-to-one correspondence with source modules:
 
 ```
+src/loman/compat.py           → tests/test_compat.py
 src/loman/computeengine.py    → tests/test_computeengine.py
 src/loman/consts.py           → tests/test_consts.py
 src/loman/exception.py        → tests/test_exception.py
