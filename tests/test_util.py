@@ -9,6 +9,7 @@ This module tests:
 """
 
 import types
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -315,3 +316,204 @@ class TestValueEq:
         a = np.array([1.0, np.nan, 3.0])
         b = np.array([1.0, 2.0, 3.0])
         assert not value_eq(a, b)
+
+
+# ==================== ADDITIONAL COVERAGE TESTS ====================
+
+
+class TestUtilCoverage:
+    """Additional tests for util.py coverage."""
+
+    def test_apply1_with_generator(self):
+        """Test apply1 with a generator input."""
+
+        def double(x):
+            return x * 2
+
+        gen = (x for x in [1, 2, 3])
+        result = apply1(double, gen)
+        # Result should be a generator
+        assert list(result) == [2, 4, 6]
+
+    def test_attribute_view_getstate_setstate(self):
+        """Test AttributeView serialization methods."""
+        d = {"a": 1, "b": 2}
+        av = AttributeView.from_dict(d)
+
+        state = av.__getstate__()
+        assert "get_attribute_list" in state
+        assert "get_attribute" in state
+        assert "get_item" in state
+
+        # Create new AttributeView and restore state
+        new_av = AttributeView(lambda: [], lambda x: None)
+        new_av.__setstate__(state)
+        assert new_av.a == 1
+
+    def test_attribute_view_setstate_with_none_get_item(self):
+        """Test AttributeView setstate when get_item is None."""
+        d = {"a": 1}
+        # Create AttributeView without using from_dict to have None get_item
+        av = AttributeView.__new__(AttributeView)
+        av.get_attribute_list = d.keys
+        av.get_attribute = d.get
+        av.get_item = None  # Explicitly set to None
+
+        state = av.__getstate__()
+        assert state["get_item"] is None
+
+        new_av = AttributeView(lambda: [], lambda x: None)
+        new_av.__setstate__(state)
+        # After setstate with get_item=None, get_item should default to get_attribute
+        assert new_av["a"] == 1
+
+    def test_attribute_view_from_dict_no_apply1(self):
+        """Test AttributeView.from_dict with use_apply1=False."""
+        d = {"a": 1, "b": 2}
+        av = AttributeView.from_dict(d, use_apply1=False)
+        assert av.a == 1
+        assert av.b == 2
+
+    def test_value_eq_ndarray_exception(self):
+        """Test value_eq when numpy comparison raises exception."""
+        a = np.array([1, 2, 3])
+        # Create something that causes array_equal to fail
+        b = "not an array that can be compared"
+        result = value_eq(a, b)
+        assert result is False
+
+    def test_value_eq_fallback_exception(self):
+        """Test value_eq when comparison raises exception."""
+
+        class BadComparison:
+            def __eq__(self, other):
+                raise ValueError("Cannot compare")
+
+        a = BadComparison()
+        b = BadComparison()
+        result = value_eq(a, b)
+        # Should return False when comparison fails
+        assert result is False
+
+    def test_value_eq_result_is_ndarray(self):
+        """Test value_eq when result is ndarray-like."""
+        # Create objects where == returns an array
+        a = np.array([1, 2, 3])
+        b = np.array([1, 2, 3])
+        result = value_eq(a, b)
+        assert result is True
+
+
+class TestValueEqDeadCode:
+    """Tests for dead code paths in value_eq."""
+
+    def test_value_eq_pandas_series(self):
+        """Test value_eq with pandas Series."""
+        s1 = pd.Series([1, 2, 3])
+        s2 = pd.Series([1, 2, 3])
+
+        assert value_eq(s1, s2) is True
+
+    def test_value_eq_pandas_different(self):
+        """Test value_eq with different pandas Series."""
+        s1 = pd.Series([1, 2, 3])
+        s2 = pd.Series([1, 2, 4])
+
+        assert value_eq(s1, s2) is False
+
+    def test_value_eq_dataframe(self):
+        """Test value_eq with DataFrames."""
+        df1 = pd.DataFrame({"a": [1, 2]})
+        df2 = pd.DataFrame({"a": [1, 2]})
+
+        assert value_eq(df1, df2) is True
+
+
+class TestAttributeViewDir:
+    """Tests for AttributeView __dir__."""
+
+    def test_attribute_view_dir(self):
+        """Test AttributeView __dir__ returns attribute list."""
+        d = {"a": 1, "b": 2}
+        av = AttributeView.from_dict(d)
+
+        attrs = dir(av)
+        assert "a" in attrs
+        assert "b" in attrs
+
+
+class TestValueEqException:
+    """Test value_eq with objects that raise on comparison."""
+
+    def test_value_eq_raises_exception(self):
+        """Test value_eq handles objects that raise on comparison."""
+
+        class RaisingObj:
+            def __eq__(self, other):
+                raise ValueError("Cannot compare")
+
+        obj1 = RaisingObj()
+        obj2 = RaisingObj()  # Different object, so a is b is False
+
+        # Should return False when comparison raises
+        result = value_eq(obj1, obj2)
+        assert result is False
+
+    def test_value_eq_ndarray_exception_mock(self):
+        """Test value_eq handles numpy arrays that raise on comparison - covers line 114."""
+        a = np.array([1, 2, 3])
+        b = np.array([1, 2, 3])
+
+        # Force np.array_equal to raise an exception
+        with patch("numpy.array_equal", side_effect=Exception("Mock failure")):
+            result = value_eq(a, b)
+            # Should return False when np.array_equal raises
+            assert result is False
+
+    def test_value_eq_default_comparison_exception(self):
+        """Test value_eq handles exception in default comparison path - covers line 121."""
+
+        class NonArrayRaisingObj:
+            """Object that raises on comparison but is not ndarray-like."""
+
+            def __eq__(self, other):
+                raise ValueError("Cannot compare")
+
+        obj1 = NonArrayRaisingObj()
+        obj2 = NonArrayRaisingObj()
+
+        # Should return False when comparison raises
+        result = value_eq(obj1, obj2)
+        assert result is False
+
+    def test_value_eq_comparison_returns_ndarray(self):
+        """Test value_eq when comparison returns an ndarray - covers line 121."""
+
+        class ArrayReturningObj:
+            """Object whose __eq__ returns an ndarray instead of bool."""
+
+            def __eq__(self, other):
+                return np.array([True, True, True])
+
+        obj1 = ArrayReturningObj()
+        obj2 = ArrayReturningObj()
+
+        # Should handle ndarray result via np.all
+        result = value_eq(obj1, obj2)
+        assert result is True
+
+    def test_value_eq_comparison_returns_ndarray_false(self):
+        """Test value_eq when comparison returns ndarray with False values."""
+
+        class ArrayReturningObjFalse:
+            """Object whose __eq__ returns an ndarray with False."""
+
+            def __eq__(self, other):
+                return np.array([True, False, True])
+
+        obj1 = ArrayReturningObjFalse()
+        obj2 = ArrayReturningObjFalse()
+
+        # Should return False when not all elements are True
+        result = value_eq(obj1, obj2)
+        assert result is False

@@ -145,3 +145,16 @@ class TestGetSignature:
         assert sig.default_params == ["c", "e"]
         assert sig.has_var_args is True
         assert sig.has_var_kwds is True
+
+    def test_get_signature_positional_only(self):
+        """Test get_signature with positional-only parameters raises NotImplementedError."""
+        import pytest
+
+        # Create a function with positional-only parameters (Python 3.8+)
+        # We need to create a function with POSITIONAL_ONLY parameter kind
+        exec_globals = {}
+        exec("def func_with_pos_only(x, /): pass", exec_globals)
+        func = exec_globals["func_with_pos_only"]
+
+        with pytest.raises(NotImplementedError, match="Unexpected param kind"):
+            get_signature(func)
