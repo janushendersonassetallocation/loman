@@ -52,16 +52,8 @@ src/loman/serialization/      → tests/test_serialization.py
 
 This maintains the one-to-one structure and ensures all code has dedicated test coverage.
 
-### Special Test Files
-- **`tests/test_computeengine_structure.py`** - Tests for computation graph structure and dependencies
-- **`tests/test_class_style_definition.py`** - Tests for class-style computation definitions
-- **`tests/test_blocks.py`** - Tests for computation blocks
-- **`tests/test_coverage_gaps.py`** - Coverage verification tests
-- **`tests/test_dill_serialization.py`** - Tests for dill-based serialization
-- **`tests/test_loman_tree_functions.py`** - Tests for tree-related functions
-- **`tests/test_metadata.py`** - Tests for node metadata
-- **`tests/test_converters.py`** - Tests for data converters
-- **`tests/test_value_eq.py`** - Tests for value equality
+### Shared Test Fixtures
+- **`tests/conftest.py`** - Shared test fixtures including `BasicFourNodeComputation` and `create_example_block_computation()`
 
 ### Test Organization Within Files
 
@@ -198,6 +190,35 @@ Use direct instantiation when:
 - Don't duplicate test code - use fixtures or helper functions
 - Don't leave commented-out test code
 
+### Linter Considerations (ruff N805)
+
+**CRITICAL:** When using loman's class-style computation definitions with `@ComputationFactory`, `@calc_node`, and `@input_node` decorators, the decorated functions use parameter names that reference other nodes (like `a`, `b`, `c`), NOT `self`.
+
+Ruff's N805 rule will incorrectly try to rename the first parameter to `self`, which **breaks the computation logic**. Always add `# noqa: N805` to these functions:
+
+```python
+@ComputationFactory
+class BasicFourNodeComputation:
+    a = input_node()
+
+    @calc_node
+    def b(a):  # noqa: N805
+        return a + 1
+
+    @calc_node
+    def c(a):  # noqa: N805
+        return 2 * a
+
+    @calc_node
+    def d(b, c):  # noqa: N805
+        return b + c
+```
+
+This applies to:
+- `tests/conftest.py` - shared test fixtures
+- `tests/test_computeengine.py` - class-style definition tests
+- Any test using `@ComputationFactory` with `@calc_node` decorators
+
 ## Common Testing Patterns
 
 ### Testing Abstract Classes
@@ -254,6 +275,10 @@ Tests for the Computation class:
 - Dependency tracking and graph operations
 - Partial and full recalculations
 - Node decorators and input handling
+- Class-style computation definitions (`@ComputationFactory`, `@calc_node`, `@input_node`)
+- Computation blocks and nested computations
+- Node metadata, tags, and annotations
+- Data converters and transformations
 
 ### test_visualization.py
 Tests for visualization functionality:
@@ -274,11 +299,34 @@ Tests for node key handling:
 - String and non-string node names
 - Key uniqueness and hashing
 
-### test_metadata.py
-Tests for node metadata:
-- Tag assignment and retrieval
-- Metadata storage and access
-- Node annotations
+### test_util.py
+Tests for utility functions:
+- `apply1`, `apply_n`, `as_iterable` functions
+- `AttributeView` class
+- `value_eq` for safe value comparison
+
+### test_graph_utils.py
+Tests for graph utilities:
+- Topological sorting
+- Cycle detection
+- Graph manipulation helpers
+
+### test_consts.py
+Tests for constants:
+- `States` enum values
+- `NodeAttributes` constants
+- `NodeTransformations` constants
+
+### test_exception.py
+Tests for exception classes:
+- Custom exception types
+- Exception inheritance
+- Error message formatting
+
+### test_compat.py
+Tests for compatibility utilities:
+- Cross-version compatibility
+- Optional dependency handling
 
 ## Continuous Improvement
 
