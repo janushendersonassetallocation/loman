@@ -18,6 +18,7 @@
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch)
 [![CodeFactor](https://www.codefactor.io/repository/github/janushendersonassetallocation/loman/badge)](https://www.codefactor.io/repository/github/janushendersonassetallocation/loman)
+[![Coverage](https://img.shields.io/endpoint?url=https://janushendersonassetallocation.github.io/loman/tests/coverage-badge.json)](https://janushendersonassetallocation.github.io/loman/tests/html-coverage/)
 
 [![CI](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_ci.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_ci.yml)
 [![PRE-COMMIT](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_pre-commit.yml/badge.svg?event=push)](https://github.com/janushendersonassetallocation/loman/actions/workflows/rhiza_pre-commit.yml)
