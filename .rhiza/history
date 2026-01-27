@@ -44,6 +44,7 @@
 Makefile
 book/book.mk
 book/marimo/marimo.mk
+book/minibook-templates/custom.html.jinja2
 presentation/README.md
 presentation/presentation.mk
 tests/test_rhiza/README.md

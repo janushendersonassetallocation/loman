@@ -17,8 +17,6 @@ exclude:
 - .rhiza/docs
 - .rhiza/make.d
 - book/marimo/notebooks/
-- book/minibook-templates/
-- book/pdoc-templates/
 - book/README.md
 - book/marimo/README.md
 # if we exclude the file Rhiza will not(!) remove the local file
