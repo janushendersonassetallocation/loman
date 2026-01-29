@@ -173,6 +173,7 @@ PART = re.compile(r"([^/]*)/?")
 
 
 def _parse_nodekey(path_str: str, end: int) -> NodeKey:
+    """Parse a path string into a NodeKey starting from the given position."""
     parts: list[str] = []
     parts_append = parts.append
 

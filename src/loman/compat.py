@@ -8,6 +8,8 @@ from typing import Any
 
 @dataclass
 class _Signature:
+    """Internal representation of a function signature for compatibility inspection."""
+
     kwd_params: list[str] = field()
     default_params: list[str] = field()
     has_var_args: bool = field()

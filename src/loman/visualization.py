@@ -341,6 +341,7 @@ class GraphView:
         return dag_out, d_mapped_to_original, s_collapsed
 
     def _initialize_transforms(self) -> dict[NodeKey, str]:
+        """Initialize node transformations for visualization."""
         node_transformations: dict[NodeKey, str] = {}
         if self.collapse_all:
             self._apply_default_collapse_transforms(node_transformations)
@@ -348,12 +349,14 @@ class GraphView:
         return node_transformations
 
     def _apply_default_collapse_transforms(self, node_transformations: dict[NodeKey, str]) -> None:
+        """Apply default collapse transformations to tree nodes."""
         for n in self.computation.get_tree_descendents(self.root):
             nk = to_nodekey(n)
             if not self.computation.has_node(nk):
                 node_transformations[nk] = NodeTransformations.COLLAPSE
 
     def _apply_custom_transforms(self, node_transformations: dict[NodeKey, str]) -> dict[NodeKey, str]:
+        """Apply user-specified custom transformations to nodes."""
         if self.node_transformations is not None:
             for rule_name, transform in self.node_transformations.items():
                 include_ancestors = transform == NodeTransformations.EXPAND
@@ -380,6 +383,7 @@ class GraphView:
     def _create_visualization_dag(
         self, original_nodes: defaultdict[NodeKey, list[NodeKey]], composite_nodes: set[NodeKey]
     ) -> nx.DiGraph:
+        """Create the visualization DAG from structure and node data."""
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
@@ -387,6 +391,7 @@ class GraphView:
         return create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
 
     def _create_dot_graph(self) -> pydotplus.Dot:
+        """Create a PyDot graph from the visualization DAG."""
         return to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 
     def refresh(self) -> None:
@@ -416,6 +421,7 @@ class GraphView:
                 subprocess.run(["open", f.name], check=False)  # pragma: no cover  # nosec B603 B607
 
     def _repr_svg_(self) -> str | None:
+        """Return SVG representation for Jupyter notebook display."""
         return self.svg()
 
 
