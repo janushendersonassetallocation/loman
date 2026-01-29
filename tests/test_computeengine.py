@@ -1,6 +1,5 @@
 import io
 import random
-import tempfile
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
