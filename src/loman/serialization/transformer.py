@@ -204,6 +204,7 @@ class Transformer:
             return self._to_dict_transformer(o)
 
     def _dict_to_dict(self, o: dict[Any, Any]) -> dict[str, Any]:
+        """Convert a dictionary to serializable form."""
         d = {k: self.to_dict(v) for k, v in o.items()}
         if KEY_TYPE in o:
             return {KEY_TYPE: TYPENAME_DICT, KEY_DATA: d}
@@ -211,6 +212,7 @@ class Transformer:
             return d
 
     def _attrs_to_dict(self, o: object) -> dict[str, Any]:
+        """Convert an attrs object to serializable dictionary form."""
         data: dict[str, Any] = {}
         for a in o.__attrs_attrs__:  # type: ignore[attr-defined]
             data[a.name] = self.to_dict(o.__getattribute__(a.name))
@@ -220,6 +222,7 @@ class Transformer:
         return res
 
     def _dataclass_to_dict(self, o: object) -> dict[str, Any]:
+        """Convert a dataclass object to serializable dictionary form."""
         data: dict[str, Any] = {}
         for f in dataclasses.fields(o):  # type: ignore[arg-type]
             data[f.name] = self.to_dict(getattr(o, f.name))
@@ -229,6 +232,7 @@ class Transformer:
         return res
 
     def _to_dict_transformer(self, o: object) -> dict[str, Any] | None:
+        """Convert an object using a registered custom transformer."""
         transformer = self.get_transformer_for_obj(o)
         if transformer is None:
             if self.strict:
@@ -265,6 +269,7 @@ class Transformer:
             raise Exception()
 
     def _from_dict_transformable(self, d: dict[str, Any]) -> object:
+        """Reconstruct a Transformable object from dictionary form."""
         classname = d[KEY_CLASS]
         cls = self._transformable_types.get(classname)
         if cls is None:
@@ -276,6 +281,7 @@ class Transformer:
             return cls.from_dict(self, d[KEY_DATA])
 
     def _from_attrs(self, d: dict[str, Any]) -> object:
+        """Reconstruct an attrs object from dictionary form."""
         if not HAS_ATTRS:  # pragma: no cover
             if self.strict:
                 raise UnrecognizedTypeError("attrs package not installed")
@@ -294,6 +300,7 @@ class Transformer:
             return cls(**kwargs)
 
     def _from_dataclass(self, d: dict[str, Any]) -> object:
+        """Reconstruct a dataclass object from dictionary form."""
         cls = self._dataclass_types.get(d[KEY_CLASS])
         if cls is None:
             if self.strict:
@@ -308,6 +315,7 @@ class Transformer:
             return cls(**kwargs)
 
     def _from_dict_transformer(self, type_: str, d: dict[str, Any]) -> object:
+        """Reconstruct an object using a registered custom transformer."""
         transformer = self.get_transformer_for_name(type_)
         if transformer is None:
             if self.strict:

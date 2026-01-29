@@ -596,6 +596,7 @@ def create_root_graph(
     """
 
     def _normalize_attr_value(v: Any) -> Any:
+        """Normalize attribute values for Graphviz, quoting strings as needed."""
         # Keep numeric values as-is
         if isinstance(v, (int, float)):
             return v

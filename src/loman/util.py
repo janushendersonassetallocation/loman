@@ -93,6 +93,7 @@ class AttributeView:
         if use_apply1:
 
             def get_attribute(xs: Any) -> Any:
+                """Get attribute value from dictionary with apply1 support."""
                 return apply1(d.get, xs)
         else:
             get_attribute = d.get  # type: ignore[assignment]

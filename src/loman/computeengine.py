@@ -62,18 +62,23 @@ class TimingData:
 
 
 class _ParameterType(Enum):
+    """Internal enum for distinguishing positional and keyword parameters."""
+
     ARG = 1
     KWD = 2
 
 
 @dataclass
 class _ParameterItem:
+    """Internal container for parameter information during computation."""
+
     type: _ParameterType
     name: int | str
     value: object
 
 
 def _node(func: Callable[..., Any], *args: Any, **kws: Any) -> Any:  # pragma: no cover
+    """Internal wrapper function for node decorator."""
     return func(*args, **kws)
 
 
@@ -83,6 +88,7 @@ def node(
     """Decorator to add a function as a node to a computation graph."""
 
     def inner(f: Callable[..., Any]) -> Callable[..., Any]:
+        """Inner decorator that registers the function as a node."""
         if name is None:
             comp.add_node(f.__name__, f, *args, **kw)
         else:
@@ -158,6 +164,7 @@ def calc_node(
     """Decorator to mark a function as a calculation node."""
 
     def wrap(func: Callable[..., Any]) -> Callable[..., Any]:
+        """Wrap function with node info attribute."""
         func._loman_node_info = CalcNode(func, kwds)  # type: ignore[attr-defined]
         return func
 
@@ -212,7 +219,10 @@ def computation_factory(
     """Factory function to create computations from class definitions."""
 
     def wrap(cls: type) -> Callable[..., "Computation"]:
+        """Wrap class to create computation factory function."""
+
         def create_computation(*args: Any, **kwargs: Any) -> "Computation":
+            """Create a computation instance from the wrapped class."""
             obj = cls()
             comp = Computation(*args, **kwargs)
             comp._definition_object = obj  # type: ignore[attr-defined]
@@ -352,9 +362,11 @@ class Computation:
         """Create an attribute view for a specific node path."""
 
         def node_func() -> Iterable[str]:
+            """Return list of child node names for this path."""
             return [str(n) for n in self.get_tree_list_children(nodekey)]
 
         def get_one_func_for_path(name: str) -> Any:
+            """Get value for a single node at this path."""
             nk = to_nodekey(name)
             new_nk = nk.prepend(nodekey)
             if self.has_node(new_nk):
@@ -365,6 +377,7 @@ class Computation:
                 raise KeyError(f"Path {new_nk} does not exist")  # pragma: no cover
 
         def get_many_func_for_path(name: Name | Names) -> Any:
+            """Get values for one or more nodes at this path."""
             if isinstance(name, list):
                 return [get_one_func_for_path(str(n)) for n in name]
             else:
@@ -373,9 +386,11 @@ class Computation:
         return AttributeView(node_func, get_one_func_for_path, get_many_func_for_path)
 
     def _get_names_for_state(self, state: States) -> set[Name]:
+        """Get node names that have a specific state."""
         return set(node_keys_to_names(self._state_map[state]))
 
     def _get_tags_for_state(self, tag: str) -> set[Name]:
+        """Get node names that have a specific tag."""
         return set(node_keys_to_names(self._tag_map[tag]))
 
     def _process_function_args(self, node_key: NodeKey, node: dict[str, Any], args: list[Any] | None) -> int:
@@ -545,6 +560,7 @@ class Computation:
             self.set_tag(node_key, SystemTags.SERIALIZE)
 
     def _refresh_maps(self) -> None:
+        """Refresh internal tag and state maps from node data."""
         self._tag_map.clear()
         for state in States:
             self._state_map[state].clear()
@@ -556,6 +572,7 @@ class Computation:
                 self._tag_map[tag].add(node_key)
 
     def _set_tag_one(self, name: Name, tag: str) -> None:
+        """Set a single tag on a single node."""
         node_key = to_nodekey(name)
         self.dag.nodes[node_key][NodeAttributes.TAG].add(tag)
         self._tag_map[tag].add(node_key)
@@ -569,6 +586,7 @@ class Computation:
         apply_n(self._set_tag_one, name, tag)
 
     def _clear_tag_one(self, name: Name, tag: str) -> None:
+        """Clear a single tag from a single node."""
         node_key = to_nodekey(name)
         self.dag.nodes[node_key][NodeAttributes.TAG].discard(tag)
         self._tag_map[tag].discard(node_key)
@@ -582,6 +600,7 @@ class Computation:
         apply_n(self._clear_tag_one, name, tag)
 
     def _set_style_one(self, name: Name, style: str) -> None:
+        """Set style on a single node."""
         node_key = to_nodekey(name)
         self.dag.nodes[node_key][NodeAttributes.STYLE] = style
 
@@ -594,6 +613,7 @@ class Computation:
         apply_n(self._set_style_one, name, style)
 
     def _clear_style_one(self, name: Name) -> None:
+        """Clear style from a single node."""
         node_key = to_nodekey(name)
         self.dag.nodes[node_key][NodeAttributes.STYLE] = None
 
@@ -804,6 +824,7 @@ class Computation:
         self.insert_many(name_value_pairs)
 
     def _set_state(self, node_key: NodeKey, state: States) -> None:
+        """Set the state of a node without changing its value."""
         node = self.dag.nodes[node_key]
         old_state = node[NodeAttributes.STATE]
         self._state_map[old_state].remove(node_key)
@@ -813,6 +834,7 @@ class Computation:
     def _set_state_and_value(
         self, node_key: NodeKey, state: States, value: object, *, throw_conversion_exception: bool = True
     ) -> None:
+        """Set state and value of a node, applying any converter."""
         node = self.dag.nodes[node_key]
         converter = node.get(NodeAttributes.CONVERTER)
         if converter is None:
@@ -830,6 +852,7 @@ class Computation:
     def _set_state_and_literal_value(
         self, node_key: NodeKey, state: States, value: object, require_old_state: bool = True
     ) -> None:
+        """Set state and literal value of a node without conversion."""
         node = self.dag.nodes[node_key]
         try:
             old_state = node[NodeAttributes.STATE]
@@ -842,6 +865,7 @@ class Computation:
         self._state_map[state].add(node_key)
 
     def _set_states(self, node_keys: Iterable[NodeKey], state: States) -> None:
+        """Set the state of multiple nodes at once."""
         for name in node_keys:
             node = self.dag.nodes[name]
             old_state = node[NodeAttributes.STATE]
@@ -881,6 +905,7 @@ class Computation:
         self.set_stale(node_key)
 
     def _get_descendents(self, node_key: NodeKey, stop_states: set[States] | None = None) -> set[NodeKey]:
+        """Get all descendant nodes, optionally stopping at certain states."""
         if stop_states is None:
             stop_states = set()
         if self.dag.nodes[node_key][NodeAttributes.STATE] in stop_states:
@@ -900,24 +925,29 @@ class Computation:
         return visited
 
     def _set_descendents(self, node_key: NodeKey, state: States) -> None:
+        """Set the state of all descendant nodes."""
         descendents = self._get_descendents(node_key, {States.PINNED})
         self._set_states(descendents, state)
 
     def _set_uninitialized(self, node_key: NodeKey) -> None:
+        """Set a node to uninitialized state and clear its value."""
         self._set_states([node_key], States.UNINITIALIZED)
         self.dag.nodes[node_key].pop(NodeAttributes.VALUE, None)
 
     def _set_uptodate(self, node_key: NodeKey, value: object) -> None:
+        """Set a node to up-to-date state with a value."""
         self._set_state_and_value(node_key, States.UPTODATE, value)
         self._set_descendents(node_key, States.STALE)
         for n in self.dag.successors(node_key):
             self._try_set_computable(n)
 
     def _set_error(self, node_key: NodeKey, exc: Exception, tb: str) -> None:
+        """Set a node to error state with exception information."""
         self._set_state_and_literal_value(node_key, States.ERROR, Error(exc, tb))
         self._set_descendents(node_key, States.STALE)
 
     def _try_set_computable(self, node_key: NodeKey) -> None:
+        """Set node to computable if all predecessors are up-to-date."""
         if self.dag.nodes[node_key][NodeAttributes.STATE] == States.PINNED:
             return
         if self.dag.nodes[node_key].get(NodeAttributes.FUNC) is not None:
@@ -929,6 +959,7 @@ class Computation:
             self._set_state(node_key, States.COMPUTABLE)
 
     def _get_parameter_data(self, node_key: NodeKey) -> Iterable[_ParameterItem]:
+        """Get all parameter data for a node's function call."""
         for arg, value in self.dag.nodes[node_key][NodeAttributes.ARGS].items():
             yield _ParameterItem(_ParameterType.ARG, arg, value)
         for param_name, value in self.dag.nodes[node_key][NodeAttributes.KWDS].items():
@@ -942,6 +973,7 @@ class Computation:
     def _get_func_args_kwds(
         self, node_key: NodeKey
     ) -> tuple[Callable[..., Any], str | None, list[Any], dict[str, Any]]:
+        """Get function, executor name, args and kwargs for a node."""
         node0 = self.dag.nodes[node_key]
         f = node0[NodeAttributes.FUNC]
         executor_name = node0.get(NodeAttributes.EXECUTOR)
@@ -992,12 +1024,14 @@ class Computation:
         return res_args, res_kwds
 
     def _compute_nodes(self, node_keys: Iterable[NodeKey], raise_exceptions: bool = False) -> None:
+        """Compute multiple nodes, handling dependencies and parallel execution."""
         LOG.debug(f"Computing nodes {node_keys}")
 
         futs: dict[Any, NodeKey] = {}
         node_keys_set = set(node_keys)
 
         def run(name: NodeKey) -> None:
+            """Submit a node computation to an executor."""
             f, executor_name, args, kwds = self._get_func_args_kwds(name)
             if executor_name is None:
                 executor = self.default_executor
@@ -1046,6 +1080,7 @@ class Computation:
                 computed.add(node_key)
 
     def _get_calc_node_keys(self, node_key: NodeKey) -> list[NodeKey]:
+        """Get node keys that need to be computed for a target node."""
         g = nx.DiGraph()
         g.add_nodes_from(self.dag.nodes)
         g.add_edges_from(self.dag.edges)
@@ -1070,6 +1105,7 @@ class Computation:
         return [n for n in nodes_sorted if n in ancestors]
 
     def _get_calc_node_names(self, name: Name) -> Names:
+        """Get node names that need to be computed for a target node."""
         node_key = to_nodekey(name)
         return node_keys_to_names(self._get_calc_node_keys(node_key))
 
@@ -1190,6 +1226,7 @@ class Computation:
         return result
 
     def _state_one(self, name: Name) -> States:
+        """Get the state of a single node."""
         node_key = to_nodekey(name)
         state: States = self.dag.nodes[node_key][NodeAttributes.STATE]
         return state
@@ -1213,6 +1250,7 @@ class Computation:
         return apply1(self._state_one, name)
 
     def _value_one(self, name: Name) -> Any:
+        """Get the value of a single node."""
         node_key = to_nodekey(name)
         return self.dag.nodes[node_key][NodeAttributes.VALUE]
 
@@ -1260,6 +1298,7 @@ class Computation:
         raise ComputationError(f"Unable to compute node {nk}")
 
     def _tag_one(self, name: Name) -> set[str]:
+        """Get the tags of a single node."""
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
         tags: set[str] = node[NodeAttributes.TAG]
@@ -1293,6 +1332,7 @@ class Computation:
         return set(n.name for n in nodes)
 
     def _style_one(self, name: Name) -> str | None:
+        """Get the style of a single node."""
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
         style: str | None = node.get(NodeAttributes.STYLE)
@@ -1312,6 +1352,7 @@ class Computation:
         return apply1(self._style_one, name)
 
     def _get_item_one(self, name: Name) -> NodeData:
+        """Get state and value data for a single node."""
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
         return NodeData(node[NodeAttributes.STATE], node[NodeAttributes.VALUE])
@@ -1324,6 +1365,7 @@ class Computation:
         return apply1(self._get_item_one, name)
 
     def _get_timing_one(self, name: Name) -> TimingData | None:
+        """Get timing data for a single node."""
         node_key = to_nodekey(name)
         node = self.dag.nodes[node_key]
         timing: TimingData | None = node.get(NodeAttributes.TIMING, None)
@@ -1375,6 +1417,7 @@ class Computation:
         return result
 
     def _get_inputs_one_node_keys(self, node_key: NodeKey) -> list[NodeKey | None]:
+        """Get input node keys for a single node."""
         args_dict: dict[int, NodeKey] = {}
         kwds: list[NodeKey | None] = []
         max_arg_index = -1
@@ -1397,6 +1440,7 @@ class Computation:
             return kwds
 
     def _get_inputs_one_names(self, name: Name) -> Names:
+        """Get input node names for a single node."""
         node_key = to_nodekey(name)
         return node_keys_to_names([nk for nk in self._get_inputs_one_node_keys(node_key) if nk is not None])
 
@@ -1410,6 +1454,7 @@ class Computation:
         return apply1(self._get_inputs_one_names, name)
 
     def _get_ancestors_node_keys(self, node_keys: Iterable[NodeKey], include_self: bool = True) -> set[NodeKey]:
+        """Get all ancestor node keys for a set of nodes."""
         ancestors: set[NodeKey] = set()
         for n in node_keys:
             if include_self:
@@ -1425,6 +1470,7 @@ class Computation:
         return node_keys_to_names(ancestor_node_keys)
 
     def _get_original_inputs_node_keys(self, node_keys: list[NodeKey] | None) -> list[NodeKey]:
+        """Get original input node keys that have no computation function."""
         resolved_node_keys: Iterable[NodeKey]
         if node_keys is None:
             resolved_node_keys = self._node_keys()
@@ -1448,6 +1494,7 @@ class Computation:
         return node_keys_to_names(result_nks)
 
     def _get_outputs_one(self, name: Name) -> Names:
+        """Get output node names for a single node."""
         node_key = to_nodekey(name)
         output_node_keys = list(self.dag.successors(node_key))
         return node_keys_to_names(output_node_keys)
@@ -1463,6 +1510,7 @@ class Computation:
         return apply1(self._get_outputs_one, name)
 
     def _get_descendents_node_keys(self, node_keys: Iterable[NodeKey], include_self: bool = True) -> set[NodeKey]:
+        """Get all descendant node keys for a set of nodes."""
         descendent_node_keys: set[NodeKey] = set()
         for node_key in node_keys:
             if include_self:
@@ -1654,7 +1702,10 @@ class Computation:
         """
 
         def make_f(field_name: str) -> Callable[[Any], Any]:
+            """Create a function to extract a field from a namedtuple."""
+
             def get_field_value(tuple_val: Any) -> Any:
+                """Extract field value from the namedtuple."""
                 return getattr(tuple_val, field_name)
 
             return get_field_value
@@ -1687,6 +1738,7 @@ class Computation:
         """
 
         def f(xs: Iterable[Any]) -> list[Any]:
+            """Apply subgraph computation to each element in the input."""
             results: list[Any] = []
             is_error = False
             for x in xs:
@@ -1775,6 +1827,7 @@ class Computation:
         self.add_node(target_nk, identity_function, kwds={"x": source_nk}, style=style)
 
     def _repr_svg_(self) -> str | None:
+        """Return SVG representation for Jupyter notebook display."""
         return GraphView(self).svg()
 
     def draw(
