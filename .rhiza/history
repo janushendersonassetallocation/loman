@@ -12,7 +12,6 @@
 .github/agents/analyser.md
 .github/agents/summarise.md
 .github/copilot-instructions.md
-.github/dependabot.yml
 .github/github.mk
 .github/workflows/rhiza_benchmarks.yml
 .github/workflows/rhiza_book.yml
@@ -30,8 +29,6 @@
 .rhiza/.env
 .rhiza/.gitignore
 .rhiza/.rhiza-version
-.rhiza/docs/CONFIG.md
-.rhiza/docs/TOKEN_SETUP.md
 .rhiza/requirements/README.md
 .rhiza/requirements/docs.txt
 .rhiza/requirements/marimo.txt
@@ -48,6 +45,7 @@ book/minibook-templates/custom.html.jinja2
 presentation/README.md
 presentation/presentation.mk
 tests/test_rhiza/README.md
+tests/test_rhiza/__init__.py
 tests/test_rhiza/benchmarks/.gitignore
 tests/test_rhiza/benchmarks/README.md
 tests/test_rhiza/benchmarks/analyze_benchmarks.py
