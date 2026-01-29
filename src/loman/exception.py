@@ -10,7 +10,7 @@ class ComputationError(Exception):
 class MapError(ComputationError):
     """Exception raised during map operations with partial results."""
 
-    def __init__(self, message, results):
+    def __init__(self, message: str, results: list[object]) -> None:
         """Initialize MapError with message and partial results."""
         super().__init__(message)
         self.results = results

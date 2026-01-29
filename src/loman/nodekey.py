@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Any, ClassVar, Optional, Union
 
 from loman.util import as_iterable
 
@@ -32,9 +32,9 @@ def quote_part(part: object) -> str:
 class NodeKey:
     """Immutable key for identifying nodes in the computation graph hierarchy."""
 
-    parts: tuple
+    parts: tuple[Any, ...]
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return string representation using path notation."""
         return "/".join([quote_part(part) for part in self.parts])
 
@@ -44,7 +44,8 @@ class NodeKey:
         if len(self.parts) == 0:
             return ""
         elif len(self.parts) == 1:
-            return self.parts[0]
+            part: Name = self.parts[0]
+            return part
         elif all(isinstance(part, str) for part in self.parts):
             return "/".join(quote_part(part) for part in self.parts)
         else:
@@ -79,7 +80,7 @@ class NodeKey:
             result = result.join_parts(*other.parts)
         return result
 
-    def join_parts(self, *parts) -> "NodeKey":
+    def join_parts(self, *parts: Any) -> "NodeKey":
         """Join this node key with raw parts to create a new node key."""
         if len(parts) == 0:
             return self
@@ -112,7 +113,7 @@ class NodeKey:
         quoted_path_str = repr(path_str)
         return f"{self.__class__.__name__}({quoted_path_str})"
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Check equality with another NodeKey."""
         if other is None:
             return False
@@ -120,7 +121,7 @@ class NodeKey:
             return NotImplemented
         return self.parts == other.parts
 
-    _ROOT = None
+    _ROOT: ClassVar["NodeKey | None"] = None
 
     @classmethod
     def root(cls) -> "NodeKey":
@@ -130,17 +131,17 @@ class NodeKey:
         return cls._ROOT
 
     @property
-    def is_root(self):
+    def is_root(self) -> bool:
         """Check if this is the root node key."""
         return len(self.parts) == 0
 
     @staticmethod
-    def common_parent(nodekey1: Name, nodekey2: Name):
+    def common_parent(nodekey1: Name, nodekey2: Name) -> "NodeKey":
         """Find the common parent of two node keys."""
-        nodekey1 = to_nodekey(nodekey1)
-        nodekey2 = to_nodekey(nodekey2)
-        parts = []
-        for p1, p2 in zip(nodekey1.parts, nodekey2.parts):
+        nk1 = to_nodekey(nodekey1)
+        nk2 = to_nodekey(nodekey2)
+        parts: list[Any] = []
+        for p1, p2 in zip(nk1.parts, nk2.parts):
             if p1 != p2:
                 break
             parts.append(p1)
@@ -172,7 +173,7 @@ PART = re.compile(r"([^/]*)/?")
 
 
 def _parse_nodekey(path_str: str, end: int) -> NodeKey:
-    parts = []
+    parts: list[str] = []
     parts_append = parts.append
 
     while path_str[end : end + 1] == "/":
@@ -182,7 +183,7 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
         if nextchar == "":
             break
         if nextchar == '"':
-            part, end = json.decoder.scanstring(path_str, end + 1)
+            part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]
             parts_append(part)
             nextchar = path_str[end : end + 1]
             assert nextchar == "" or nextchar == "/"
@@ -190,6 +191,7 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
                 end = end + 1
         else:
             chunk = PART.match(path_str, end)
+            assert chunk is not None
             end = chunk.end()
             (part,) = chunk.groups()
             parts_append(part)

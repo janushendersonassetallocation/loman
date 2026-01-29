@@ -1,7 +1,9 @@
 """Compatibility utilities for function signature inspection."""
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -12,7 +14,7 @@ class _Signature:
     has_var_kwds: bool = field()
 
 
-def get_signature(func):
+def get_signature(func: Callable[..., Any]) -> _Signature:
     """Extract function signature information for compatibility purposes."""
     sig = inspect.signature(func)
     pk = inspect._ParameterKind
