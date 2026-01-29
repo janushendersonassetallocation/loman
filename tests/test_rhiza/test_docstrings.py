@@ -35,7 +35,7 @@ def _iter_modules_from_path(logger, package_path: Path):
             continue
 
 
-def test_doctests(logger, root, monkeypatch: pytest.MonkeyPatch):
+def test_doctests(logger, root, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     """Run doctests for each package directory under src/."""
     src_path = root / "src"
 
@@ -64,11 +64,13 @@ def test_doctests(logger, root, monkeypatch: pytest.MonkeyPatch):
 
                 for module in modules:
                     logger.debug("Running doctests for module: %s", module.__name__)
-                    results = doctest.testmod(
-                        module,
-                        verbose=False,
-                        optionflags=(doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE),
-                    )
+                    # Disable pytest's stdout capture during doctest to avoid interference
+                    with capsys.disabled():
+                        results = doctest.testmod(
+                            module,
+                            verbose=False,
+                            optionflags=(doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE),
+                        )
                     total_tests += results.attempted
 
                     if results.failed:
