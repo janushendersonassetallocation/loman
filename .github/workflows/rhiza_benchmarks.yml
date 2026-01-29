@@ -39,7 +39,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "0.9.27"
+          version: "0.9.28"
           python-version: "3.12"
 
       - name: Run benchmarks
