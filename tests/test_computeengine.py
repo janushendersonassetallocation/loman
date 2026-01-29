@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import loman as lm
 from loman import (
     C,
     CannotInsertToPlaceholderNodeError,
@@ -2050,25 +2049,25 @@ def test_exception_in_computation_with_converter():
 
 
 def test_simple_node_metadata():
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_node("foo", metadata={"test": "working"})
     assert comp.metadata("foo")["test"] == "working"
 
 
 def test_simple_computation_metadata():
-    comp = lm.Computation(metadata={"test": "working"})
+    comp = Computation(metadata={"test": "working"})
     assert comp.metadata("")["test"] == "working"
 
 
 def test_setting_node_metadata():
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_node("foo")
     comp.metadata("foo")["test"] = "working"
     assert comp.metadata("foo")["test"] == "working"
 
 
 def test_setting_block_metadata():
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_node("foo/bar")
     comp.metadata("foo")["test"] = "working"
     assert comp.metadata("foo")["test"] == "working"
@@ -2076,10 +2075,10 @@ def test_setting_block_metadata():
 
 def test_setting_computation_block_metadata():
     """Test setting metadata on computation blocks."""
-    comp_inner = lm.Computation()
+    comp_inner = Computation()
     comp_inner.add_node("bar")
 
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_block("foo", comp_inner, metadata={"test": "working"})
     assert comp.metadata("foo")["test"] == "working"
 
@@ -2090,7 +2089,7 @@ def test_setting_computation_block_metadata():
 
 
 def test_list_children():
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_node("foo1/bar1/baz1/a", value=1)
     comp.add_node("foo1/bar1/baz2/a", value=1)
 
@@ -2098,7 +2097,7 @@ def test_list_children():
 
 
 def test_has_path_has_node():
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_node("foo1/bar1/baz1/a", value=1)
 
     assert comp.has_node("foo1/bar1/baz1/a")
@@ -2110,7 +2109,7 @@ def test_has_path_has_node():
 
 
 def test_tree_descendents():
-    comp = lm.Computation()
+    comp = Computation()
     comp.add_node("foo/bar/baz")
     comp.add_node("foo/bar2")
     comp.add_node("beef/bar")
@@ -2319,26 +2318,26 @@ class TestGetTagsForState:
 class TestWriteDillCoverage:
     """Tests for write_dill coverage."""
 
-    def test_write_dill_old_deprecated(self):
+    def test_write_dill_old_deprecated(self, tmp_path):
         """Test write_dill_old is deprecated."""
         comp = Computation()
         comp.add_node("a", value=1)
 
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            with pytest.warns(DeprecationWarning):
-                comp.write_dill_old(f.name)
+        path = tmp_path / "comp_old.dill"
+        with pytest.warns(DeprecationWarning):
+            comp.write_dill_old(str(path))
 
-    def test_write_dill_to_file(self):
+    def test_write_dill_to_file(self, tmp_path):
         """Test write_dill to file path."""
         comp = Computation()
         comp.add_node("a", value=42)
 
-        with tempfile.NamedTemporaryFile(suffix=".dill", delete=False) as f:
-            comp.write_dill(f.name)
+        path = tmp_path / "comp.dill"
+        comp.write_dill(str(path))
 
-            # Read it back
-            loaded = Computation.read_dill(f.name)
-            assert loaded.v.a == 42
+        # Read it back
+        loaded = Computation.read_dill(str(path))
+        assert loaded.v.a == 42
 
     def test_write_dill_to_fileobj(self):
         """Test write_dill to file object."""
