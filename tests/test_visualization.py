@@ -763,9 +763,13 @@ class TestVisualizationWin32:
                 mock_file.__exit__ = MagicMock(return_value=False)
                 mock_tempfile.return_value = mock_file
 
-                # Mock subprocess.run for non-win32 path
-                with patch("subprocess.run"):
-                    v.view()
+                # Force the win32 branch and mock os.startfile
+                with patch.object(sys, "platform", "win32"):
+                    with patch("os.startfile", create=True) as mock_startfile:
+                        v.view()
+
+                        # Ensure os.startfile was called with the generated PDF path
+                        mock_startfile.assert_called_once_with(mock_file.name)
 
 
 class TestVisualizationAttrNormalization:
