@@ -2,7 +2,15 @@
 
 import pytest
 
-from loman.nodekey import NodeKey, is_pattern, match_pattern, nodekey_join, to_nodekey
+from loman.nodekey import (
+    NodeKey,
+    PathNotFoundError,
+    is_pattern,
+    match_pattern,
+    nodekey_join,
+    quote_part,
+    to_nodekey,
+)
 
 TEST_DATA = [
     ("/A", NodeKey(("A",))),
@@ -115,3 +123,111 @@ def test_is_pattern():
     assert is_pattern(NodeKey(("abc", "*", "**", "def")))
     assert is_pattern(NodeKey(("**", "*", "def")))
     assert is_pattern(NodeKey(("abc", "**", "*")))
+
+
+def test_nodekey_ancestors():
+    """Test NodeKey ancestors method."""
+    nk = to_nodekey("foo/bar/baz")
+    result = set(x.name for x in nk.ancestors())
+    assert result == {"foo/bar/baz", "foo/bar", "foo", ""}
+
+
+class TestNodeKeyCoverage:
+    """Additional tests for nodekey.py coverage."""
+
+    def test_quote_part_with_slash(self):
+        """Test quote_part with a string containing slash."""
+        result = quote_part("foo/bar")
+        assert result == '"foo/bar"'
+
+    def test_nodekey_label_empty(self):
+        """Test NodeKey label property with empty parts."""
+        nk = NodeKey(())
+        assert nk.label == ""
+
+    def test_nodekey_name_with_mixed_parts(self):
+        """Test NodeKey name property with non-string parts."""
+        obj = object()
+        nk = NodeKey(("a", obj))
+        # When parts contain non-strings, name returns self
+        assert nk.name is nk
+
+    def test_nodekey_parent_of_root(self):
+        """Test getting parent of root NodeKey raises PathNotFoundError."""
+        nk = NodeKey(())
+        with pytest.raises(PathNotFoundError):
+            _ = nk.parent
+
+    def test_nodekey_eq_with_none(self):
+        """Test NodeKey equality with None."""
+        nk = NodeKey(("a",))
+        assert nk != None  # noqa: E711
+
+    def test_nodekey_eq_with_non_nodekey(self):
+        """Test NodeKey equality with non-NodeKey returns NotImplemented."""
+        nk = NodeKey(("a",))
+        result = nk.__eq__("not a nodekey")
+        assert result is NotImplemented
+
+    def test_nodekey_root_singleton(self):
+        """Test NodeKey.root() returns singleton."""
+        r1 = NodeKey.root()
+        r2 = NodeKey.root()
+        assert r1 is r2
+
+    def test_to_nodekey_value_error_unreachable(self):
+        """Test to_nodekey - the else branch is unreachable but test the object path."""
+        # This tests line 216 - the object path that's always taken for non-str/non-NodeKey
+        obj = object()
+        nk = to_nodekey(obj)
+        assert nk.parts == (obj,)
+
+    def test_drop_root_not_descendant(self):
+        """Test drop_root returns None when not a descendant."""
+        nk = NodeKey(("a", "b"))
+        root = NodeKey(("x", "y"))
+
+        result = nk.drop_root(root)
+        assert result is None
+
+    def test_is_descendent_of_true(self):
+        """Test is_descendent_of returns True for descendant."""
+        parent = NodeKey(("a",))
+        child = NodeKey(("a", "b"))
+
+        assert child.is_descendent_of(parent)
+
+    def test_is_descendent_of_false_equal(self):
+        """Test is_descendent_of returns False for equal keys."""
+        nk1 = NodeKey(("a",))
+        nk2 = NodeKey(("a",))
+
+        assert not nk1.is_descendent_of(nk2)
+
+    def test_join_parts_empty(self):
+        """Test join_parts with no parts returns self."""
+        nk = NodeKey(("a", "b"))
+        result = nk.join_parts()
+        assert result is nk
+
+    def test_join_parts_with_parts(self):
+        """Test join_parts adds parts."""
+        nk = NodeKey(("a",))
+        result = nk.join_parts("b", "c")
+        assert result.parts == ("a", "b", "c")
+
+    def test_truediv(self):
+        """Test / operator for joining node keys."""
+        nk1 = NodeKey(("a",))
+        nk2 = NodeKey(("b",))
+
+        result = nk1 / nk2
+        assert result.parts == ("a", "b")
+
+    def test_drop_root_not_descendent(self):
+        """Test drop_root returns None when not descendant."""
+        nk = NodeKey(("a", "b"))
+        root = NodeKey(("c",))
+
+        result = nk.drop_root(root)
+        assert result is None
