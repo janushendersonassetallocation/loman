@@ -7,12 +7,13 @@ import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 import matplotlib as mpl
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 import numpy as np
-import pandas as pd
-import pydotplus
+import pandas as pd  # type: ignore[import-untyped]
+import pydotplus  # type: ignore[import-untyped]
 from matplotlib.colors import Colormap
 
 import loman
@@ -21,6 +22,9 @@ from .consts import NodeAttributes, NodeTransformations, States
 from .graph_utils import contract_node
 from .nodekey import Name, NodeKey, is_pattern, match_pattern, to_nodekey
 
+if TYPE_CHECKING:
+    from .computeengine import Computation
+
 
 @dataclass
 class Node:
@@ -28,7 +32,7 @@ class Node:
 
     nodekey: NodeKey
     original_nodekey: NodeKey
-    data: dict
+    data: dict[str, Any]
 
 
 class NodeFormatter(ABC):
@@ -39,14 +43,16 @@ class NodeFormatter(ABC):
         pass  # pragma: no cover
 
     @abstractmethod
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node appearance returning dict of graphviz attributes."""
         pass  # pragma: no cover
 
     @staticmethod
-    def create(cmap: dict | Colormap | None = None, colors: str = "state", shapes: str | None = None):
+    def create(
+        cmap: dict[States | None, str] | Colormap | None = None, colors: str = "state", shapes: str | None = None
+    ) -> "CompositeNodeFormatter":
         """Create a composite node formatter with specified color and shape options."""
-        node_formatters = [StandardLabel(), StandardGroup()]
+        node_formatters: list[NodeFormatter] = [StandardLabel(), StandardGroup()]
 
         if isinstance(shapes, str):
             shapes = shapes.lower()
@@ -59,9 +65,11 @@ class NodeFormatter(ABC):
 
         colors = colors.lower()
         if colors == "state":
-            node_formatters.append(ColorByState(cmap))
+            state_cmap = cmap if isinstance(cmap, dict) else None
+            node_formatters.append(ColorByState(state_cmap))
         elif colors == "timing":
-            node_formatters.append(ColorByTiming(cmap))
+            timing_cmap = cmap if isinstance(cmap, Colormap) else None
+            node_formatters.append(ColorByTiming(timing_cmap))
         else:
             raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
 
@@ -74,7 +82,7 @@ class NodeFormatter(ABC):
 class ColorByState(NodeFormatter):
     """Node formatter that colors nodes based on their computation state."""
 
-    DEFAULT_STATE_COLORS = {
+    DEFAULT_STATE_COLORS: dict[States | None, str] = {
         None: "#ffffff",  # xkcd white
         States.PLACEHOLDER: "#f97306",  # xkcd orange
         States.UNINITIALIZED: "#0343df",  # xkcd blue
@@ -85,25 +93,26 @@ class ColorByState(NodeFormatter):
         States.PINNED: "#bf77f6",  # xkcd light purple
     }
 
-    def __init__(self, state_colors=None):
+    def __init__(self, state_colors: dict[States | None, str] | None = None) -> None:
         """Initialize with custom state color mapping."""
         if state_colors is None:
             state_colors = self.DEFAULT_STATE_COLORS.copy()
         self.state_colors = state_colors
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node color based on computation state."""
         states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
+        state: States | None
         if len(nodes) == 1:
             state = states[0]
         else:
-            if any(state == States.ERROR for state in states):
+            if any(s == States.ERROR for s in states):
                 state = States.ERROR
-            elif any(state == States.STALE for state in states):
+            elif any(s == States.STALE for s in states):
                 state = States.STALE
             else:
                 state0 = states[0]
-                if all(state == state0 for state in states):
+                if all(s == state0 for s in states):
                     state = state0
                 else:
                     state = None
@@ -113,25 +122,26 @@ class ColorByState(NodeFormatter):
 class ColorByTiming(NodeFormatter):
     """Node formatter that colors nodes based on their execution timing."""
 
-    def __init__(self, cmap: Colormap | None = None):
+    def __init__(self, cmap: Colormap | None = None) -> None:
         """Initialize with an optional colormap for timing visualization."""
         if cmap is None:
             cmap = mpl.colors.LinearSegmentedColormap.from_list("blend", ["#15b01a", "#ffff14", "#e50000"])
         self.cmap = cmap
-        self.min_duration = np.nan
-        self.max_duration = np.nan
+        self.min_duration: float = float("nan")
+        self.max_duration: float = float("nan")
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate the color mapping based on node timing data."""
-        durations = []
+        durations: list[float] = []
         for node in nodes:
             timing = node.data.get(NodeAttributes.TIMING)
             if timing is not None:
                 durations.append(timing.duration)
-        self.max_duration = max(durations)
-        self.min_duration = min(durations)
+        if durations:
+            self.max_duration = max(durations)
+            self.min_duration = min(durations)
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with timing-based coloring."""
         if len(nodes) == 1:
             data = nodes[0].data
@@ -143,18 +153,19 @@ class ColorByTiming(NodeFormatter):
                 norm_duration: float = (duration - self.min_duration) / max(1e-8, self.max_duration - self.min_duration)
                 col = mpl.colors.rgb2hex(self.cmap(norm_duration))
             return {"style": "filled", "fillcolor": col}
+        return None
 
 
 class ShapeByType(NodeFormatter):
     """Node formatter that sets node shapes based on their type."""
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with type-based shape styling."""
         if len(nodes) == 1:
             data = nodes[0].data
             value = data.get(NodeAttributes.VALUE)
             if value is None:
-                return
+                return None
             if isinstance(value, np.ndarray):
                 return {"shape": "rect"}
             elif isinstance(value, pd.DataFrame):
@@ -169,26 +180,28 @@ class ShapeByType(NodeFormatter):
                 return {"shape": "hexagon"}
             else:
                 return {"shape": "diamond"}
+        return None
 
 
 class RectBlocks(NodeFormatter):
     """Node formatter that shapes composite nodes as rectangles."""
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return rectangle shape for composite nodes."""
         if is_composite:
             return {"shape": "rect", "peripheries": 2}
+        return None
 
 
 class StandardLabel(NodeFormatter):
     """Node formatter that sets node labels."""
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return standard label for node."""
         return {"label": name.label}
 
 
-def get_group_path(name: NodeKey, data: dict) -> NodeKey:
+def get_group_path(name: NodeKey, data: dict[str, Any]) -> NodeKey:
     """Determine the group path for a node based on name hierarchy and group attribute."""
     name_group_path = name.parent
     attribute_group = data.get(NodeAttributes.GROUP)
@@ -201,7 +214,7 @@ def get_group_path(name: NodeKey, data: dict) -> NodeKey:
 class StandardGroup(NodeFormatter):
     """Node formatter that applies standard grouping styles."""
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard group styling."""
         if len(nodes) == 1:
             data = nodes[0].data
@@ -216,17 +229,18 @@ class StandardGroup(NodeFormatter):
 class StandardStylingOverrides(NodeFormatter):
     """Node formatter that applies standard styling overrides."""
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard styling overrides."""
         if len(nodes) == 1:
             data = nodes[0].data
             style = data.get(NodeAttributes.STYLE)
             if style is None:
-                return
+                return None
             if style == "small":
                 return {"width": 0.3, "height": 0.2, "fontsize": 8}
             elif style == "dot":
                 return {"shape": "point", "width": 0.1, "peripheries": 1}
+        return None
 
 
 @dataclass
@@ -240,9 +254,9 @@ class CompositeNodeFormatter(NodeFormatter):
         for formatter in self.formatters:
             formatter.calibrate(nodes)
 
-    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict | None:
+    def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node by combining output from all contained formatters."""
-        d = {}
+        d: dict[str, Any] = {}
         for formatter in self.formatters:
             format_attrs = formatter.format(name, nodes, is_composite)
             if format_attrs is not None:
@@ -254,35 +268,37 @@ class CompositeNodeFormatter(NodeFormatter):
 class GraphView:
     """A view for visualizing computation graphs as graphical diagrams."""
 
-    computation: "loman.Computation"
+    computation: "Computation"
     root: Name | None = None
     node_formatter: NodeFormatter | None = None
-    node_transformations: dict | None = None
+    node_transformations: dict[Name, str] | None = None
     collapse_all: bool = True
 
-    graph_attr: dict | None = None
-    node_attr: dict | None = None
-    edge_attr: dict | None = None
+    graph_attr: dict[str, Any] | None = None
+    node_attr: dict[str, Any] | None = None
+    edge_attr: dict[str, Any] | None = None
 
     struct_dag: nx.DiGraph | None = None
     viz_dag: nx.DiGraph | None = None
     viz_dot: pydotplus.Dot | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize the graph view after dataclass construction."""
         self.refresh()
 
     @staticmethod
-    def get_sub_block(dag, root, node_transformations: dict):
+    def get_sub_block(
+        dag: nx.DiGraph, root: Name | None, node_transformations: dict[NodeKey, str]
+    ) -> tuple[nx.DiGraph, defaultdict[NodeKey, list[NodeKey]], set[NodeKey]]:
         """Extract a subgraph with node transformations for visualization."""
-        d_transform_to_nodes = defaultdict(list)
+        d_transform_to_nodes: defaultdict[str, list[NodeKey]] = defaultdict(list)
         for nk, transform in node_transformations.items():
             d_transform_to_nodes[transform].append(nk)
 
-        dag_out = nx.DiGraph()
+        dag_out: nx.DiGraph = nx.DiGraph()
 
-        d_original_to_mapped = {}
-        s_collapsed = set()
+        d_original_to_mapped: dict[NodeKey, NodeKey] = {}
+        s_collapsed: set[NodeKey] = set()
 
         for nk_original in dag.nodes():
             nk_mapped = nk_original.drop_root(root)
@@ -315,7 +331,7 @@ class GraphView:
             contract_node(dag_out, d_original_to_mapped[nk])
             del d_original_to_mapped[nk]
 
-        d_mapped_to_original = defaultdict(list)
+        d_mapped_to_original: defaultdict[NodeKey, list[NodeKey]] = defaultdict(list)
         for nk_original, nk_mapped in d_original_to_mapped.items():
             if nk_mapped in dag_out.nodes:
                 d_mapped_to_original[nk_mapped].append(nk_original)
@@ -324,26 +340,29 @@ class GraphView:
 
         return dag_out, d_mapped_to_original, s_collapsed
 
-    def _initialize_transforms(self):
-        node_transformations = {}
+    def _initialize_transforms(self) -> dict[NodeKey, str]:
+        """Initialize node transformations for visualization."""
+        node_transformations: dict[NodeKey, str] = {}
         if self.collapse_all:
             self._apply_default_collapse_transforms(node_transformations)
         self._apply_custom_transforms(node_transformations)
         return node_transformations
 
-    def _apply_default_collapse_transforms(self, node_transformations):
+    def _apply_default_collapse_transforms(self, node_transformations: dict[NodeKey, str]) -> None:
+        """Apply default collapse transformations to tree nodes."""
         for n in self.computation.get_tree_descendents(self.root):
             nk = to_nodekey(n)
             if not self.computation.has_node(nk):
                 node_transformations[nk] = NodeTransformations.COLLAPSE
 
-    def _apply_custom_transforms(self, node_transformations):
+    def _apply_custom_transforms(self, node_transformations: dict[NodeKey, str]) -> dict[NodeKey, str]:
+        """Apply user-specified custom transformations to nodes."""
         if self.node_transformations is not None:
             for rule_name, transform in self.node_transformations.items():
                 include_ancestors = transform == NodeTransformations.EXPAND
                 rule_nk = to_nodekey(rule_name)
                 if is_pattern(rule_nk):
-                    apply_nodes = set()
+                    apply_nodes: set[NodeKey] = set()
                     for n in self.computation.get_tree_descendents(self.root):
                         nk = to_nodekey(n)
                         if match_pattern(rule_nk, nk):
@@ -357,20 +376,25 @@ class GraphView:
                             if nk1.is_root or nk1 == self.root:
                                 break
                             node_transformations[nk1] = NodeTransformations.EXPAND
-                for rule_nk in apply_nodes:
-                    node_transformations[rule_nk] = transform
+                for r_nk in apply_nodes:
+                    node_transformations[r_nk] = transform
         return node_transformations
 
-    def _create_visualization_dag(self, original_nodes, composite_nodes):
+    def _create_visualization_dag(
+        self, original_nodes: defaultdict[NodeKey, list[NodeKey]], composite_nodes: set[NodeKey]
+    ) -> nx.DiGraph:
+        """Create the visualization DAG from structure and node data."""
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
+        assert self.struct_dag is not None
         return create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
 
-    def _create_dot_graph(self):
+    def _create_dot_graph(self) -> pydotplus.Dot:
+        """Create a PyDot graph from the visualization DAG."""
         return to_pydot(self.viz_dag, self.graph_attr, self.node_attr, self.edge_attr)
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Refresh the visualization by rebuilding the graph structure."""
         node_transformations = self._initialize_transforms()
         self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(
@@ -383,46 +407,53 @@ class GraphView:
         """Generate SVG representation of the visualization."""
         if self.viz_dot is None:
             return None
-        return self.viz_dot.create_svg().decode("utf-8")
+        svg_bytes: bytes = self.viz_dot.create_svg()
+        return svg_bytes.decode("utf-8")
 
-    def view(self):  # pragma: no cover
+    def view(self) -> None:  # pragma: no cover
         """Open the visualization in a PDF viewer."""
+        assert self.viz_dot is not None
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(self.viz_dot.create_pdf())
             if sys.platform == "win32":
-                os.startfile(f.name)  # pragma: no cover  # nosec B606
+                os.startfile(f.name)  # pragma: no cover  # nosec B606  # type: ignore[attr-defined]
             else:
                 subprocess.run(["open", f.name], check=False)  # pragma: no cover  # nosec B603 B607
 
-    def _repr_svg_(self):
+    def _repr_svg_(self) -> str | None:
+        """Return SVG representation for Jupyter notebook display."""
         return self.svg()
 
 
 def create_viz_dag(
-    struct_dag, comp_dag, node_formatter: NodeFormatter, original_nodes: dict, composite_nodes: set
+    struct_dag: nx.DiGraph,
+    comp_dag: nx.DiGraph,
+    node_formatter: NodeFormatter,
+    original_nodes: defaultdict[NodeKey, list[NodeKey]],
+    composite_nodes: set[NodeKey],
 ) -> nx.DiGraph:
     """Create a visualization DAG from the computation structure."""
     if node_formatter is not None:
-        nodes = []
+        nodes: list[Node] = []
         for nodekey in struct_dag.nodes:
             for original_nodekey in original_nodes[nodekey]:
                 data = comp_dag.nodes[original_nodekey]
-                node = Node(nodekey, original_nodekey, data)
-                nodes.append(node)
+                n = Node(nodekey, original_nodekey, data)
+                nodes.append(n)
         node_formatter.calibrate(nodes)
 
-    viz_dag = nx.DiGraph()
-    node_index_map = {}
+    viz_dag: nx.DiGraph = nx.DiGraph()
+    node_index_map: dict[NodeKey, str] = {}
     for i, nodekey in enumerate(struct_dag.nodes):
         short_name = f"n{i}"
-        attr_dict = None
+        attr_dict: dict[str, Any] | None = None
 
         if node_formatter is not None:
             nodes = []
             for original_nodekey in original_nodes[nodekey]:
                 data = comp_dag.nodes[original_nodekey]
-                node = Node(nodekey, original_nodekey, data)
-                nodes.append(node)
+                n = Node(nodekey, original_nodekey, data)
+                nodes.append(n)
             is_composite = nodekey in composite_nodes
             attr_dict = node_formatter.format(nodekey, nodes, is_composite)
         if attr_dict is None:  # pragma: no cover
@@ -441,26 +472,28 @@ def create_viz_dag(
         group_path2 = get_group_path(name2, struct_dag.nodes[name2])
         group_path = NodeKey.common_parent(group_path1, group_path2)
 
-        attr_dict = {}
+        edge_attr_dict: dict[str, Any] = {}
         if not group_path.is_root:
             # group_path = None
-            attr_dict["_group"] = group_path
+            edge_attr_dict["_group"] = group_path
 
-        viz_dag.add_edge(short_name_1, short_name_2, **attr_dict)
+        viz_dag.add_edge(short_name_1, short_name_2, **edge_attr_dict)
 
     return viz_dag
 
 
-def _group_nodes_and_edges(viz_dag):
+def _group_nodes_and_edges(
+    viz_dag: nx.DiGraph,
+) -> tuple[NodeKey, dict[NodeKey, list[str]], dict[NodeKey, list[tuple[str, str]]]]:
     """Group nodes and edges by their groups."""
     root = NodeKey.root()
 
-    node_groups = {}
+    node_groups: dict[NodeKey, list[str]] = {}
     for name, data in viz_dag.nodes(data=True):
         group = data.get("_group", root)
         node_groups.setdefault(group, []).append(name)
 
-    edge_groups = {}
+    edge_groups: dict[NodeKey, list[tuple[str, str]]] = {}
     for name1, name2, data in viz_dag.edges(data=True):
         group = data.get("_group", root)
         edge_groups.setdefault(group, []).append((name1, name2))
@@ -468,7 +501,12 @@ def _group_nodes_and_edges(viz_dag):
     return root, node_groups, edge_groups
 
 
-def _create_pydot_nodes(viz_dag, node_groups, subgraphs, root):
+def _create_pydot_nodes(
+    viz_dag: nx.DiGraph,
+    node_groups: dict[NodeKey, list[str]],
+    subgraphs: dict[NodeKey, pydotplus.Dot | pydotplus.Subgraph],
+    root: NodeKey,
+) -> None:
     """Create PyDot nodes for each group."""
     for group, names in node_groups.items():
         c = subgraphs[root] if group is root else create_subgraph(group)
@@ -483,7 +521,7 @@ def _create_pydot_nodes(viz_dag, node_groups, subgraphs, root):
         subgraphs[group] = c
 
 
-def _ensure_parent_subgraphs(subgraphs):
+def _ensure_parent_subgraphs(subgraphs: dict[NodeKey, pydotplus.Dot | pydotplus.Subgraph]) -> None:
     """Ensure all parent subgraphs exist in the hierarchy."""
     groups = list(subgraphs.keys())
     for group in groups:
@@ -497,7 +535,7 @@ def _ensure_parent_subgraphs(subgraphs):
             subgraphs[group1] = create_subgraph(group1)
 
 
-def _link_subgraphs(subgraphs):
+def _link_subgraphs(subgraphs: dict[NodeKey, pydotplus.Dot | pydotplus.Subgraph]) -> None:
     """Link subgraphs to their parents."""
     for group, subgraph in subgraphs.items():
         if group.is_root:
@@ -510,7 +548,9 @@ def _link_subgraphs(subgraphs):
         subgraphs[parent].add_subgraph(subgraph)
 
 
-def _add_edges_to_subgraphs(edge_groups, subgraphs):
+def _add_edges_to_subgraphs(
+    edge_groups: dict[NodeKey, list[tuple[str, str]]], subgraphs: dict[NodeKey, pydotplus.Dot | pydotplus.Subgraph]
+) -> None:
     """Add edges to their respective subgraphs."""
     for group, edges in edge_groups.items():
         c = subgraphs[group]
@@ -519,21 +559,33 @@ def _add_edges_to_subgraphs(edge_groups, subgraphs):
             c.add_edge(edge)
 
 
-def to_pydot(viz_dag, graph_attr=None, node_attr=None, edge_attr=None) -> pydotplus.Dot:
+def to_pydot(
+    viz_dag: nx.DiGraph | None,
+    graph_attr: dict[str, Any] | None = None,
+    node_attr: dict[str, Any] | None = None,
+    edge_attr: dict[str, Any] | None = None,
+) -> pydotplus.Dot:
     """Convert a visualization DAG to a PyDot graph for rendering."""
+    assert viz_dag is not None
     root, node_groups, edge_groups = _group_nodes_and_edges(viz_dag)
 
-    subgraphs = {root: create_root_graph(graph_attr, node_attr, edge_attr)}
+    subgraphs: dict[NodeKey, pydotplus.Dot | pydotplus.Subgraph] = {
+        root: create_root_graph(graph_attr, node_attr, edge_attr)
+    }
 
     _create_pydot_nodes(viz_dag, node_groups, subgraphs, root)
     _ensure_parent_subgraphs(subgraphs)
     _link_subgraphs(subgraphs)
     _add_edges_to_subgraphs(edge_groups, subgraphs)
 
-    return subgraphs[root]
+    result = subgraphs[root]
+    assert isinstance(result, pydotplus.Dot)
+    return result
 
 
-def create_root_graph(graph_attr, node_attr, edge_attr):
+def create_root_graph(
+    graph_attr: dict[str, Any] | None, node_attr: dict[str, Any] | None, edge_attr: dict[str, Any] | None
+) -> pydotplus.Dot:
     """Create root Graphviz graph with specified attributes.
 
     Notes:
@@ -543,7 +595,8 @@ def create_root_graph(graph_attr, node_attr, edge_attr):
         We defensively quote string values that contain commas or whitespace.
     """
 
-    def _normalize_attr_value(v):
+    def _normalize_attr_value(v: Any) -> Any:
+        """Normalize attribute values for Graphviz, quoting strings as needed."""
         # Keep numeric values as-is
         if isinstance(v, (int, float)):
             return v
@@ -570,7 +623,7 @@ def create_root_graph(graph_attr, node_attr, edge_attr):
     return root_graph
 
 
-def create_subgraph(group: NodeKey):
+def create_subgraph(group: NodeKey) -> pydotplus.Subgraph:
     """Create a Graphviz subgraph for a node group."""
     c = pydotplus.Subgraph("cluster_" + str(group))
     c.obj_dict["attributes"]["label"] = str(group)
