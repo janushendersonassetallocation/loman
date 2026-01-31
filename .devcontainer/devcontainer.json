@@ -1,7 +1,7 @@
 {
     "name": "Python Dev (Rhiza)",
     // 3.14 might be a bit too experimental
-    "image": "mcr.microsoft.com/devcontainers/python:3.13",
+    "image": "mcr.microsoft.com/devcontainers/python:3.14",
     "hostRequirements": {
         "cpus": 4
     },
