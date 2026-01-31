@@ -3,7 +3,7 @@
 This file and its associated tests flow down via a SYNC action from the jebel-quant/rhiza repository
 (https://github.com/jebel-quant/rhiza).
 
-Automatically discovers all packages under `src/` and runs doctests for each.
+Automatically discovers all packages and runs doctests for each.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import warnings
 from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
 
 
 def _iter_modules_from_path(logger, package_path: Path):
@@ -36,15 +37,22 @@ def _iter_modules_from_path(logger, package_path: Path):
 
 
 def test_doctests(logger, root, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
-    """Run doctests for each package directory under src/."""
-    src_path = root / "src"
+    """Run doctests for each package directory."""
+    # Read SOURCE_FOLDER from .rhiza/.env
+    env_path = root / ".rhiza" / ".env"
+    values = {}
+    if env_path.exists():
+        values = dotenv_values(env_path)
+
+    source_folder = values.get("SOURCE_FOLDER", "src")
+    src_path = root / source_folder
 
     logger.info("Starting doctest discovery in: %s", src_path)
     if not src_path.exists():
         logger.info("Source directory not found: %s — skipping doctests", src_path)
         pytest.skip(f"Source directory not found: {src_path}")
 
-    # Add src to sys.path with automatic cleanup
+    # Add source path to sys.path with automatic cleanup
     monkeypatch.syspath_prepend(str(src_path))
     logger.debug("Prepended to sys.path: %s", src_path)
 
@@ -52,7 +60,7 @@ def test_doctests(logger, root, monkeypatch: pytest.MonkeyPatch, capsys: pytest.
     total_failures = 0
     failed_modules = []
 
-    # Find all packages in src
+    # Find all packages in the source path
     for package_dir in src_path.iterdir():
         if package_dir.is_dir() and (package_dir / "__init__.py").exists():
             # Import the package
