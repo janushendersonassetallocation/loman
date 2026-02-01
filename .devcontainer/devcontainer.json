@@ -1,14 +1,12 @@
 {
     "name": "Python Dev (Rhiza)",
-    // 3.14 might be a bit too experimental
-    "image": "mcr.microsoft.com/devcontainers/python:3.13",
+    "image": "mcr.microsoft.com/devcontainers/python:3.14",
     "hostRequirements": {
         "cpus": 4
     },
     "features": {
-        //Those features might be obsolete as they are contained in microsoft base image? 
-        // "ghcr.io/devcontainers/features/common-utils:2": {},
-        // "ghcr.io/devcontainers/features/git:1": {},
+        "ghcr.io/devcontainers/features/common-utils:2": {},
+        "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {},
         "ghcr.io/devcontainers/features/copilot-cli:1": {}
     },
