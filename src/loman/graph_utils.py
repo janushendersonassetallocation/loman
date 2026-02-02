@@ -1,14 +1,15 @@
 """Graph utility functions for computation graph operations."""
 
 import functools
+from typing import Any
 
-import networkx as nx
+import networkx as nx  # type: ignore[import-untyped]
 
 from loman.exception import LoopDetectedError
 from loman.util import apply_n
 
 
-def contract_node_one(g, n):
+def contract_node_one(g: nx.DiGraph, n: Any) -> None:
     """Remove a node from graph and connect its predecessors to its successors."""
     for p in g.predecessors(n):
         for s in g.successors(n):
@@ -16,12 +17,12 @@ def contract_node_one(g, n):
     g.remove_node(n)
 
 
-def contract_node(g, ns):
+def contract_node(g: nx.DiGraph, ns: Any) -> None:
     """Remove multiple nodes from graph and connect their predecessors to successors."""
     apply_n(functools.partial(contract_node_one, g), ns)
 
 
-def topological_sort(g):
+def topological_sort(g: nx.DiGraph) -> list[Any]:
     """Performs a topological sort on a directed acyclic graph (DAG).
 
     This function attempts to compute the topological order of the nodes in
@@ -60,7 +61,7 @@ def topological_sort(g):
             except nx.NetworkXNoCycle:  # pragma: no cover
                 # there must non-cycle reason NetworkXUnfeasible, leave as is
                 raise e
-        args = []
+        args: list[str] = []
         if cycle_lst:
             lst = [f"{n_src}->{n_tgt}" for n_src, n_tgt in cycle_lst]
             args = [f"DAG cycle: {', '.join(lst)}"]
