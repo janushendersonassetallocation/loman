@@ -102,6 +102,10 @@ class ColorByState(NodeFormatter):
             state_colors = self.DEFAULT_STATE_COLORS.copy()
         self.state_colors = state_colors
 
+    def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
+        pass
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node color based on computation state."""
         states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
@@ -162,6 +166,10 @@ class ColorByTiming(NodeFormatter):
 class ShapeByType(NodeFormatter):
     """Node formatter that sets node shapes based on their type."""
 
+    def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
+        pass
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with type-based shape styling."""
         if len(nodes) == 1:
@@ -189,6 +197,10 @@ class ShapeByType(NodeFormatter):
 class RectBlocks(NodeFormatter):
     """Node formatter that shapes composite nodes as rectangles."""
 
+    def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
+        pass
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return rectangle shape for composite nodes."""
         if is_composite:
@@ -198,6 +210,10 @@ class RectBlocks(NodeFormatter):
 
 class StandardLabel(NodeFormatter):
     """Node formatter that sets node labels."""
+
+    def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
+        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return standard label for node."""
@@ -217,6 +233,10 @@ def get_group_path(name: NodeKey, data: dict[str, Any]) -> NodeKey:
 class StandardGroup(NodeFormatter):
     """Node formatter that applies standard grouping styles."""
 
+    def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
+        pass
+
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard group styling."""
         if len(nodes) == 1:
@@ -231,6 +251,10 @@ class StandardGroup(NodeFormatter):
 
 class StandardStylingOverrides(NodeFormatter):
     """Node formatter that applies standard styling overrides."""
+
+    def calibrate(self, nodes: list[Node]) -> None:
+        """Calibrate formatter based on all nodes in the graph."""
+        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard styling overrides."""

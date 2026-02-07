@@ -880,6 +880,9 @@ class TestVisualizationCalibrate:
         """Test calibrate on base formatter."""
 
         class TestFormatter(NodeFormatter):
+            def calibrate(self, nodes):
+                pass
+
             def format(self, name, nodes, is_composite):
                 return {}
 
