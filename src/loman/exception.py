@@ -40,6 +40,30 @@ class CannotInsertToPlaceholderNodeError(ComputationError):
     pass
 
 
+class InvalidBlockTypeError(TypeError, ComputationError):
+    """Exception raised when a block is not callable or a Computation."""
+
+    pass
+
+
+class FittingError(ComputationError):
+    """Exception raised when curve fitting exceeds error tolerance."""
+
+    pass
+
+
+class ValidationError(ComputationError):
+    """Exception raised during computation validation."""
+
+    pass
+
+
+class SerializationError(ComputationError):
+    """Exception raised during serialization/deserialization."""
+
+    pass
+
+
 # Backward compatibility aliases
 MapException = MapError
 LoopDetectedException = LoopDetectedError

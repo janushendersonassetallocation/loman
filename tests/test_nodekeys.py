@@ -24,8 +24,9 @@ TEST_DATA = [
 ]
 
 
-@pytest.mark.parametrize("test_str,expected_path", TEST_DATA)
+@pytest.mark.parametrize(("test_str", "expected_path"), TEST_DATA)
 def test_simple_nodekey_parser(test_str, expected_path):
+    """Test simple nodekey parser."""
     assert to_nodekey(test_str) == expected_path
 
 
@@ -36,8 +37,9 @@ TEST_JOIN_DATA = [
 ]
 
 
-@pytest.mark.parametrize("base_path,join_parts,expected_path", TEST_JOIN_DATA)
+@pytest.mark.parametrize(("base_path", "join_parts", "expected_path"), TEST_JOIN_DATA)
 def test_join_nodekeys(base_path, join_parts, expected_path):
+    """Test join nodekeys."""
     result = base_path.join(*join_parts)
     assert result == expected_path
 
@@ -48,8 +50,9 @@ TEST_ADD_DATA = [
 ]
 
 
-@pytest.mark.parametrize("this,other,path_expected", TEST_ADD_DATA)
+@pytest.mark.parametrize(("this", "other", "path_expected"), TEST_ADD_DATA)
 def test_div_op(this, other, path_expected):
+    """Test div op."""
     assert this / other == path_expected
 
 
@@ -64,8 +67,9 @@ TEST_JOIN_DATA_2 = [
 ]
 
 
-@pytest.mark.parametrize("paths,expected_path", TEST_JOIN_DATA_2)
+@pytest.mark.parametrize(("paths", "expected_path"), TEST_JOIN_DATA_2)
 def test_join_nodekeys_2(paths, expected_path):
+    """Test join nodekeys 2."""
     result = nodekey_join(*paths)
     assert result == to_nodekey(expected_path)
 
@@ -77,8 +81,9 @@ TEST_COMMON_PARENT_DATA = [
 ]
 
 
-@pytest.mark.parametrize("path1,path2,expected_path", TEST_COMMON_PARENT_DATA)
+@pytest.mark.parametrize(("path1", "path2", "expected_path"), TEST_COMMON_PARENT_DATA)
 def test_common_parent(path1, path2, expected_path):
+    """Test common parent."""
     result = NodeKey.common_parent(path1, path2)
     assert result == to_nodekey(expected_path)
 
@@ -96,14 +101,16 @@ TEST_PATTERN_MATCH_DATA = [
 ]
 
 
-@pytest.mark.parametrize("pattern,target,expected", TEST_PATTERN_MATCH_DATA)
+@pytest.mark.parametrize(("pattern", "target", "expected"), TEST_PATTERN_MATCH_DATA)
 def test_pattern_matching(pattern, target, expected):
+    """Test pattern matching."""
     pattern_key = NodeKey(pattern)
     target_key = NodeKey(target)
     assert match_pattern(pattern_key, target_key) == expected
 
 
 def test_is_pattern():
+    """Test is pattern."""
     # Test single asterisk patterns
     assert is_pattern(NodeKey(("*",)))
     assert is_pattern(NodeKey(("abc", "*")))
@@ -128,7 +135,7 @@ def test_is_pattern():
 def test_nodekey_ancestors():
     """Test NodeKey ancestors method."""
     nk = to_nodekey("foo/bar/baz")
-    result = set(x.name for x in nk.ancestors())
+    result = {x.name for x in nk.ancestors()}
     assert result == {"foo/bar/baz", "foo/bar", "foo", ""}
 
 

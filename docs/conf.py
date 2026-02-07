@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Sphinx configuration file for loman documentation."""
 #
 # loman documentation build configuration file, created by
 # sphinx-quickstart on Sat Mar 25 16:18:54 2017.

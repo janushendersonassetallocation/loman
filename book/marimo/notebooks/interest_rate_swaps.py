@@ -362,7 +362,7 @@ def _(mo):
 @app.cell
 def _(swap_leg_pvs):
     def swap_spread(a, b, p, projection_curve1, projection_curve2, discount_curve):
-        fixed_pv1, float_pv1 = swap_leg_pvs(a, b, p, projection_curve1, discount_curve)
+        _fixed_pv1, float_pv1 = swap_leg_pvs(a, b, p, projection_curve1, discount_curve)
         fixed_pv2, float_pv2 = swap_leg_pvs(a, b, p, projection_curve2, discount_curve)
         return (float_pv1 - float_pv2) / fixed_pv2
 
@@ -533,7 +533,8 @@ def _(comp, namedtuple, np, swap_pv):
 
     def create_curveset(usd_libor_curve, usd_ois_curve, usd_fitting_error):
         if np.max(np.abs(usd_fitting_error) > 0.00001):
-            raise Exception("Fitting error > 0.1bps")
+            msg = "Fitting error > 0.1bps"
+            raise ValueError(msg)
         return {"USD-LIBOR-3M": usd_libor_curve, "USD-OIS": usd_ois_curve}
 
     comp.add_node("curveset", create_curveset)
@@ -650,7 +651,8 @@ def _(comp, create_perturbed_curve, np):
 
     def create_curveset_perturbed(usd_libor_curve_perturbed, usd_ois_curve, usd_fitting_error):
         if np.max(np.abs(usd_fitting_error) > 0.00001):
-            raise Exception("Fitting error > 0.1bps")
+            msg = "Fitting error > 0.1bps"
+            raise ValueError(msg)
         return {"USD-LIBOR-3M": usd_libor_curve_perturbed, "USD-OIS": usd_ois_curve}
 
     comp.add_node("curveset", create_curveset_perturbed)

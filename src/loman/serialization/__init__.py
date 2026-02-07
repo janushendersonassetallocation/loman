@@ -16,7 +16,6 @@ UnrecognizedTypeException = UnrecognizedTypeError
 UntransformableTypeException = UntransformableTypeError
 
 __all__ = [
-    "default_transformer",
     "CustomTransformer",
     "MissingObject",
     "NdArrayTransformer",
@@ -24,4 +23,5 @@ __all__ = [
     "Transformer",
     "UnrecognizedTypeException",
     "UntransformableTypeException",
+    "default_transformer",
 ]

@@ -27,6 +27,7 @@ from .exception import (
     MapException,
     NodeAlreadyExistsException,
     NonExistentNodeException,
+    ValidationError,
 )
 from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
@@ -195,7 +196,8 @@ class Block(Node):
             block0 = self.block()
             comp.add_block(name, block0, *self.args, **self.kwds)
         else:
-            raise TypeError(f"Block {self.block} must be callable or Computation")
+            msg = f"Block {self.block} must be callable or Computation"
+            raise TypeError(msg)
 
 
 block = Block
@@ -208,7 +210,7 @@ def populate_computation_from_class(comp: "Computation", cls: type, obj: object,
         if isinstance(member, Node):
             node_ = member
         elif hasattr(member, "_loman_node_info"):
-            node_ = getattr(member, "_loman_node_info")
+            node_ = member._loman_node_info
         if node_ is not None:
             node_.add_to_comp(comp, name, obj, ignore_self)
 
@@ -271,32 +273,38 @@ class NullObject:
     def __getattr__(self, name: str) -> Any:
         """Raise AttributeError for any attribute access."""
         print(f"__getattr__: {name}")
-        raise AttributeError(f"'NullObject' object has no attribute '{name}'")
+        msg = f"'NullObject' object has no attribute '{name}'"
+        raise AttributeError(msg)
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Raise AttributeError for any attribute assignment."""
         print(f"__setattr__: {name}")
-        raise AttributeError(f"'NullObject' object has no attribute '{name}'")
+        msg = f"'NullObject' object has no attribute '{name}'"
+        raise AttributeError(msg)
 
     def __delattr__(self, name: str) -> None:
         """Raise AttributeError for any attribute deletion."""
         print(f"__delattr__: {name}")
-        raise AttributeError(f"'NullObject' object has no attribute '{name}'")
+        msg = f"'NullObject' object has no attribute '{name}'"
+        raise AttributeError(msg)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Raise TypeError when called as a function."""
         print(f"__call__: {args}, {kwargs}")
-        raise TypeError("'NullObject' object is not callable")
+        msg = "'NullObject' object is not callable"
+        raise TypeError(msg)
 
     def __getitem__(self, key: Any) -> Any:
         """Raise KeyError for any item access."""
         print(f"__getitem__: {key}")
-        raise KeyError(f"'NullObject' object has no item with key '{key}'")
+        msg = f"'NullObject' object has no item with key '{key}'"
+        raise KeyError(msg)
 
     def __setitem__(self, key: Any, value: Any) -> None:
         """Raise KeyError for any item assignment."""
         print(f"__setitem__: {key}")
-        raise KeyError(f"'NullObject' object cannot have items set with key '{key}'")
+        msg = f"'NullObject' object cannot have items set with key '{key}'"
+        raise KeyError(msg)
 
     def __repr__(self) -> str:
         """Return string representation of NullObject."""
@@ -374,7 +382,8 @@ class Computation:
             elif self.tree_has_path(new_nk):
                 return self.get_attribute_view_for_path(new_nk, get_one_func, get_many_func)
             else:
-                raise KeyError(f"Path {new_nk} does not exist")  # pragma: no cover
+                msg = f"Path {new_nk} does not exist"
+                raise KeyError(msg)  # pragma: no cover
 
         def get_many_func_for_path(name: Name | Names) -> Any:
             """Get values for one or more nodes at this path."""
@@ -633,7 +642,8 @@ class Computation:
             result: dict[str, Any] = self._metadata[node_key]
             return result
         else:
-            raise NonExistentNodeException(f"Node {node_key} does not exist.")
+            msg = f"Node {node_key} does not exist."
+            raise NonExistentNodeException(msg)
 
     def delete_node(self, name: Name) -> None:
         """Delete a node from a computation.
@@ -649,7 +659,8 @@ class Computation:
         LOG.debug(f"Deleting node {node_key}")
 
         if not self.dag.has_node(node_key):
-            raise NonExistentNodeException(f"Node {node_key} does not exist")
+            msg = f"Node {node_key} does not exist"
+            raise NonExistentNodeException(msg)
 
         if node_key in self._metadata:
             del self._metadata[node_key]
@@ -677,18 +688,21 @@ class Computation:
             for k, v in old_name.items():
                 LOG.debug(f"Renaming node {k} to {v}")
             if new_name is not None:
-                raise ValueError("new_name must not be set if rename_node is passed a dictionary")
+                msg = "new_name must not be set if rename_node is passed a dictionary"
+                raise ValueError(msg)
             else:
                 name_mapping = dict(old_name)
         else:
             LOG.debug(f"Renaming node {old_name} to {new_name}")
             old_node_key = to_nodekey(old_name)
             if not self.dag.has_node(old_node_key):
-                raise NonExistentNodeException(f"Node {old_name} does not exist")
+                msg = f"Node {old_name} does not exist"
+                raise NonExistentNodeException(msg)
             assert new_name is not None
             new_node_key = to_nodekey(new_name)
             if self.dag.has_node(new_node_key):
-                raise NodeAlreadyExistsException(f"Node {new_name} already exists")
+                msg = f"Node {new_name} already exists"
+                raise NodeAlreadyExistsException(msg)
             name_mapping = {old_name: new_name}
 
         node_key_mapping = {to_nodekey(on): to_nodekey(nn) for on, nn in name_mapping.items()}
@@ -753,13 +767,13 @@ class Computation:
         LOG.debug(f"Inserting value into node {node_key}")
 
         if not self.dag.has_node(node_key):
-            raise NonExistentNodeException(f"Node {node_key} does not exist")
+            msg = f"Node {node_key} does not exist"
+            raise NonExistentNodeException(msg)
 
         state = self._state_one(name)
         if state == States.PLACEHOLDER:
-            raise CannotInsertToPlaceholderNodeException(
-                "Cannot insert into placeholder node. Use add_node to create the node first"
-            )
+            msg = "Cannot insert into placeholder node. Use add_node to create the node first"
+            raise CannotInsertToPlaceholderNodeException(msg)
 
         if not force:
             if state == States.UPTODATE:
@@ -789,9 +803,10 @@ class Computation:
         node_key_value_pairs = [(to_nodekey(name), value) for name, value in name_value_pairs]
         LOG.debug(f"Inserting value into nodes {', '.join(str(name) for name, value in node_key_value_pairs)}")
 
-        for name, value in node_key_value_pairs:
+        for name, _value in node_key_value_pairs:
             if not self.dag.has_node(name):
-                raise NonExistentNodeException(f"Node {name} does not exist")
+                msg = f"Node {name} does not exist"
+                raise NonExistentNodeException(msg)
 
         stale = set()
         computable = set()
@@ -799,7 +814,7 @@ class Computation:
             self._set_state_and_value(name, States.UPTODATE, value)
             stale.update(nx.dag.descendants(self.dag, name))
             computable.update(self.dag.successors(name))
-        names = set([name for name, value in node_key_value_pairs])
+        names = {name for name, value in node_key_value_pairs}
         stale.difference_update(names)
         computable.difference_update(names)
         for name in stale:
@@ -847,7 +862,7 @@ class Computation:
                 tb = traceback.format_exc()
                 self._set_error(node_key, e, tb)
                 if throw_conversion_exception:
-                    raise e
+                    raise
 
     def _set_state_and_literal_value(
         self, node_key: NodeKey, state: States, value: object, require_old_state: bool = True
@@ -990,7 +1005,8 @@ class Computation:
                 assert isinstance(param.name, str)
                 kwds[param.name] = param.value
             else:  # pragma: no cover
-                raise Exception(f"Unexpected param type: {param.type}")
+                msg = f"Unexpected param type: {param.type}"
+                raise ValidationError(msg)
         return f, executor_name, args, kwds
 
     def get_definition_args_kwds(self, name: Name) -> tuple[list[Any], dict[str, Any]]:
@@ -1020,7 +1036,8 @@ class Computation:
                 elif param_type == _ParameterType.KWD:
                     res_kwds[param_name] = in_node_key.name
                 else:  # pragma: no cover
-                    raise Exception(f"Unexpected param type: {param_type}")
+                    msg = f"Unexpected param type: {param_type}"
+                    raise ValidationError(msg)
         return res_args, res_kwds
 
     def _compute_nodes(self, node_keys: Iterable[NodeKey], raise_exceptions: bool = False) -> None:
@@ -1049,7 +1066,7 @@ class Computation:
                 run(node_key)
 
         while len(futs) > 0:
-            done, not_done = wait(futs.keys(), return_when=FIRST_COMPLETED)
+            done, _not_done = wait(futs.keys(), return_when=FIRST_COMPLETED)
             for fut in done:
                 node_key = futs.pop(fut)
                 node0 = self.dag.nodes[node_key]
@@ -1068,7 +1085,8 @@ class Computation:
                     for n in self.dag.successors(node_key):
                         logging.debug(str(node_key) + " " + str(n) + " " + str(computed))
                         if n in computed:
-                            raise LoopDetectedException(f"Calculating {node_key} for the second time")
+                            msg = f"Calculating {node_key} for the second time"
+                            raise LoopDetectedException(msg)
                         self._try_set_computable(n)
                         node0 = self.dag.nodes[n]
                         state = node0[NodeAttributes.STATE]
@@ -1096,9 +1114,11 @@ class Computation:
             state = node[NodeAttributes.STATE]
 
             if state == States.UNINITIALIZED and len(self.dag.pred[n]) == 0:
-                raise Exception(f"Cannot compute {node_key} because {n} uninitialized")
+                msg = f"Cannot compute {node_key} because {n} uninitialized"
+                raise ValidationError(msg)
             if state == States.PLACEHOLDER:
-                raise Exception(f"Cannot compute {node_key} because {n} is placeholder")
+                msg = f"Cannot compute {node_key} because {n} is placeholder"
+                raise ValidationError(msg)
 
         ancestors.add(node_key)
         nodes_sorted = topological_sort(g)
@@ -1164,7 +1184,7 @@ class Computation:
 
         :return: List of nodes.
         """
-        return list(n.name for n in self.dag.nodes)
+        return [n.name for n in self.dag.nodes]
 
     def get_tree_list_children(self, name: Name) -> set[Name]:
         """Get a list of nodes in this computation.
@@ -1295,7 +1315,8 @@ class Computation:
         self.compute(nk, raise_exceptions=True)
         if self.state(nk) == States.UPTODATE:
             return self.value(nk)
-        raise ComputationError(f"Unable to compute node {nk}")
+        msg = f"Unable to compute node {nk}"
+        raise ComputationError(msg)
 
     def _tag_one(self, name: Name) -> set[str]:
         """Get the tags of a single node."""
@@ -1329,7 +1350,7 @@ class Computation:
             nodes1 = self._tag_map.get(tag1)
             if nodes1 is not None:
                 nodes.update(nodes1)
-        return set(n.name for n in nodes)
+        return {n.name for n in nodes}
 
     def _style_one(self, name: Name) -> str | None:
         """Get the style of a single node."""
@@ -1653,7 +1674,8 @@ class Computation:
         if isinstance(obj, Computation):
             return obj
         else:
-            raise Exception()
+            msg = "Loaded object is not a Computation"
+            raise ValidationError(msg)
 
     def copy(self) -> "Computation":
         """Create a copy of a computation.
@@ -1750,7 +1772,8 @@ class Computation:
                     is_error = True
                     results.append(subgraph.copy())
             if is_error:
-                raise MapException(f"Unable to calculate {result_node}", results)
+                msg = f"Unable to calculate {result_node}"
+                raise MapException(msg, results)
             return results
 
         self.add_node(result_node, f, kwds={"xs": input_node})

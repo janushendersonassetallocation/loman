@@ -129,7 +129,8 @@ class Transformer:
         elif isinstance(t, type) and dataclasses.is_dataclass(t):
             self.register_dataclass(t)
         else:
-            raise ValueError(f"Unable to register {t}")
+            msg = f"Unable to register {t}"
+            raise ValueError(msg)
 
     def register_transformer(self, transformer: CustomTransformer) -> None:
         """Register a custom transformer for specific types."""
@@ -236,7 +237,8 @@ class Transformer:
         transformer = self.get_transformer_for_obj(o)
         if transformer is None:
             if self.strict:
-                raise UntransformableTypeError(f"Could not transform object of type {type(o).__name__}")
+                msg = f"Could not transform object of type {type(o).__name__}"
+                raise UntransformableTypeError(msg)
             else:
                 return None
         d = transformer.to_dict(self, o)
@@ -266,7 +268,8 @@ class Transformer:
             else:
                 return self._from_dict_transformer(type_, d)
         else:
-            raise Exception()
+            msg = "Unable to determine object type from dictionary"
+            raise ValueError(msg)
 
     def _from_dict_transformable(self, d: dict[str, Any]) -> object:
         """Reconstruct a Transformable object from dictionary form."""
@@ -274,7 +277,8 @@ class Transformer:
         cls = self._transformable_types.get(classname)
         if cls is None:
             if self.strict:
-                raise UnrecognizedTypeError(f"Unable to transform Transformable object of class {classname}")
+                msg = f"Unable to transform Transformable object of class {classname}"
+                raise UnrecognizedTypeError(msg)
             else:
                 return MissingObject()
         else:
@@ -284,12 +288,14 @@ class Transformer:
         """Reconstruct an attrs object from dictionary form."""
         if not HAS_ATTRS:  # pragma: no cover
             if self.strict:
-                raise UnrecognizedTypeError("attrs package not installed")
+                msg = "attrs package not installed"
+                raise UnrecognizedTypeError(msg)
             return MissingObject()
         cls = self._attrs_types.get(d[KEY_CLASS])
         if cls is None:
             if self.strict:
-                raise UnrecognizedTypeError(f"Unable to create attrs object of type {cls}")
+                msg = f"Unable to create attrs object of type {cls}"
+                raise UnrecognizedTypeError(msg)
             else:
                 return MissingObject()
         else:
@@ -304,7 +310,8 @@ class Transformer:
         cls = self._dataclass_types.get(d[KEY_CLASS])
         if cls is None:
             if self.strict:
-                raise UnrecognizedTypeError(f"Unable to create dataclass object of type {cls}")
+                msg = f"Unable to create dataclass object of type {cls}"
+                raise UnrecognizedTypeError(msg)
             else:
                 return MissingObject()
         else:
@@ -319,7 +326,8 @@ class Transformer:
         transformer = self.get_transformer_for_name(type_)
         if transformer is None:
             if self.strict:
-                raise UnrecognizedTypeError(f"Unable to transform object of type {type_}")
+                msg = f"Unable to transform object of type {type_}"
+                raise UnrecognizedTypeError(msg)
             else:
                 return MissingObject()
         return transformer.from_dict(self, d)

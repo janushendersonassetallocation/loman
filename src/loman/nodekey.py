@@ -141,7 +141,7 @@ class NodeKey:
         nk1 = to_nodekey(nodekey1)
         nk2 = to_nodekey(nodekey2)
         parts: list[Any] = []
-        for p1, p2 in zip(nk1.parts, nk2.parts):
+        for p1, p2 in zip(nk1.parts, nk2.parts, strict=False):
             if p1 != p2:
                 break
             parts.append(p1)
@@ -216,7 +216,8 @@ def to_nodekey(name: Name) -> NodeKey:
     elif isinstance(name, object):
         return NodeKey((name,))
     else:  # pragma: no cover
-        raise ValueError(f"Unexpected error creating node key for name {name}")
+        msg = f"Unexpected error creating node key for name {name}"
+        raise TypeError(msg)
 
 
 def nodekey_join(*names: Name) -> NodeKey:
