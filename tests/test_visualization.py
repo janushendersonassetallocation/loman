@@ -42,6 +42,7 @@ from tests.conftest import (
 
 
 def node_set(nodes):
+    """Create a set of node keys from node names."""
     s = set()
     for n in nodes:
         nodekey = to_nodekey(n)
@@ -50,8 +51,9 @@ def node_set(nodes):
 
 
 def edges_set(edges):
+    """Create a set of edges from edge pairs."""
     s = set()
-    for a, b in edges:
+    for a, _b in edges:
         nk_a = to_nodekey(a)
         nk_b = to_nodekey(a)
         el = frozenset((nk_a, nk_b))
@@ -60,12 +62,14 @@ def edges_set(edges):
 
 
 def edges_from_chain(chain_iter):
+    """Generate edges from a chain of nodes."""
     a, b = tee(chain_iter)
     next(b, None)
-    return zip(a, b)
+    return zip(a, b, strict=False)
 
 
 def check_graph(g, expected_chains):
+    """Check that graph matches expected chains."""
     expected_nodes = set()
     for chain in expected_chains:
         for node_name in chain:
@@ -81,6 +85,7 @@ def check_graph(g, expected_chains):
 
 
 def get_label_to_node_mapping(v):
+    """Get mapping from labels to nodes in visualization."""
     nodes = v.viz_dot.obj_dict["nodes"]
     label_to_name_mapping = {v[0]["attributes"]["label"]: k for k, v in nodes.items()}
     node = {label: nodes[name][0] for label, name in label_to_name_mapping.items()}
@@ -88,8 +93,9 @@ def get_label_to_node_mapping(v):
 
 
 def get_path_to_node_mapping(v):
+    """Get mapping from paths to nodes in visualization."""
     d = {}
-    for name, node_obj in v.viz_dag.nodes(data=True):
+    for _name, node_obj in v.viz_dag.nodes(data=True):
         label = node_obj["label"]
         group = node_obj.get("_group")
         path = NodeKey((label,)) if group is None else group.join_parts(label)
@@ -98,6 +104,7 @@ def get_path_to_node_mapping(v):
 
 
 def test_simple():
+    """Test simple."""
     comp = Computation()
     comp.add_node("a")
     comp.add_node("b", lambda a: a + 1)
@@ -170,6 +177,7 @@ def test_simple():
 
 
 def test_with_groups():
+    """Test with groups."""
     comp = Computation()
     comp.add_node("a", group="foo")
     comp.add_node("b", lambda a: a + 1, group="foo")
@@ -179,6 +187,7 @@ def test_with_groups():
 
 
 def test_show_expansion():
+    """Test show expansion."""
     Coordinate = namedtuple("Coordinate", ["x", "y"])
     comp = Computation()
     comp.add_node("c", value=Coordinate(1, 2))
@@ -198,6 +207,7 @@ def test_show_expansion():
 
 
 def test_with_visualization_blocks():
+    """Test with visualization blocks."""
     comp = create_example_block_computation()
 
     comp.compute_all()
@@ -215,6 +225,7 @@ def test_with_visualization_blocks():
 
 
 def test_with_visualization_view_subblocks():
+    """Test with visualization view subblocks."""
     comp = create_example_block_computation()
 
     comp.compute_all()
@@ -227,6 +238,7 @@ def test_with_visualization_view_subblocks():
 
 
 def test_with_visualization_collapsed_blocks():
+    """Test with visualization collapsed blocks."""
     comp = create_example_block_computation()
 
     comp.compute_all()
@@ -244,6 +256,7 @@ def test_with_visualization_collapsed_blocks():
 
 
 def test_with_visualization_single_element_collapsed_blocks():
+    """Test with visualization single element collapsed blocks."""
     comp = loman.Computation()
     comp.add_node("foo1/bar1/baz1/a")
 
@@ -264,6 +277,7 @@ def test_with_visualization_single_element_collapsed_blocks():
 
 
 def test_sub_blocks_collapse_with_group():
+    """Test sub blocks collapse with group."""
     comp = loman.Computation()
     comp.add_node("a")
     comp.add_node("foo/bar/b", lambda a: a + 1, kwds={"a": "a"})
@@ -274,6 +288,7 @@ def test_sub_blocks_collapse_with_group():
 
 
 def test_with_visualization_collapsed_blocks_uniform_sate():
+    """Test with visualization collapsed blocks uniform sate."""
     comp = loman.Computation()
     comp.add_node("a")
     comp.add_node("foo/bar/b", lambda a: a + 1, kwds={"a": "a"})
@@ -287,6 +302,7 @@ def test_with_visualization_collapsed_blocks_uniform_sate():
 
 
 def test_with_visualization_view_default_collapsing():
+    """Test with visualization view default collapsing."""
     comp = create_example_block_computation()
 
     comp.compute_all()
@@ -296,6 +312,7 @@ def test_with_visualization_view_default_collapsing():
 
 
 def test_with_visualization_view_subblocks_default_collapsing():
+    """Test with visualization view subblocks default collapsing."""
     comp = Computation()
     comp.add_node("foo/a")
     comp.add_node("foo/b", lambda a: a + 1)
@@ -306,6 +323,7 @@ def test_with_visualization_view_subblocks_default_collapsing():
 
 
 def test_draw_expanded_block():
+    """Test draw expanded block."""
     comp = Computation()
     comp.add_node("foo/bar/baz/a")
     comp.add_node("foo/bar/baz/b", lambda a: a + 1)
@@ -322,6 +340,7 @@ def test_draw_expanded_block():
 
 
 def test_draw_expanded_block_with_wildcard():
+    """Test draw expanded block with wildcard."""
     comp = Computation()
     comp.add_node("foo/bar/baz/a")
     comp.add_node("foo/bar/baz/b", lambda a: a + 1)
@@ -338,6 +357,7 @@ def test_draw_expanded_block_with_wildcard():
 
 
 def test_draw_expanded_block_with_wildcard_2():
+    """Test draw expanded block with wildcard 2."""
     comp_inner = BasicFourNodeComputation()
     comp = Computation()
     for x, y, z in itertools.product(range(1, 3), range(1, 3), range(1, 3)):
@@ -441,6 +461,8 @@ def test_draw_expanded_block_with_wildcard_2():
 
 
 def test_style_preservation_with_block_links():
+    """Test style preservation with block links."""
+
     def build_comp():
         comp = Computation()
         comp.add_node("a", style="dot")

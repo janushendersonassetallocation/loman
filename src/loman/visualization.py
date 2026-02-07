@@ -7,7 +7,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import matplotlib as mpl
 import networkx as nx  # type: ignore[import-untyped]
@@ -38,6 +38,7 @@ class Node:
 class NodeFormatter(ABC):
     """Abstract base class for node formatting in visualizations."""
 
+    @abstractmethod
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
         pass  # pragma: no cover
@@ -61,7 +62,8 @@ class NodeFormatter(ABC):
         elif shapes is None:
             pass
         else:
-            raise ValueError(f"{shapes} is not a valid loman shapes parameter for visualization")
+            msg = f"{shapes} is not a valid loman shapes parameter for visualization"
+            raise ValueError(msg)
 
         colors = colors.lower()
         if colors == "state":
@@ -71,7 +73,8 @@ class NodeFormatter(ABC):
             timing_cmap = cmap if isinstance(cmap, Colormap) else None
             node_formatters.append(ColorByTiming(timing_cmap))
         else:
-            raise ValueError(f"{colors} is not a valid loman colors parameter for visualization")
+            msg = f"{colors} is not a valid loman colors parameter for visualization"
+            raise ValueError(msg)
 
         node_formatters.append(StandardStylingOverrides())
         node_formatters.append(RectBlocks())
@@ -82,7 +85,7 @@ class NodeFormatter(ABC):
 class ColorByState(NodeFormatter):
     """Node formatter that colors nodes based on their computation state."""
 
-    DEFAULT_STATE_COLORS: dict[States | None, str] = {
+    DEFAULT_STATE_COLORS: ClassVar[dict[States | None, str]] = {
         None: "#ffffff",  # xkcd white
         States.PLACEHOLDER: "#f97306",  # xkcd orange
         States.UNINITIALIZED: "#0343df",  # xkcd blue
