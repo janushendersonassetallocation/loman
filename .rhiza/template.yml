@@ -33,4 +33,4 @@ exclude:
 #- book/README.md
 #- book/marimo/README.md
 # if we exclude the file Rhiza will not(!) remove the local file
-- .pre-commit-config.yaml
+#- .pre-commit-config.yaml
