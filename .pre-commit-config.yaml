@@ -9,7 +9,7 @@ repos:
       - id: check-yaml
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.14.14'
+    rev: 'v0.15.0'
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix, --unsafe-fixes ]
@@ -24,7 +24,7 @@ repos:
         args: ["--disable", "MD013"]
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.36.0
+    rev: 0.36.1
     hooks:
       - id: check-renovate
         args: [ "--verbose" ]
@@ -38,28 +38,29 @@ repos:
       - id: actionlint
 
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.24.1
+    rev: v0.25
     hooks:
       - id: validate-pyproject
 
-  # - repo: https://github.com/PyCQA/bandit
-  #   rev: 1.9.3
-  #   hooks:
-  #     - id: bandit
-  #       args: ["--skip", "B101", "--exclude", ".venv,tests,.git,.pytest_cache"]
+  #- repo: https://github.com/PyCQA/bandit
+  #  rev: 1.9.3
+  #  hooks:
+  #    - id: bandit
+  #      args: ["--skip", "B101", "--exclude", ".venv,tests,.rhiza/tests,.git,.pytest_cache", "-c", "pyproject.toml"]
 
-  - repo: local
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.10.0
     hooks:
-      - id: update-readme-help
-        name: Update README with Makefile help output
-        entry: make readme
-        language: system
-        files: '^Makefile$'
-        pass_filenames: false
+      - id: uv-lock
 
+  - repo: https://github.com/Jebel-Quant/rhiza-hooks
+    rev: v0.1.6  # Use the latest release
+    hooks:
+      # Migrated from rhiza
       - id: check-rhiza-workflow-names
-        name: Check and Fix Rhiza workflow names
-        entry: python .rhiza/scripts/check_workflow_names.py
-        language: python
-        additional_dependencies: [PyYAML]
-        files: ^\.github/workflows/rhiza_.*\.ya?ml$
+      - id: update-readme-help
+      # Additional utility hooks
+      - id: check-rhiza-config
+      - id: check-makefile-targets
+      - id: check-python-version-consistency
+      - id: check-template-bundles

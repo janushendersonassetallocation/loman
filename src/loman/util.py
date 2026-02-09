@@ -64,8 +64,8 @@ class AttributeView:
         """Get attribute by name, raising AttributeError if not found."""
         try:
             return self.get_attribute(attr)
-        except KeyError:
-            raise AttributeError(attr)
+        except KeyError as e:
+            raise AttributeError(attr) from e
 
     def __getitem__(self, key: Any) -> Any:
         """Get item by key."""

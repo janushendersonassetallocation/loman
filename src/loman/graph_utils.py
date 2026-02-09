@@ -60,7 +60,7 @@ def topological_sort(g: nx.DiGraph) -> list[Any]:
                 cycle_lst = nx.find_cycle(g)
             except nx.NetworkXNoCycle:  # pragma: no cover
                 # there must non-cycle reason NetworkXUnfeasible, leave as is
-                raise e
+                raise e from None
         args: list[str] = []
         if cycle_lst:
             lst = [f"{n_src}->{n_tgt}" for n_src, n_tgt in cycle_lst]

@@ -36,8 +36,9 @@ class TestComputationError:
 
     def test_computation_error_can_be_raised(self):
         """Test that ComputationError can be raised with message."""
+        test_msg = "test message"
         with pytest.raises(ComputationError, match="test message"):
-            raise ComputationError("test message")
+            raise ComputationError(test_msg)
 
 
 class TestMapError:
@@ -58,8 +59,9 @@ class TestMapError:
     def test_map_error_can_be_raised(self):
         """Test that MapError can be raised and caught."""
         partial_results = [1, 2, 3]
+        test_msg = "Map failed"
         with pytest.raises(MapError) as exc_info:
-            raise MapError("Map failed", partial_results)
+            raise MapError(test_msg, partial_results)
 
         assert exc_info.value.results == partial_results
 
@@ -73,8 +75,9 @@ class TestLoopDetectedError:
 
     def test_loop_detected_error_can_be_raised(self):
         """Test that LoopDetectedError can be raised with message."""
+        test_msg = "cycle detected"
         with pytest.raises(LoopDetectedError, match="cycle detected"):
-            raise LoopDetectedError("cycle detected")
+            raise LoopDetectedError(test_msg)
 
 
 class TestNonExistentNodeError:
@@ -86,8 +89,9 @@ class TestNonExistentNodeError:
 
     def test_non_existent_node_error_can_be_raised(self):
         """Test that NonExistentNodeError can be raised with message."""
+        test_msg = "node not found"
         with pytest.raises(NonExistentNodeError, match="node not found"):
-            raise NonExistentNodeError("node not found")
+            raise NonExistentNodeError(test_msg)
 
 
 class TestNodeAlreadyExistsError:
@@ -99,8 +103,9 @@ class TestNodeAlreadyExistsError:
 
     def test_node_already_exists_error_can_be_raised(self):
         """Test that NodeAlreadyExistsError can be raised with message."""
+        test_msg = "node exists"
         with pytest.raises(NodeAlreadyExistsError, match="node exists"):
-            raise NodeAlreadyExistsError("node exists")
+            raise NodeAlreadyExistsError(test_msg)
 
 
 class TestCannotInsertToPlaceholderNodeError:
