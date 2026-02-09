@@ -5,7 +5,6 @@ include:
 - .github/
 - .rhiza/
 - book/
-- tests/
 - .editorconfig
 # let's not include the pre-commit-config.yaml in an update
 # - .pre-commit-config.yaml
@@ -14,7 +13,6 @@ include:
 exclude:
 - .github/workflows/rhiza_docker.yml
 - .github/workflows/rhiza_security.yml
-- .github/dependabot.yml
 - .rhiza/docs
 - .rhiza/make.d
 - book/marimo/notebooks/
