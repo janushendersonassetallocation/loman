@@ -1,23 +1,11 @@
 template-repository: jebel-quant/rhiza
 template-branch: main
-
-templates:
-  - github
-  - core
-  - devcontainer
-  - book
-  - tests
-  - marimo
-  - presentation
-  
-#include:
-
-#- .devcontainer/
-#- .github/
-#- .rhiza/
-#- book/
-#- tests/
-#- .editorconfig
+include:
+- .devcontainer/
+- .github/
+- .rhiza/
+- book/
+- .editorconfig
 # let's not include the pre-commit-config.yaml in an update
 # - .pre-commit-config.yaml
 #- Makefile
@@ -26,7 +14,6 @@ templates:
 exclude:
 # - .github/workflows/rhiza_docker.yml
 - .github/workflows/rhiza_security.yml
-# - .github/dependabot.yml
 - .rhiza/docs
 - .rhiza/make.d/00-additional-deps.mk
 - book/marimo/notebooks/rhiza.py
