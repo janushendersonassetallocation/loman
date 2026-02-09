@@ -1,27 +1,45 @@
-.DS_Store
-_pdoc
-_book
-_tests
-_marimushka
+### Python template
+.idea
+.venv
+.ruff_cache
+
+### Don't expose API keys, etc.
+.env
+
 __marimo__
+
+_tests
+_book
+_pdoc
+_marimushka
+_mkdocs
+_benchmarks
+_jupyter
 
 # temp file used by Junie
 .output.txt
+
+# folder used for programs, e.g. uv, uvx, task, etc.
+bin
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
+# Generated presentation files
+presentation.html
+presentation.pdf
+*.pptx
+
 # C extensions
 *.so
 
-# folder used for task
-bin
+# .DS_Store
+.DS_Store
 
 # Distribution / packaging
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -34,15 +52,11 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+MANIFEST
 
 # Installer logs
 pip-log.txt
@@ -51,13 +65,18 @@ pip-delete-this-directory.txt
 # Unit test / coverage reports
 htmlcov/
 .tox/
+.nox/
 .coverage
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
-*,cover
+coverage.json
+*.cover
+*.py,cover
 .hypothesis/
+.pytest_cache/
+cover/
 
 # Translations
 *.mo
@@ -66,50 +85,16 @@ coverage.xml
 # Django stuff:
 *.log
 local_settings.py
+db.sqlite3
+db.sqlite3-journal
 
 # Flask stuff:
 instance/
 .webassets-cache
 
-# Scrapy stuff:
-.scrapy
+# Cython debug symbols
+cython_debug/
 
-# Sphinx documentation
-docs/_build/
+# Makefile
+local.mk
 
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# dotenv
-.env
-
-# virtualenv
-.venv
-venv/
-ENV/
-
-# Spyder project settings
-.spyderproject
-
-# Rope project settings
-.ropeproject
-
-# PyCharm project settings
-.idea
-.vscode
-
-# Other
-/MANIFEST
-/README.html

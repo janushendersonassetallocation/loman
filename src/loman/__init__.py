@@ -10,9 +10,13 @@ from loman.computeengine import C, Computation, block, calc_node, computation_fa
 from loman.consts import NodeTransformations, States
 from loman.exception import (
     CannotInsertToPlaceholderNodeError,
+    FittingError,
+    InvalidBlockTypeError,
     LoopDetectedError,
     MapError,
     NonExistentNodeError,
+    SerializationError,
+    ValidationError,
 )
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.visualization import GraphView
@@ -21,25 +25,29 @@ from loman.visualization import GraphView
 ComputationFactory = computation_factory
 
 __all__ = [
-    "util",
-    "viz",
     "C",
-    "Computation",
-    "computation_factory",
-    "ComputationFactory",  # Backward compatibility
-    "block",
-    "calc_node",
-    "input_node",
-    "node",
-    "NodeTransformations",
-    "States",
     "CannotInsertToPlaceholderNodeError",
+    "Computation",
+    "ComputationFactory",  # Backward compatibility
+    "FittingError",
+    "GraphView",
+    "InvalidBlockTypeError",
     "LoopDetectedError",
     "MapError",
-    "NonExistentNodeError",
     "Name",
     "Names",
     "NodeKey",
+    "NodeTransformations",
+    "NonExistentNodeError",
+    "SerializationError",
+    "States",
+    "ValidationError",
+    "block",
+    "calc_node",
+    "computation_factory",
+    "input_node",
+    "node",
     "to_nodekey",
-    "GraphView",
+    "util",
+    "viz",
 ]

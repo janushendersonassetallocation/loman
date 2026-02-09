@@ -287,7 +287,7 @@ def _(comp, loman, np):
     @loman.node(comp)
     def ps(n_losses, ts, n_obligors, p_def_conds):
         ps_dist = init_loss_distribution(n_losses, len(ts))
-        for i in range(n_obligors):
+        for _i in range(n_obligors):
             update_loss_distribution(ps_dist, p_def_conds, 1)
         return ps_dist
 
@@ -421,7 +421,7 @@ def _(comp, np):
     default_leg_pv_uncond = 0
     coupon_leg_1_pv_uncond = 0
     coupon_leg_pv_uncond = 0
-    for M, w in zip(Ms, ws):
+    for M, w in zip(Ms, ws, strict=False):
         comp.insert("M", M)
         comp.compute_all()
         default_leg_pv_uncond += w * comp.v.default_leg_pv
@@ -471,7 +471,7 @@ def _(comp, np, plt):
     Ms_dist *= np.sqrt(2)
     ws_dist /= np.sqrt(np.pi)
     ps_uncond = None
-    for M_dist, w_dist in zip(Ms_dist, ws_dist):
+    for M_dist, w_dist in zip(Ms_dist, ws_dist, strict=False):
         comp.insert("M", M_dist)
         comp.compute_all()
         if ps_uncond is None:

@@ -387,7 +387,8 @@ class TestUtilCoverage:
 
         class BadComparison:
             def __eq__(self, other):
-                raise ValueError("Cannot compare")
+                msg = "Cannot compare"
+                raise ValueError(msg)
 
         a = BadComparison()
         b = BadComparison()
@@ -450,7 +451,8 @@ class TestValueEqException:
 
         class RaisingObj:
             def __eq__(self, other):
-                raise ValueError("Cannot compare")
+                msg = "Cannot compare"
+                raise ValueError(msg)
 
         obj1 = RaisingObj()
         obj2 = RaisingObj()  # Different object, so a is b is False
@@ -477,7 +479,8 @@ class TestValueEqException:
             """Object that raises on comparison but is not ndarray-like."""
 
             def __eq__(self, other):
-                raise ValueError("Cannot compare")
+                msg = "Cannot compare"
+                raise ValueError(msg)
 
         obj1 = NonArrayRaisingObj()
         obj2 = NonArrayRaisingObj()
