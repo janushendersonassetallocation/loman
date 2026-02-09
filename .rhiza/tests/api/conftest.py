@@ -24,11 +24,17 @@ from test_utils import MAKE
 # These are now located in .rhiza/make.d/ directory
 SPLIT_MAKEFILES = [
     ".rhiza/rhiza.mk",
-    ".rhiza/make.d/01-test.mk",
-    ".rhiza/make.d/02-book.mk",
-    ".rhiza/make.d/03-marimo.mk",
-    ".rhiza/make.d/04-presentation.mk",
-    ".rhiza/make.d/05-github.mk",
+    ".rhiza/make.d/bootstrap.mk",
+    ".rhiza/make.d/quality.mk",
+    ".rhiza/make.d/releasing.mk",
+    ".rhiza/make.d/test.mk",
+    ".rhiza/make.d/book.mk",
+    ".rhiza/make.d/marimo.mk",
+    ".rhiza/make.d/presentation.mk",
+    ".rhiza/make.d/github.mk",
+    ".rhiza/make.d/agentic.mk",
+    ".rhiza/make.d/docker.mk",
+    ".rhiza/make.d/docs.mk",
 ]
 
 
