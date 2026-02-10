@@ -34,7 +34,7 @@ Directory for modular Makefile extensions. Files are auto-loaded in numeric orde
 Shell scripts for Rhiza operations (e.g., `release.sh`). POSIX-compliant for portability.
 
 ### `.rhiza/utils/`
-Python utility scripts (e.g., `version_matrix.py` for CI matrix generation).
+Python utility scripts for Rhiza operations.
 
 ### `.rhiza/template.yml`
 Configuration file defining which files to sync from upstream, include/exclude patterns, and sync behavior.
