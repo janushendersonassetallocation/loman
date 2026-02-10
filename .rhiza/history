@@ -39,6 +39,7 @@
 .rhiza/make.d/README.md
 .rhiza/make.d/agentic.mk
 .rhiza/make.d/book.mk
+.rhiza/make.d/bootstrap.mk
 .rhiza/make.d/custom-env.mk
 .rhiza/make.d/custom-task.mk
 .rhiza/make.d/docs.mk
