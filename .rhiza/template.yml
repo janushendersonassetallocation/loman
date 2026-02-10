@@ -9,6 +9,9 @@ templates:
   - marimo
   - tests
 
+include:
+  - .rhiza/make.d/quality.mk
+
 #include:
 #- .devcontainer/
 #- .github/

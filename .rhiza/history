@@ -44,6 +44,7 @@
 .rhiza/make.d/docs.mk
 .rhiza/make.d/github.mk
 .rhiza/make.d/marimo.mk
+.rhiza/make.d/quality.mk
 .rhiza/make.d/test.mk
 .rhiza/requirements/README.md
 .rhiza/requirements/docs.txt
