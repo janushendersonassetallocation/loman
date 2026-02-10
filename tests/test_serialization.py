@@ -44,20 +44,23 @@ TEST_TRANSFORMED_OBJS: list[object] = [
 ]
 
 
-@pytest.mark.parametrize("obj,obj_dict", zip(TEST_OBJS, TEST_TRANSFORMED_OBJS))
+@pytest.mark.parametrize(("obj", "obj_dict"), zip(TEST_OBJS, TEST_TRANSFORMED_OBJS, strict=False))
 def test_serialization(obj, obj_dict):
+    """Test serialization."""
     u = Transformer()
     assert u.to_dict(obj) == obj_dict
 
 
-@pytest.mark.parametrize("obj,obj_dict", zip(TEST_OBJS, TEST_TRANSFORMED_OBJS))
+@pytest.mark.parametrize(("obj", "obj_dict"), zip(TEST_OBJS, TEST_TRANSFORMED_OBJS, strict=False))
 def test_deserialization(obj, obj_dict):
+    """Test deserialization."""
     u = Transformer()
     assert u.from_dict(obj_dict) == obj
 
 
 @pytest.mark.parametrize("obj", TEST_OBJS)
 def test_serialization_roundtrip(obj):
+    """Test serialization roundtrip."""
     u = Transformer()
     d = u.to_dict(obj)
     obj_roundtrip = u.from_dict(d)
@@ -68,24 +71,31 @@ TEST_OBJS_COMPLEX: list[object] = [complex(1, 2), {"a": 1, "b": complex(1, 2)}]
 
 
 class ComplexTransformer(CustomTransformer):
+    """Custom transformer for complex numbers."""
+
     @property
     def name(self):
+        """Return transformer name."""
         return "complex"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict:
+        """Convert complex to dict."""
         assert isinstance(o, complex)
         return {"real": o.real, "imag": o.imag}
 
     def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        """Convert dict to complex."""
         return complex(d["real"], d["imag"])
 
     @property
     def supported_direct_types(self):
+        """Return supported types."""
         return [complex]
 
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_COMPLEX)
 def test_serialization_roundtrip_complex_transformer(obj):
+    """Test serialization roundtrip complex transformer."""
     u = Transformer()
     u.register(ComplexTransformer())
     obj_dict = u.to_dict(obj)
@@ -94,18 +104,24 @@ def test_serialization_roundtrip_complex_transformer(obj):
 
 
 class TransformableExample(Transformable):
+    """Example class implementing Transformable for testing."""
+
     def __init__(self, a, b):
+        """Initialize with two values."""
         self.a = a
         self.b = b
 
     def __eq__(self, other):
+        """Check equality with another TransformableExample."""
         return self.a == other.a and self.b == other.b
 
     def to_dict(self, transformer: "Transformer") -> dict:
+        """Convert to dict."""
         return {"a": self.a, "b": self.b}
 
     @classmethod
     def from_dict(cls, transformer: "Transformer", d: dict) -> object:
+        """Create from dict."""
         return cls(d["a"], d["b"])
 
 
@@ -114,6 +130,7 @@ TEST_OBJS_TRANSFORMABLE: list[object] = [TransformableExample("Hello", "world")]
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_TRANSFORMABLE)
 def test_serialization_roundtrip_transformable(obj):
+    """Test serialization roundtrip transformable."""
     u = Transformer()
     u.register(TransformableExample)
     obj_dict = u.to_dict(obj)
@@ -123,6 +140,8 @@ def test_serialization_roundtrip_transformable(obj):
 
 @attrs.define
 class AttrsExample:
+    """Example attrs class for testing serialization."""
+
     a: int
     b: str
 
@@ -134,6 +153,7 @@ TEST_OBJS_ATTRS: list[object] = [
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_ATTRS)
 def test_serialization_roundtrip_attrs(obj):
+    """Test serialization roundtrip attrs."""
     u = Transformer()
     u.register(AttrsExample)
     obj_dict = u.to_dict(obj)
@@ -143,6 +163,8 @@ def test_serialization_roundtrip_attrs(obj):
 
 @dataclass
 class DataClassExample:
+    """Example dataclass for testing serialization."""
+
     a: int
     b: str
 
@@ -154,6 +176,7 @@ TEST_OBJS_DATACLASS: list[object] = [
 
 @pytest.mark.parametrize("obj", TEST_OBJS + TEST_OBJS_DATACLASS)
 def test_serialization_roundtrip_dataclass(obj):
+    """Test serialization roundtrip dataclass."""
     u = Transformer()
     u.register(DataClassExample)
     obj_dict = u.to_dict(obj)
@@ -163,10 +186,13 @@ def test_serialization_roundtrip_dataclass(obj):
 
 @attrs.define
 class AttrsRecursiveExample:
+    """Recursive attrs example for testing nested serialization."""
+
     a: object
 
 
 def test_serialization_roundtrip_attrs_recursive():
+    """Test serialization roundtrip attrs recursive."""
     u = Transformer()
     u.register(AttrsRecursiveExample)
     obj = AttrsRecursiveExample(AttrsRecursiveExample(AttrsRecursiveExample(3)))
@@ -177,10 +203,13 @@ def test_serialization_roundtrip_attrs_recursive():
 
 @dataclass
 class DataClassRecursiveExample:
+    """Recursive dataclass example for testing nested serialization."""
+
     a: object
 
 
 def test_serialization_roundtrip_dataclass_recursive():
+    """Test serialization roundtrip dataclass recursive."""
     u = Transformer()
     u.register(DataClassRecursiveExample)
     obj = DataClassRecursiveExample(DataClassRecursiveExample(DataClassRecursiveExample(3)))
@@ -190,6 +219,7 @@ def test_serialization_roundtrip_dataclass_recursive():
 
 
 def test_serialization_strictness():
+    """Test serialization strictness."""
     u = Transformer(strict=True)
     with pytest.raises(UntransformableTypeException):
         u.to_dict(TEST_OBJS_COMPLEX[0])
@@ -203,6 +233,7 @@ def test_serialization_strictness():
 
 
 def test_deserialization_strictness():
+    """Test deserialization strictness."""
     u = Transformer(strict=True)
     u.register(ComplexTransformer())
     v = Transformer(strict=True)
@@ -227,6 +258,7 @@ def test_deserialization_strictness():
 
 
 def test_nd_array_transformer():
+    """Test nd array transformer."""
     t = Transformer(strict=False)
     t.register(NdArrayTransformer())
     arr = np.random.randn(4, 3, 2)
@@ -236,27 +268,39 @@ def test_nd_array_transformer():
 
 
 class Foo:
+    """Base test class for transformer subtype testing."""
+
     pass
 
 
 class FooA(Foo):
+    """Subclass A of Foo for testing."""
+
     pass
 
 
 class FooB(Foo):
+    """Subclass B of Foo for testing."""
+
     pass
 
 
 class FooUnregistered(Foo):
+    """Unregistered subclass of Foo for testing."""
+
     pass
 
 
 class FooTransformer(CustomTransformer):
+    """Custom transformer for Foo and subclasses."""
+
     @property
     def name(self) -> str:
+        """Return transformer name."""
         return "Foo"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict:
+        """Convert Foo object to dict."""
         if type(o) is Foo:
             return {"v": "Foo"}
         elif type(o) is FooA:
@@ -264,9 +308,11 @@ class FooTransformer(CustomTransformer):
         elif type(o) is FooB:
             return {"v": "FooB"}
         else:
-            raise ValueError(f"Cannot transform {o}")
+            msg = f"Cannot transform {o}"
+            raise ValueError(msg)
 
     def from_dict(self, transformer: "Transformer", d: dict) -> object:
+        """Convert dict to Foo object."""
         v = d["v"]
         if v == "Foo":
             return Foo()
@@ -275,14 +321,17 @@ class FooTransformer(CustomTransformer):
         elif v == "FooB":
             return FooB()
         else:
-            raise ValueError(f"Cannot transform {v}")
+            msg = f"Cannot transform {v}"
+            raise ValueError(msg)
 
     @property
     def supported_subtypes(self) -> Iterable[type]:
+        """Return supported subtypes."""
         return [Foo]
 
 
 def test_serialization_roundtrip_transformer_subtypes():
+    """Test serialization roundtrip transformer subtypes."""
     u = Transformer()
     u.register(FooTransformer())
     o = Foo()
@@ -303,7 +352,7 @@ def test_serialization_roundtrip_transformer_subtypes():
     o2 = u.from_dict(d)
     assert type(o2) is FooB
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Cannot transform"):
         u.to_dict(FooUnregistered())
 
 
@@ -313,6 +362,8 @@ def test_serialization_roundtrip_transformer_subtypes():
 
 
 def test_dill_serialization():
+    """Test dill serialization."""
+
     def b(x):
         return x + 1
 
@@ -343,6 +394,7 @@ def test_dill_serialization():
 
 
 def test_dill_serialization_skip_flag():
+    """Test dill serialization skip flag."""
     comp = Computation()
     comp.add_node("a")
     comp.add_node("b", lambda a: a + 1, serialize=False)
@@ -370,6 +422,7 @@ def test_dill_serialization_skip_flag():
 
 
 def test_no_serialize_flag():
+    """Test no serialize flag."""
     comp = Computation()
     comp.add_node("a", serialize=False)
     comp.add_node("b", lambda a: a + 1)
@@ -385,6 +438,8 @@ def test_no_serialize_flag():
 
 
 def test_serialize_nested_loman():
+    """Test serialize nested loman."""
+
     @ComputationFactory
     class CompInner:
         a = input_node(value=3)
@@ -418,6 +473,8 @@ def test_serialize_nested_loman():
 
 
 def test_roundtrip_old_dill():
+    """Test roundtrip old dill."""
+
     def b(x):
         return x + 1
 
@@ -448,14 +505,21 @@ def test_roundtrip_old_dill():
 
 
 class UnserializableObject:
+    """Test class that cannot be serialized."""
+
     def __init__(self):
+        """Initialize with test data."""
         self.data = "This is some data"
 
     def __getstate__(self):
-        raise TypeError(f"{self.__class__.__name__} is not serializable")
+        """Raise error when trying to serialize."""
+        msg = f"{self.__class__.__name__} is not serializable"
+        raise TypeError(msg)
 
 
 def test_serialize_nested_loman_with_unserializable_nodes():
+    """Test serialize nested loman with unserializable nodes."""
+
     @ComputationFactory
     class CompInner:
         a = input_node(value=3)
@@ -478,8 +542,8 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     outer.insert("COMP", inner)
     outer.compute_all()
 
+    f = io.BytesIO()
     with pytest.raises(TypeError):
-        f = io.BytesIO()
         outer.write_dill(f)
 
     outer.v.COMP.clear_tag("unserializable", "__serialize__")
@@ -602,7 +666,7 @@ class TestTransformerCoverage:
         """Test from_dict with unexpected type raises Exception."""
         t = Transformer()
         # Pass something that's not str/None/bool/int/float/list/dict
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match=r".*"):  # Intentionally broad
             t.from_dict(object())
 
 
