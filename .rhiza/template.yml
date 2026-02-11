@@ -9,12 +9,5 @@ templates:
   - marimo
   - tests
 
-include:
-  - .rhiza/make.d/quality.mk
-  - .rhiza/make.d/bootstrap.mk
-  - .rhiza/make.d/releasing.mk
-
 exclude:
   - book/marimo/notebooks/rhiza.py
-  - .rhiza/tests/integration/test_lfs.py
-  - .rhiza/tests/structure/test_lfs_structure.py

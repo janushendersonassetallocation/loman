@@ -29,7 +29,7 @@ test: install ## run all tests
 	fi; \
 	@mkdir -p _tests/html-coverage _tests/html-report; \
 	if [ -d ${SOURCE_FOLDER} ]; then \
-	  ${VENV}/bin/python -m pytest \
+	  ${UV_BIN} run pytest \
 	  --ignore=${TESTS_FOLDER}/benchmarks \
 	  --cov=${SOURCE_FOLDER} \
 	  --cov-report=term \
@@ -39,7 +39,7 @@ test: install ## run all tests
 	  --html=_tests/html-report/report.html; \
 	else \
 	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, running tests without coverage${RESET}\n"; \
-	  ${VENV}/bin/python -m pytest \
+	  ${UV_BIN} run pytest \
 	  --ignore=${TESTS_FOLDER}/benchmarks \
 	  --html=_tests/html-report/report.html; \
 	fi
@@ -73,11 +73,12 @@ benchmark: install ## run performance benchmarks
 	@if [ -d "${TESTS_FOLDER}/benchmarks" ]; then \
 	  printf "${BLUE}[INFO] Running performance benchmarks...${RESET}\n"; \
 	  ${UV_BIN} pip install pytest-benchmark==5.2.3 pygal==3.1.0; \
-	  ${VENV}/bin/python -m pytest "${TESTS_FOLDER}/benchmarks/" \
+	  mkdir -p _tests/benchmarks; \
+	  ${UV_BIN} run pytest "${TESTS_FOLDER}/benchmarks/" \
 	  		--benchmark-only \
-			--benchmark-histogram=tests/test_rhiza/benchmarks/benchmarks \
-			--benchmark-json=tests/test_rhiza/benchmarks/benchmarks.json; \
-	  ${VENV}/bin/python tests/test_rhiza/benchmarks/analyze_benchmarks.py ; \
+			--benchmark-histogram=_tests/benchmarks/histogram \
+			--benchmark-json=_tests/benchmarks/results.json; \
+	  ${UVX_BIN} "rhiza-tools>=0.2.3" analyze-benchmarks --benchmarks-json _tests/benchmarks/results.json --output-html _tests/benchmarks/report.html; \
 	else \
 	  printf "${YELLOW}[WARN] Benchmarks folder not found, skipping benchmarks${RESET}\n"; \
 	fi
@@ -88,8 +89,7 @@ benchmark: install ## run performance benchmarks
 docs-coverage: install ## check documentation coverage with interrogate
 	@if [ -d "${SOURCE_FOLDER}" ]; then \
 	  printf "${BLUE}[INFO] Checking documentation coverage in ${SOURCE_FOLDER}...${RESET}\n"; \
-	  ${VENV}/bin/python -m interrogate -vv ${SOURCE_FOLDER}; \
+	  ${UV_BIN} run interrogate -vv ${SOURCE_FOLDER}; \
 	else \
 	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping docs-coverage${RESET}\n"; \
 	fi
-

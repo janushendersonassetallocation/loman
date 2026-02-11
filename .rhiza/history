@@ -64,10 +64,12 @@
 .rhiza/tests/conftest.py
 .rhiza/tests/deps/test_dependency_health.py
 .rhiza/tests/integration/test_book_targets.py
+.rhiza/tests/integration/test_lfs.py
 .rhiza/tests/integration/test_marimushka.py
 .rhiza/tests/integration/test_notebook_execution.py
 .rhiza/tests/integration/test_release.py
 .rhiza/tests/integration/test_test_mk.py
+.rhiza/tests/structure/test_lfs_structure.py
 .rhiza/tests/structure/test_project_layout.py
 .rhiza/tests/structure/test_requirements.py
 .rhiza/tests/sync/conftest.py
