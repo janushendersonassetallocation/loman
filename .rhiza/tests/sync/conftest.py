@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
 
-# Import from test_utils instead of relative import
-from test_utils import setup_rhiza_git_repo
+tests_root = Path(__file__).resolve().parents[1]
+if str(tests_root) not in sys.path:
+    sys.path.insert(0, str(tests_root))
+
+from test_utils import run_make, setup_rhiza_git_repo, strip_ansi  # noqa: E402, F401
 
 
 @pytest.fixture(autouse=True)
@@ -35,6 +39,26 @@ def setup_sync_env(logger, root, tmp_path: Path):
     # Copy core Rhiza Makefiles and version file
     (tmp_path / ".rhiza").mkdir(exist_ok=True)
     shutil.copy(root / ".rhiza" / "rhiza.mk", tmp_path / ".rhiza" / "rhiza.mk")
+
+    # Copy split Makefiles from make.d directory
+    split_makefiles = [
+        "bootstrap.mk",
+        "quality.mk",
+        "releasing.mk",
+        "test.mk",
+        "book.mk",
+        "marimo.mk",
+        "presentation.mk",
+        "github.mk",
+        "agentic.mk",
+        "docker.mk",
+        "docs.mk",
+    ]
+    (tmp_path / ".rhiza" / "make.d").mkdir(parents=True, exist_ok=True)
+    for mk_file in split_makefiles:
+        source_path = root / ".rhiza" / "make.d" / mk_file
+        if source_path.exists():
+            shutil.copy(source_path, tmp_path / ".rhiza" / "make.d" / mk_file)
 
     # Copy .rhiza-version if it exists
     if (root / ".rhiza" / ".rhiza-version").exists():
