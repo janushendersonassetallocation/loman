@@ -130,17 +130,20 @@ def test_minimal_setup_works(logger, setup_api_env):
 
 
 def test_extension_mechanism(logger, setup_api_env):
-    """Test that .rhiza/make.d/*.mk files are included."""
-    ext_file = setup_api_env / ".rhiza" / "make.d" / "50-custom.mk"
-    ext_file.write_text("""
-.PHONY: custom-target
+    """Test that custom targets can be added in the root Makefile."""
+    # Add a custom target to the root Makefile (before include line)
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    # Insert custom target before the include line
+    new_content = (
+        """.PHONY: custom-target
 custom-target:
 	@echo "Running custom target"
-""")
 
-    # Verify the target is listed in help (if we were parsing help, but running it is better)
-    # Note: make -n might not show @echo commands if they are silent,
-    # but here we just want to see if make accepts the target.
+"""
+        + original
+    )
+    makefile.write_text(new_content)
 
     result = run_make(logger, ["custom-target"], dry_run=False)
     assert result.returncode == 0
@@ -186,15 +189,21 @@ pre-sync::
 
 
 def test_hook_execution_order(logger, setup_api_env):
-    """Define hooks and verify execution order."""
-    # Create an extension that defines visible hooks (using double-colon)
-    (setup_api_env / ".rhiza" / "make.d" / "hooks.mk").write_text("""
-pre-sync::
+    """Define hooks in root Makefile and verify execution order."""
+    # Add hooks to root Makefile (before include line)
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        """pre-sync::
 	@echo "STARTING_SYNC"
 
 post-sync::
 	@echo "FINISHED_SYNC"
-""")
+
+"""
+        + original
+    )
+    makefile.write_text(new_content)
 
     result = run_make(logger, ["sync"], dry_run=False)
     assert result.returncode == 0
@@ -211,21 +220,150 @@ post-sync::
 
 
 def test_override_core_target(logger, setup_api_env):
-    """Verify that a repo extension can override a core target (with warning)."""
-    # Override 'fmt' which is defined in Makefile.rhiza
-    (setup_api_env / ".rhiza" / "make.d" / "override.mk").write_text("""
+    """Verify that the root Makefile can override a core target (with warning)."""
+    # Override 'fmt' which is defined in quality.mk
+    # Add override AFTER the include line so it takes precedence
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        original
+        + """
 fmt:
 	@echo "CUSTOM_FMT"
-""")
+"""
+    )
+    makefile.write_text(new_content)
 
     result = run_make(logger, ["fmt"], dry_run=False)
     assert result.returncode == 0
-    # It should run the custom one because .rhiza/make.d is included later
+    # It should run the custom one because it's defined after the include
     assert "CUSTOM_FMT" in result.stdout
-    # It should NOT run the original one (which runs pre-commit)
-    # The original one has "@${UV_BIN} run pre-commit..."
-    # We can check that the output doesn't look like pre-commit output or just check presence of CUSTOM_FMT
 
     # We expect a warning on stderr about overriding
     assert "warning: overriding" in result.stderr.lower()
     assert "fmt" in result.stderr.lower()
+
+
+def test_global_variable_override(logger, setup_api_env):
+    """Test that global variables can be overridden in the root Makefile.
+
+    This tests the pattern documented in CUSTOMIZATION.md:
+    Set variables before the include line to override defaults.
+    """
+    # Add variable override to root Makefile (before include line)
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        """# Override default coverage threshold (defaults to 90)
+COVERAGE_FAIL_UNDER := 42
+export COVERAGE_FAIL_UNDER
+
+"""
+        + original
+    )
+    makefile.write_text(new_content)
+
+    result = run_make(logger, ["print-COVERAGE_FAIL_UNDER"], dry_run=False)
+    assert result.returncode == 0
+    assert "42" in result.stdout
+
+
+def test_pre_install_hook(logger, setup_api_env):
+    """Test that pre-install hooks are executed before install.
+
+    This tests the hook pattern documented in CUSTOMIZATION.md.
+    """
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        """pre-install::
+	@echo "[[PRE_INSTALL_HOOK]]"
+
+"""
+        + original
+    )
+    makefile.write_text(new_content)
+
+    # Run install in dry-run mode to avoid actual installation
+    result = run_make(logger, ["install"], dry_run=True)
+    assert result.returncode == 0
+    # In dry-run mode, the echo command is printed (not executed)
+    assert "PRE_INSTALL_HOOK" in result.stdout
+
+
+def test_post_install_hook(logger, setup_api_env):
+    """Test that post-install hooks are executed after install.
+
+    This tests the hook pattern documented in CUSTOMIZATION.md.
+    """
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        """post-install::
+	@echo "[[POST_INSTALL_HOOK]]"
+
+"""
+        + original
+    )
+    makefile.write_text(new_content)
+
+    # Run install in dry-run mode
+    result = run_make(logger, ["install"], dry_run=True)
+    assert result.returncode == 0
+    assert "POST_INSTALL_HOOK" in result.stdout
+
+
+def test_multiple_hooks_accumulate(logger, setup_api_env):
+    """Test that multiple hook definitions accumulate rather than override.
+
+    This is a key feature of double-colon rules: the root Makefile and
+    local.mk can both add to the same hook without conflicts.
+    """
+    # Add hook in root Makefile
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        """pre-sync::
+	@echo "[[HOOK_A]]"
+
+"""
+        + original
+    )
+    makefile.write_text(new_content)
+
+    # Add another hook in local.mk
+    (setup_api_env / "local.mk").write_text("""pre-sync::
+	@echo "[[HOOK_B]]"
+""")
+
+    result = run_make(logger, ["sync"], dry_run=False)
+    assert result.returncode == 0
+    # Both hooks should be present
+    assert "[[HOOK_A]]" in result.stdout
+    assert "[[HOOK_B]]" in result.stdout
+
+
+def test_variable_override_before_include(logger, setup_api_env):
+    """Test that variables set before include take precedence.
+
+    Variables defined in the root Makefile before the include line
+    should be available throughout the build.
+    """
+    # Set a variable and use it in a target (before include)
+    makefile = setup_api_env / "Makefile"
+    original = makefile.read_text()
+    new_content = (
+        """MY_CUSTOM_VAR := hello
+
+.PHONY: show-var
+show-var:
+	@echo "MY_VAR=$(MY_CUSTOM_VAR)"
+
+"""
+        + original
+    )
+    makefile.write_text(new_content)
+
+    result = run_make(logger, ["show-var"], dry_run=False)
+    assert result.returncode == 0
+    assert "MY_VAR=hello" in result.stdout
