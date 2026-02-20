@@ -27,7 +27,7 @@ class TestLFSTemplateStructure:
 
     def test_lfs_documentation_exists(self, root, lfs_makefile):
         """LFS documentation should exist."""
-        lfs_doc = root / "docs" / "LFS.md"
+        lfs_doc = root / ".rhiza" / "docs" / "LFS.md"
         assert lfs_doc.exists(), "LFS.md documentation not found"
 
     def test_lfs_makefile_has_targets(self, lfs_makefile):
@@ -66,7 +66,7 @@ class TestLFSTemplateStructure:
 
     def test_lfs_documentation_has_sections(self, root, lfs_makefile):
         """LFS documentation should have all expected sections."""
-        lfs_doc = root / "docs" / "LFS.md"
+        lfs_doc = root / ".rhiza" / "docs" / "LFS.md"
         # Since test_lfs_documentation_exists checks existence, we assume it exists if passed
         if not lfs_doc.exists():
             pytest.skip("LFS.md not found")
@@ -87,7 +87,7 @@ class TestLFSTemplateStructure:
 
     def test_lfs_documentation_describes_all_targets(self, root, lfs_makefile):
         """LFS documentation should describe all make targets."""
-        lfs_doc = root / "docs" / "LFS.md"
+        lfs_doc = root / ".rhiza" / "docs" / "LFS.md"
         if not lfs_doc.exists():
             pytest.skip("LFS.md not found")
 
