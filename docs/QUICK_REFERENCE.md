@@ -15,11 +15,13 @@ A concise reference for common Rhiza operations.
 
 | Command | Description |
 |---------|-------------|
+| `make publish` | Bump version, create tag and push in one step |
 | `make bump` | Bump version (prompts for major/minor/patch) |
 | `make bump BUMP=patch` | Bump patch version directly |
 | `make bump BUMP=minor` | Bump minor version directly |
 | `make bump BUMP=major` | Bump major version directly |
 | `make release` | Create and push release tag |
+| `make release-status` | Show release workflow status and latest release |
 
 ## Code Quality
 
@@ -34,6 +36,19 @@ A concise reference for common Rhiza operations.
 | Command | Description |
 |---------|-------------|
 | `make sync` | Sync templates from upstream Rhiza |
+
+## GitHub Agentic Workflows (gh-aw)
+
+| Command | Description |
+|---------|-------------|
+| `make install-gh-aw` | Install the gh-aw CLI extension |
+| `make gh-aw-init` | Initialize repository for gh-aw |
+| `make gh-aw-setup` | Guided setup for secrets and engine configuration |
+| `make gh-aw-compile` | Compile workflow `.md` files into `.lock.yml` GitHub Actions |
+| `make gh-aw-validate` | Validate that `.lock.yml` files are up-to-date |
+| `make gh-aw-status` | Show status of all agentic workflows |
+| `make gh-aw-run WORKFLOW=<name>` | Run a specific agentic workflow locally |
+| `make gh-aw-logs` | Show logs for recent agentic workflow runs |
 
 ## Running Tests
 
@@ -60,7 +75,6 @@ uv run pytest -v -s
 │   ├── 00-19*.mk     # Configuration
 │   ├── 20-79*.mk     # Task definitions
 │   └── 80-99*.mk     # Hook implementations
-├── scripts/          # Shell scripts (release.sh)
 ├── utils/            # Python utilities
 └── template.yml      # Sync configuration
 ```
