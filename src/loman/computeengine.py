@@ -13,10 +13,10 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, BinaryIO
 
-import decorator  # type: ignore[import-untyped]
-import dill  # type: ignore[import-untyped]
-import networkx as nx  # type: ignore[import-untyped]
-import pandas as pd  # type: ignore[import-untyped]
+import decorator
+import dill
+import networkx as nx
+import pandas as pd
 
 from .compat import get_signature
 from .consts import EdgeAttributes, NodeAttributes, NodeTransformations, States, SystemTags
@@ -91,7 +91,7 @@ def node(
     def inner(f: Callable[..., Any]) -> Callable[..., Any]:
         """Inner decorator that registers the function as a node."""
         if name is None:
-            comp.add_node(f.__name__, f, *args, **kw)
+            comp.add_node(f.__name__, f, *args, **kw)  # type: ignore[attr-defined]
         else:
             comp.add_node(name, f, *args, **kw)
         result: Callable[..., Any] = decorator.decorate(f, _node)
@@ -153,7 +153,7 @@ class CalcNode(Node):
         if ignore_self:
             signature = get_signature(self.f)
             if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
-                f = f.__get__(obj, obj.__class__)
+                f = f.__get__(obj, obj.__class__)  # type: ignore[attr-defined]
         if "ignore_self" in kwds:
             del kwds["ignore_self"]
         comp.add_node(name, f, **kwds)
@@ -691,7 +691,7 @@ class Computation:
                 msg = "new_name must not be set if rename_node is passed a dictionary"
                 raise ValueError(msg)
             else:
-                name_mapping = dict(old_name)
+                name_mapping = dict(old_name)  # type: ignore[arg-type]
         else:
             LOG.debug(f"Renaming node {old_name} to {new_name}")
             old_node_key = to_nodekey(old_name)
@@ -1587,7 +1587,7 @@ class Computation:
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Restore computation from serialized state."""
-        self.__init__()  # type: ignore[misc]
+        self.__init__()
         self.dag = state["dag"]
         self._refresh_maps()
 
@@ -1620,7 +1620,7 @@ class Computation:
                 dill.dump(obj, file_)
         finally:
             self.__class__.__getstate__ = original_getstate  # type: ignore[method-assign]
-            self.__class__.__setstate__ = original_setstate  # type: ignore[method-assign]
+            self.__class__.__setstate__ = original_setstate
 
     def write_dill(self, file_: str | BinaryIO) -> None:
         """Serialize a computation to a file or file-like object.

@@ -344,7 +344,7 @@ class NdArrayTransformer(CustomTransformer):
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Convert numpy array to dictionary with shape, dtype, and data."""
         assert isinstance(o, np.ndarray)  # noqa: S101
-        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}
+        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}  # type: ignore[arg-type]
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct numpy array from dictionary."""

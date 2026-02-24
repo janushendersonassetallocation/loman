@@ -10,10 +10,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import matplotlib as mpl
-import networkx as nx  # type: ignore[import-untyped]
+import networkx as nx
 import numpy as np
-import pandas as pd  # type: ignore[import-untyped]
-import pydotplus  # type: ignore[import-untyped]
+import pandas as pd
+import pydotplus
 from matplotlib.colors import Colormap
 
 import loman
@@ -68,7 +68,7 @@ class NodeFormatter(ABC):
         colors = colors.lower()
         if colors == "state":
             state_cmap = cmap if isinstance(cmap, dict) else None
-            node_formatters.append(ColorByState(state_cmap))
+            node_formatters.append(ColorByState(state_cmap))  # type: ignore[arg-type]
         elif colors == "timing":
             timing_cmap = cmap if isinstance(cmap, Colormap) else None
             node_formatters.append(ColorByTiming(timing_cmap))
@@ -431,16 +431,16 @@ class GraphView:
         """Generate SVG representation of the visualization."""
         if self.viz_dot is None:
             return None
-        svg_bytes: bytes = self.viz_dot.create_svg()
+        svg_bytes: bytes = self.viz_dot.create_svg()  # type: ignore[attr-defined]
         return svg_bytes.decode("utf-8")
 
     def view(self) -> None:  # pragma: no cover
         """Open the visualization in a PDF viewer."""
         assert self.viz_dot is not None  # noqa: S101
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-            f.write(self.viz_dot.create_pdf())
+            f.write(self.viz_dot.create_pdf())  # type: ignore[attr-defined]
             if sys.platform == "win32":
-                os.startfile(f.name)  # pragma: no cover  # nosec B606  # noqa: S606  # type: ignore[attr-defined]
+                os.startfile(f.name)  # pragma: no cover  # nosec B606  # noqa: S606
             else:
                 subprocess.run(["open", f.name], check=False)  # pragma: no cover  # nosec B603 B607  # noqa: S603, S607
 

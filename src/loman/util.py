@@ -6,7 +6,7 @@ from collections.abc import Callable, Generator, Iterable
 from typing import Any, TypeVar
 
 import numpy as np
-import pandas as pd  # type: ignore[import-untyped]
+import pandas as pd
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -26,7 +26,7 @@ def apply1(
 def as_iterable(xs: T | Iterable[T]) -> Iterable[T]:
     """Convert input to iterable form if not already iterable."""
     if isinstance(xs, (types.GeneratorType, list, set)):
-        return xs
+        return xs  # type: ignore[return-value]
     return (xs,)  # type: ignore[return-value]
 
 
@@ -96,7 +96,7 @@ class AttributeView:
                 """Get attribute value from dictionary with apply1 support."""
                 return apply1(d.get, xs)
         else:
-            get_attribute = d.get  # type: ignore[assignment]
+            get_attribute = d.get
         return AttributeView(d.keys, get_attribute)
 
 
