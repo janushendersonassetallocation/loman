@@ -13,10 +13,10 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, BinaryIO
 
-import decorator  # type: ignore[import-untyped]
-import dill  # type: ignore[import-untyped]
-import networkx as nx  # type: ignore[import-untyped]
-import pandas as pd  # type: ignore[import-untyped]
+import decorator
+import dill
+import networkx as nx
+import pandas as pd
 
 from .compat import get_signature
 from .consts import EdgeAttributes, NodeAttributes, NodeTransformations, States, SystemTags
@@ -91,7 +91,7 @@ def node(
     def inner(f: Callable[..., Any]) -> Callable[..., Any]:
         """Inner decorator that registers the function as a node."""
         if name is None:
-            comp.add_node(f.__name__, f, *args, **kw)
+            comp.add_node(f.__name__, f, *args, **kw)  # type: ignore[attr-defined]
         else:
             comp.add_node(name, f, *args, **kw)
         result: Callable[..., Any] = decorator.decorate(f, _node)
@@ -153,7 +153,7 @@ class CalcNode(Node):
         if ignore_self:
             signature = get_signature(self.f)
             if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
-                f = f.__get__(obj, obj.__class__)
+                f = f.__get__(obj, obj.__class__)  # type: ignore[attr-defined]
         if "ignore_self" in kwds:
             del kwds["ignore_self"]
         comp.add_node(name, f, **kwds)
@@ -691,14 +691,14 @@ class Computation:
                 msg = "new_name must not be set if rename_node is passed a dictionary"
                 raise ValueError(msg)
             else:
-                name_mapping = dict(old_name)
+                name_mapping = dict(old_name)  # type: ignore[arg-type]
         else:
             LOG.debug(f"Renaming node {old_name} to {new_name}")
             old_node_key = to_nodekey(old_name)
             if not self.dag.has_node(old_node_key):
                 msg = f"Node {old_name} does not exist"
                 raise NonExistentNodeException(msg)
-            assert new_name is not None
+            assert new_name is not None  # noqa: S101
             new_node_key = to_nodekey(new_name)
             if self.dag.has_node(new_node_key):
                 msg = f"Node {new_name} already exists"
@@ -775,11 +775,10 @@ class Computation:
             msg = "Cannot insert into placeholder node. Use add_node to create the node first"
             raise CannotInsertToPlaceholderNodeException(msg)
 
-        if not force:
-            if state == States.UPTODATE:
-                current_value = self._value_one(name)
-                if value_eq(value, current_value):
-                    return
+        if not force and state == States.UPTODATE:
+            current_value = self._value_one(name)
+            if value_eq(value, current_value):
+                return
 
         self._set_state_and_value(node_key, States.UPTODATE, value)
         self._set_descendents(node_key, States.STALE)
@@ -997,12 +996,12 @@ class Computation:
         for param in self._get_parameter_data(node_key):
             if param.type == _ParameterType.ARG:
                 idx = param.name
-                assert isinstance(idx, int)
+                assert isinstance(idx, int)  # noqa: S101
                 while len(args) <= idx:
                     args.append(None)
                 args[idx] = param.value
             elif param.type == _ParameterType.KWD:
-                assert isinstance(param.name, str)
+                assert isinstance(param.name, str)  # noqa: S101
                 kwds[param.name] = param.value
             else:  # pragma: no cover
                 msg = f"Unexpected param type: {param.type}"
@@ -1029,7 +1028,7 @@ class Computation:
                 param_type, param_name = edge[EdgeAttributes.PARAM]
                 if param_type == _ParameterType.ARG:
                     idx = param_name
-                    assert isinstance(idx, int)
+                    assert isinstance(idx, int)  # noqa: S101
                     while len(res_args) <= idx:
                         res_args.append(None)
                     res_args[idx] = in_node_key.name
@@ -1050,10 +1049,7 @@ class Computation:
         def run(name: NodeKey) -> None:
             """Submit a node computation to an executor."""
             f, executor_name, args, kwds = self._get_func_args_kwds(name)
-            if executor_name is None:
-                executor = self.default_executor
-            else:
-                executor = self.executor_map[executor_name]
+            executor = self.default_executor if executor_name is None else self.executor_map[executor_name]
             fut = executor.submit(_eval_node, name, f, args, kwds, raise_exceptions)
             futs[fut] = name
 
@@ -1093,7 +1089,7 @@ class Computation:
                         if state == States.COMPUTABLE and n in node_keys_set:
                             run(n)
                 else:
-                    assert tb is not None
+                    assert tb is not None  # noqa: S101
                     self._set_error(node_key, exc, tb)
                 computed.add(node_key)
 
@@ -1211,10 +1207,7 @@ class Computation:
             return True
         if self.has_node(node_key):
             return True
-        for n in self.dag.nodes:
-            if n.is_descendent_of(node_key):
-                return True
-        return False
+        return any(n.is_descendent_of(node_key) for n in self.dag.nodes)
 
     def get_tree_descendents(
         self, name: Name | None = None, *, include_stem: bool = True, graph_nodes_only: bool = False
@@ -1232,16 +1225,10 @@ class Computation:
         result = set()
         for n in self.dag.nodes:
             if n.is_descendent_of(node_key):
-                if graph_nodes_only:
-                    nodes = [n]
-                else:
-                    nodes = n.ancestors()
+                nodes = [n] if graph_nodes_only else n.ancestors()
                 for n2 in nodes:
                     if n2.is_descendent_of(node_key):
-                        if include_stem:
-                            nm = n2.name
-                        else:
-                            nm = NodeKey(tuple(n2.parts[stemsize:])).name
+                        nm = n2.name if include_stem else NodeKey(tuple(n2.parts[stemsize:])).name
                         result.add(nm)
         return result
 
@@ -1493,10 +1480,7 @@ class Computation:
     def _get_original_inputs_node_keys(self, node_keys: list[NodeKey] | None) -> list[NodeKey]:
         """Get original input node keys that have no computation function."""
         resolved_node_keys: Iterable[NodeKey]
-        if node_keys is None:
-            resolved_node_keys = self._node_keys()
-        else:
-            resolved_node_keys = self._get_ancestors_node_keys(node_keys)
+        resolved_node_keys = self._node_keys() if node_keys is None else self._get_ancestors_node_keys(node_keys)
         return [n for n in resolved_node_keys if self.dag.nodes[n].get(NodeAttributes.FUNC) is None]
 
     def get_original_inputs(self, names: Name | Names | None = None) -> Names:
@@ -1505,10 +1489,7 @@ class Computation:
         :param names: Name or names of nodes to get inputs for
         :return: Return a list of original non-computed inputs that are ancestors of the input nodes
         """
-        if names is None:
-            nks = None
-        else:
-            nks = names_to_node_keys(names)
+        nks = None if names is None else names_to_node_keys(names)
 
         result_nks = self._get_original_inputs_node_keys(nks)
 
@@ -1606,7 +1587,7 @@ class Computation:
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Restore computation from serialized state."""
-        self.__init__()  # type: ignore[misc]
+        self.__init__()
         self.dag = state["dag"]
         self._refresh_maps()
 
@@ -1639,7 +1620,7 @@ class Computation:
                 dill.dump(obj, file_)
         finally:
             self.__class__.__getstate__ = original_getstate  # type: ignore[method-assign]
-            self.__class__.__setstate__ = original_setstate  # type: ignore[method-assign]
+            self.__class__.__setstate__ = original_setstate
 
     def write_dill(self, file_: str | BinaryIO) -> None:
         """Serialize a computation to a file or file-like object.
@@ -1668,9 +1649,9 @@ class Computation:
         """
         if isinstance(file_, str):
             with open(file_, "rb") as f:
-                obj = dill.load(f)
+                obj = dill.load(f)  # noqa: S301
         else:
-            obj = dill.load(file_)
+            obj = dill.load(file_)  # noqa: S301
         if isinstance(obj, Computation):
             return obj
         else:

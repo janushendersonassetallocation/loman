@@ -10,10 +10,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import matplotlib as mpl
-import networkx as nx  # type: ignore[import-untyped]
+import networkx as nx
 import numpy as np
-import pandas as pd  # type: ignore[import-untyped]
-import pydotplus  # type: ignore[import-untyped]
+import pandas as pd
+import pydotplus
 from matplotlib.colors import Colormap
 
 import loman
@@ -68,7 +68,7 @@ class NodeFormatter(ABC):
         colors = colors.lower()
         if colors == "state":
             state_cmap = cmap if isinstance(cmap, dict) else None
-            node_formatters.append(ColorByState(state_cmap))
+            node_formatters.append(ColorByState(state_cmap))  # type: ignore[arg-type]
         elif colors == "timing":
             timing_cmap = cmap if isinstance(cmap, Colormap) else None
             node_formatters.append(ColorByTiming(timing_cmap))
@@ -119,10 +119,7 @@ class ColorByState(NodeFormatter):
                 state = States.STALE
             else:
                 state0 = states[0]
-                if all(s == state0 for s in states):
-                    state = state0
-                else:
-                    state = None
+                state = state0 if all(s == state0 for s in states) else None
         return {"style": "filled", "fillcolor": self.state_colors[state]}
 
 
@@ -414,7 +411,7 @@ class GraphView:
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
-        assert self.struct_dag is not None
+        assert self.struct_dag is not None  # noqa: S101
         return create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
 
     def _create_dot_graph(self) -> pydotplus.Dot:
@@ -434,18 +431,18 @@ class GraphView:
         """Generate SVG representation of the visualization."""
         if self.viz_dot is None:
             return None
-        svg_bytes: bytes = self.viz_dot.create_svg()
+        svg_bytes: bytes = self.viz_dot.create_svg()  # type: ignore[attr-defined]
         return svg_bytes.decode("utf-8")
 
     def view(self) -> None:  # pragma: no cover
         """Open the visualization in a PDF viewer."""
-        assert self.viz_dot is not None
+        assert self.viz_dot is not None  # noqa: S101
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-            f.write(self.viz_dot.create_pdf())
+            f.write(self.viz_dot.create_pdf())  # type: ignore[attr-defined]
             if sys.platform == "win32":
-                os.startfile(f.name)  # pragma: no cover  # nosec B606  # type: ignore[attr-defined]
+                os.startfile(f.name)  # pragma: no cover  # nosec B606  # noqa: S606
             else:
-                subprocess.run(["open", f.name], check=False)  # pragma: no cover  # nosec B603 B607
+                subprocess.run(["open", f.name], check=False)  # pragma: no cover  # nosec B603 B607  # noqa: S603, S607
 
     def _repr_svg_(self) -> str | None:
         """Return SVG representation for Jupyter notebook display."""
@@ -593,7 +590,7 @@ def to_pydot(
     edge_attr: dict[str, Any] | None = None,
 ) -> pydotplus.Dot:
     """Convert a visualization DAG to a PyDot graph for rendering."""
-    assert viz_dag is not None
+    assert viz_dag is not None  # noqa: S101
     root, node_groups, edge_groups = _group_nodes_and_edges(viz_dag)
 
     subgraphs: dict[NodeKey, pydotplus.Dot | pydotplus.Subgraph] = {
@@ -606,7 +603,7 @@ def to_pydot(
     _add_edges_to_subgraphs(edge_groups, subgraphs)
 
     result = subgraphs[root]
-    assert isinstance(result, pydotplus.Dot)
+    assert isinstance(result, pydotplus.Dot)  # noqa: S101
     return result
 
 

@@ -134,11 +134,11 @@ class Transformer:
 
     def register_transformer(self, transformer: CustomTransformer) -> None:
         """Register a custom transformer for specific types."""
-        assert transformer.name not in self._transformers
+        assert transformer.name not in self._transformers  # noqa: S101
         for type_ in transformer.supported_direct_types:
-            assert type_ not in self._direct_type_map
+            assert type_ not in self._direct_type_map  # noqa: S101
         for type_ in transformer.supported_subtypes:
-            assert type_ not in self._subtype_map
+            assert type_ not in self._subtype_map  # noqa: S101
 
         self._transformers[transformer.name] = transformer
 
@@ -155,19 +155,19 @@ class Transformer:
     def register_transformable(self, transformable_type: type[Transformable]) -> None:
         """Register a transformable type that can serialize itself."""
         name = transformable_type.__name__
-        assert name not in self._transformable_types
+        assert name not in self._transformable_types  # noqa: S101
         self._transformable_types[name] = transformable_type
 
     def register_attrs(self, attrs_type: type) -> None:
         """Register an attrs-decorated class for serialization."""
         name = attrs_type.__name__
-        assert name not in self._attrs_types
+        assert name not in self._attrs_types  # noqa: S101
         self._attrs_types[name] = attrs_type
 
     def register_dataclass(self, dataclass_type: type) -> None:
         """Register a dataclass for serialization."""
         name = dataclass_type.__name__
-        assert name not in self._dataclass_types
+        assert name not in self._dataclass_types  # noqa: S101
         self._dataclass_types[name] = dataclass_type
 
     def get_transformer_for_obj(self, obj: object) -> CustomTransformer | None:
@@ -343,8 +343,8 @@ class NdArrayTransformer(CustomTransformer):
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Convert numpy array to dictionary with shape, dtype, and data."""
-        assert isinstance(o, np.ndarray)
-        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}
+        assert isinstance(o, np.ndarray)  # noqa: S101
+        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}  # type: ignore[arg-type]
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct numpy array from dictionary."""
