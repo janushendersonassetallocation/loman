@@ -777,21 +777,22 @@ class TestVisualizationWin32:
         v = GraphView(comp)
 
         # Create a mock for the PDF generation and file opening
-        with patch.object(v.viz_dot, "create_pdf", return_value=b"fake pdf"):
-            with patch("tempfile.NamedTemporaryFile") as mock_tempfile:
-                mock_file = MagicMock()
-                mock_file.name = os.path.join(tempfile.gettempdir(), "test.pdf")  # nosec B108 - mock path for testing
-                mock_file.__enter__ = MagicMock(return_value=mock_file)
-                mock_file.__exit__ = MagicMock(return_value=False)
-                mock_tempfile.return_value = mock_file
+        with (
+            patch.object(v.viz_dot, "create_pdf", return_value=b"fake pdf"),
+            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
+        ):
+            mock_file = MagicMock()
+            mock_file.name = os.path.join(tempfile.gettempdir(), "test.pdf")  # nosec B108 - mock path for testing
+            mock_file.__enter__ = MagicMock(return_value=mock_file)
+            mock_file.__exit__ = MagicMock(return_value=False)
+            mock_tempfile.return_value = mock_file
 
-                # Force the win32 branch and mock os.startfile
-                with patch.object(sys, "platform", "win32"):
-                    with patch("os.startfile", create=True) as mock_startfile:
-                        v.view()
+            # Force the win32 branch and mock os.startfile
+            with patch.object(sys, "platform", "win32"), patch("os.startfile", create=True) as mock_startfile:
+                v.view()
 
-                        # Ensure os.startfile was called with the generated PDF path
-                        mock_startfile.assert_called_once_with(mock_file.name)
+                # Ensure os.startfile was called with the generated PDF path
+                mock_startfile.assert_called_once_with(mock_file.name)
 
 
 class TestVisualizationAttrNormalization:

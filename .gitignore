@@ -2,6 +2,7 @@
 .idea
 .venv
 .ruff_cache
+.ty_cache
 
 ### Don't expose API keys, etc.
 .env
@@ -15,6 +16,7 @@ _marimushka
 _mkdocs
 _benchmarks
 _jupyter
+_site
 
 # temp file used by Junie
 .output.txt
@@ -79,6 +81,9 @@ coverage.json
 .pytest_cache/
 cover/
 
+# Security scanning baselines (regenerate as needed)
+.bandit-baseline.json
+
 # Translations
 *.mo
 *.pot
@@ -98,4 +103,6 @@ cython_debug/
 
 # Makefile
 local.mk
+
+.bandit-baseline.json
 

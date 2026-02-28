@@ -67,6 +67,27 @@ UV automatically uses these environment variables (set by the bootstrap process)
 - **Virtual Environment Activation**: Most `make` commands automatically handle virtual environment activation. Manual activation is rarely needed.
 - **Python Version**: The repository specifies Python 3.13 in `.python-version`. UV installs this automatically.
 - **All Commands Through Make**: Always use `make` targets rather than running tools directly to ensure consistency.
+- **When a `make` target exists, use it**: Do not replace `make test`, `make fmt`, `make deptry`, etc. with direct tool commands.
+- **For Python commands without a `make` target, use `uv run`**: Run Python and Python tooling via `uv run <command>`.
+- **Never call the interpreter directly from `.venv`**: Do **not** use `.venv/bin/python`, `.venv/bin/pytest`, etc.
+
+### Command Execution Policy (Strict)
+
+Use these rules in order:
+
+1. If there is an appropriate `make` target, use the `make` target.
+2. If no `make` target exists and you must run Python code/tooling, use `uv run ...`.
+3. Do not invoke binaries from `.venv/bin` directly.
+
+Examples:
+
+- ✅ `make test`
+- ✅ `make fmt`
+- ✅ `uv run pytest`
+- ✅ `uv run python -m pytest tests/property/test_makefile_properties.py`
+- ✅ `uv run python scripts/some_script.py`
+- ❌ `.venv/bin/python -m pytest`
+- ❌ `.venv/bin/pytest`
 
 ### Customizing Setup with Hooks
 
@@ -129,6 +150,30 @@ For DevContainers and Codespaces, the `.devcontainer/` configuration and `bootst
 3.  **Test**: Run `make test` to verify changes.
 4.  **Format**: Run `make fmt` before committing.
 5.  **Verify**: Run `make deptry` to check dependencies.
+
+## GitHub Agentic Workflows (gh-aw)
+
+This repository uses GitHub Agentic Workflows for AI-driven automation.
+Agentic workflow files are Markdown files in `.github/workflows/` with
+`.lock.yml` compiled counterparts.
+
+**Key Commands:**
+- `make gh-aw-compile` or `gh aw compile` — Compile workflow `.md` files to `.lock.yml`
+- `make gh-aw-run WORKFLOW=<name>` or `gh aw run <name>` — Run a specific workflow locally
+- `make gh-aw-status` — Check status of all agentic workflows
+- `make gh-aw-setup` — Configure secrets and engine for first-time setup
+
+**Important Rules:**
+- **Never edit `.lock.yml` files directly** — Always edit the `.md` source and recompile
+- Workflows must be compiled before they can run in GitHub Actions
+- After editing any `.md` workflow, always run `make gh-aw-compile` and commit both files
+
+**Available Starter Workflows:**
+- `daily-repo-status.md` — Daily repository health reports
+- `ci-doctor.md` — Automatic CI failure diagnosis
+- `issue-triage.md` — Automatic issue classification and labeling
+
+For more details, see `docs/GH_AW.md`.
 
 ## Key Files
 

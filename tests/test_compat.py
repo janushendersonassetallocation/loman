@@ -153,7 +153,7 @@ class TestGetSignature:
         # Create a function with positional-only parameters (Python 3.8+)
         # We need to create a function with POSITIONAL_ONLY parameter kind
         exec_globals = {}
-        exec("def func_with_pos_only(x, /): pass", exec_globals)
+        exec("def func_with_pos_only(x, /): pass", exec_globals)  # noqa: S102
         func = exec_globals["func_with_pos_only"]
 
         with pytest.raises(NotImplementedError, match="Unexpected param kind"):
