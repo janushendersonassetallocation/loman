@@ -5,30 +5,45 @@ This conftest provides:
 - run_make: Helper to execute make commands with dry-run support (imported from test_utils)
 - setup_rhiza_git_repo: Initialize a git repo configured as rhiza origin (imported from test_utils)
 - SPLIT_MAKEFILES: List of split Makefile paths
+
+Security Notes:
+- S101 (assert usage): Asserts are used in pytest tests to validate conditions
+- S603/S607 (subprocess usage): Any subprocess calls (via run_make) are for testing
+  Makefile targets in isolated environments with controlled inputs
+- Test code operates in a controlled environment with trusted inputs
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import subprocess  # nosec
+import sys
 from pathlib import Path
 
 import pytest
 
-# Import shared utilities (no __init__.py needed with new structure)
-# Note: we define our own run_make and setup_rhiza_git_repo here with enhanced functionality
-from test_utils import MAKE
+tests_root = Path(__file__).resolve().parents[1]
+if str(tests_root) not in sys.path:
+    sys.path.insert(0, str(tests_root))
+
+from test_utils import run_make, setup_rhiza_git_repo, strip_ansi  # noqa: E402, F401
 
 # Split Makefile paths that are included in the main Makefile
 # These are now located in .rhiza/make.d/ directory
 SPLIT_MAKEFILES = [
     ".rhiza/rhiza.mk",
-    ".rhiza/make.d/01-test.mk",
-    ".rhiza/make.d/02-book.mk",
-    ".rhiza/make.d/03-marimo.mk",
-    ".rhiza/make.d/04-presentation.mk",
-    ".rhiza/make.d/05-github.mk",
+    ".rhiza/make.d/bootstrap.mk",
+    ".rhiza/make.d/quality.mk",
+    ".rhiza/make.d/releasing.mk",
+    ".rhiza/make.d/test.mk",
+    ".rhiza/make.d/book.mk",
+    ".rhiza/make.d/marimo.mk",
+    ".rhiza/make.d/presentation.mk",
+    ".rhiza/make.d/github.mk",
+    ".rhiza/make.d/agentic.mk",
+    ".rhiza/make.d/gh-aw.mk",
+    ".rhiza/make.d/docker.mk",
+    ".rhiza/make.d/docs.mk",
 ]
 
 
@@ -58,7 +73,7 @@ def setup_tmp_makefile(logger, root, tmp_path: Path):
     else:
         # Create a minimal, deterministic .rhiza/.env for tests so they don't
         # depend on the developer's local configuration which may vary.
-        env_content = "SCRIPTS_FOLDER=.rhiza/scripts\nCUSTOM_SCRIPTS_FOLDER=.rhiza/customisations/scripts\n"
+        env_content = "CUSTOM_SCRIPTS_FOLDER=.rhiza/customisations/scripts\n"
         (tmp_path / ".rhiza" / ".env").write_text(env_content)
 
     logger.debug("Copied Makefile from %s to %s", root / "Makefile", tmp_path / "Makefile")
@@ -81,49 +96,3 @@ def setup_tmp_makefile(logger, root, tmp_path: Path):
     finally:
         os.chdir(old_cwd)
         logger.debug("Restored working directory to %s", old_cwd)
-
-
-def run_make(
-    logger,
-    args: list[str] | None = None,
-    check: bool = True,
-    dry_run: bool = True,
-    env: dict[str, str] | None = None,
-) -> subprocess.CompletedProcess:
-    """Run `make` with optional arguments and return the completed process.
-
-    Args:
-        logger: Logger used to emit diagnostic messages during the run
-        args: Additional arguments for make
-        check: If True, raise on non-zero return code
-        dry_run: If True, use -n to avoid executing commands
-        env: Optional environment variables to pass to the subprocess
-    """
-    cmd = [MAKE]
-    if args:
-        cmd.extend(args)
-    # Use -s to reduce noise, -n to avoid executing commands
-    flags = "-sn" if dry_run else "-s"
-    cmd.insert(1, flags)
-    logger.info("Running command: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)  # nosec
-    logger.debug("make exited with code %d", result.returncode)
-    if result.stdout:
-        logger.debug("make stdout (truncated to 500 chars):\n%s", result.stdout[:500])
-    if result.stderr:
-        logger.debug("make stderr (truncated to 500 chars):\n%s", result.stderr[:500])
-    if check and result.returncode != 0:
-        msg = f"make failed with code {result.returncode}:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-        raise AssertionError(msg)
-    return result
-
-
-def setup_rhiza_git_repo():
-    """Initialize a git repository and set remote to rhiza."""
-    git = shutil.which("git") or "/usr/bin/git"
-    subprocess.run([git, "init"], check=True, capture_output=True)  # nosec
-    subprocess.run(
-        [git, "remote", "add", "origin", "https://github.com/jebel-quant/rhiza"],
-        check=True,
-        capture_output=True,
-    )  # nosec

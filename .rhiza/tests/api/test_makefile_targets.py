@@ -15,10 +15,18 @@ from __future__ import annotations
 import os
 
 import pytest
-from api.conftest import SPLIT_MAKEFILES, run_make, setup_rhiza_git_repo
+from api.conftest import SPLIT_MAKEFILES, run_make, setup_rhiza_git_repo, strip_ansi
 
-# Import shared helpers from test_utils and local conftest
-from test_utils import strip_ansi
+
+def assert_uvx_command_uses_version(output: str, tmp_path, command_fragment: str):
+    """Assert uvx command uses .python-version when present, else fallback checks."""
+    python_version_file = tmp_path / ".python-version"
+    if python_version_file.exists():
+        python_version = python_version_file.read_text().strip()
+        assert f"uvx -p {python_version} {command_fragment}" in output
+    else:
+        assert "uvx -p" in output
+        assert command_fragment in output
 
 
 class TestMakefile:
@@ -50,16 +58,7 @@ class TestMakefile:
 
         proc = run_make(logger, ["fmt"], env=env)
         out = proc.stdout
-        # Check for uvx command with the Python version flag
-        # The PYTHON_VERSION should be read from .python-version file (e.g., "3.12")
-        python_version_file = tmp_path / ".python-version"
-        if python_version_file.exists():
-            python_version = python_version_file.read_text().strip()
-            assert f"uvx -p {python_version} pre-commit run --all-files" in out
-        else:
-            # Fallback check if .python-version doesn't exist
-            assert "uvx -p" in out
-            assert "pre-commit run --all-files" in out
+        assert_uvx_command_uses_version(out, tmp_path, "pre-commit run --all-files")
 
     def test_deptry_target_dry_run(self, logger, tmp_path):
         """Deptry target should invoke deptry via uvx with Python version in dry-run output."""
@@ -80,19 +79,11 @@ class TestMakefile:
         proc = run_make(logger, ["deptry"], env=env)
 
         out = proc.stdout
-        # Check for uvx command with the Python version flag
-        python_version_file = tmp_path / ".python-version"
-        if python_version_file.exists():
-            python_version = python_version_file.read_text().strip()
-            assert f"uvx -p {python_version} deptry src" in out
-        else:
-            # Fallback check if .python-version doesn't exist
-            assert "uvx -p" in out
-            assert "deptry src" in out
+        assert_uvx_command_uses_version(out, tmp_path, "deptry src")
 
-    def test_mypy_target_dry_run(self, logger, tmp_path):
-        """Mypy target should invoke mypy via uv run in dry-run output."""
-        # Create a mock SOURCE_FOLDER directory so the mypy command runs
+    def test_typecheck_target_dry_run(self, logger, tmp_path):
+        """Typecheck target should invoke ty via uv run in dry-run output."""
+        # Create a mock SOURCE_FOLDER directory so the typecheck command runs
         source_folder = tmp_path / "src"
         source_folder.mkdir(exist_ok=True)
 
@@ -102,10 +93,10 @@ class TestMakefile:
         env_content += "\nSOURCE_FOLDER=src\n"
         env_file.write_text(env_content)
 
-        proc = run_make(logger, ["mypy"])
+        proc = run_make(logger, ["typecheck"])
         out = proc.stdout
-        # Check for uv run command instead of uvx
-        assert "uv run mypy src --strict --config-file=pyproject.toml" in out
+        # Check for uv run command
+        assert "uv run ty check src" in out
 
     def test_test_target_dry_run(self, logger):
         """Test target should invoke pytest via uv with coverage and HTML outputs in dry-run output."""
@@ -114,7 +105,7 @@ class TestMakefile:
         # Expect key steps
         assert "mkdir -p _tests/html-coverage _tests/html-report" in out
         # Check for uv command running pytest
-        assert ".venv/bin/python -m pytest" in out
+        assert "uv run pytest" in out
 
     def test_test_target_without_source_folder(self, logger, tmp_path):
         """Test target should run without coverage when SOURCE_FOLDER doesn't exist."""
@@ -133,7 +124,7 @@ class TestMakefile:
         # Should see warning about missing source folder
         assert "if [ -d nonexistent_src ]" in out
         # Should still run pytest but without coverage flags
-        assert ".venv/bin/python -m pytest" in out
+        assert "uv run pytest" in out
         assert "--html=_tests/html-report/report.html" in out
 
     def test_python_version_defaults_to_3_13_if_missing(self, logger, tmp_path):
@@ -157,12 +148,6 @@ class TestMakefile:
         out = strip_ansi(proc.stdout)
         assert "Value of UV_NO_MODIFY_PATH:\n1" in out
 
-    def test_script_folder_is_github_scripts(self, logger):
-        """`SCRIPTS_FOLDER` should point to `.rhiza/scripts`."""
-        proc = run_make(logger, ["print-SCRIPTS_FOLDER"], dry_run=False)
-        out = strip_ansi(proc.stdout)
-        assert "Value of SCRIPTS_FOLDER:\n.rhiza/scripts" in out
-
     def test_that_target_coverage_is_configurable(self, logger):
         """Test target should respond to COVERAGE_FAIL_UNDER variable."""
         # Default case: ensure the flag is present
@@ -172,6 +157,19 @@ class TestMakefile:
         # Override case: ensure the flag takes the specific value
         proc_override = run_make(logger, ["test", "COVERAGE_FAIL_UNDER=42"])
         assert "--cov-fail-under=42" in proc_override.stdout
+
+    def test_coverage_badge_target_dry_run(self, logger, tmp_path):
+        """Coverage-badge target should invoke genbadge via uvx in dry-run output."""
+        # Create a mock coverage JSON file so the target proceeds past the guard
+        tests_dir = tmp_path / "_tests"
+        tests_dir.mkdir(exist_ok=True)
+        (tests_dir / "coverage.json").write_text("{}")
+
+        proc = run_make(logger, ["coverage-badge"])
+        out = proc.stdout
+        assert "genbadge coverage" in out
+        assert "_tests/coverage.json" in out
+        assert "assets/coverage-badge.svg" in out
 
 
 class TestMakefileRootFixture:
@@ -216,6 +214,13 @@ class TestMakefileRootFixture:
         # assert "[INFO] Skipping sync in rhiza repository" in out
         assert proc.returncode == 0
 
+    def test_sync_experimental_target_skips_in_rhiza_repo(self, logger):
+        """Sync-experimental target should skip execution in rhiza repository."""
+        setup_rhiza_git_repo()
+
+        proc = run_make(logger, ["sync-experimental"], dry_run=False)
+        assert proc.returncode == 0
+
 
 class TestMakeBump:
     """Tests for the 'make bump' target."""
@@ -240,8 +245,8 @@ from pathlib import Path
 args = sys.argv[1:]
 print(f"[MOCK] uvx {' '.join(args)}")
 
-# Check if this is the bump command: "rhiza[tools]>=0.8.6" tools bump
-if "tools" in args and "bump" in args:
+# Check if this is the bump command: "rhiza-tools>=0.3.3" bump
+if "bump" in args:
     # Simulate bumping version in pyproject.toml
     pyproject = Path("pyproject.toml")
     if pyproject.exists():
@@ -270,7 +275,7 @@ if "tools" in args and "bump" in args:
         result = run_make(logger, ["bump", f"UV_BIN={uv_bin}", f"UVX_BIN={uvx_bin}"], dry_run=False)
 
         # Verify that the mock tools were called
-        assert "[MOCK] uvx rhiza[tools]>=0.8.6 tools bump" in result.stdout
+        assert "[MOCK] uvx rhiza-tools>=0.3.3 bump" in result.stdout
         assert "[MOCK] uv lock" in result.stdout
 
         # Verify that 'make install' was called (which calls uv sync)

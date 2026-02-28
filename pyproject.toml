@@ -58,3 +58,6 @@ numpy = "numpy"
 mypy = "mypy"
 ruff = "ruff"
 dill = "dill"
+
+[tool.bandit]
+skips = ["B301", "B403", "B404"]

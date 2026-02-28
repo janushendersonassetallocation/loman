@@ -6,9 +6,11 @@ This guide covers advanced customization options for Rhiza-based projects.
 
 Rhiza uses a modular Makefile system with extension points (hooks) that let you customize workflows without modifying core files.
 
+**Important**: All customizations should be made in your root `Makefile`, not in `.rhiza/`. The `.rhiza/` directory is template-managed and will be overwritten during sync operations.
+
 ### Available Hooks
 
-You can hook into standard workflows using double-colon syntax (`::`) in `.rhiza/make.d/` files:
+You can hook into standard workflows using double-colon syntax (`::`) in your root `Makefile`:
 
 - `pre-install / post-install` - Runs around `make install`
 - `pre-sync / post-sync` - Runs around repository synchronization
@@ -18,7 +20,7 @@ You can hook into standard workflows using double-colon syntax (`::`) in `.rhiza
 
 ### Example: Installing System Dependencies
 
-Create `.rhiza/make.d/20-dependencies.mk`:
+Add to your root `Makefile` (before the `include .rhiza/rhiza.mk` line):
 
 ```makefile
 pre-install::
@@ -32,7 +34,7 @@ This hook runs automatically before `make install`, ensuring graphviz is availab
 
 ### Example: Post-Release Tasks
 
-Create `.rhiza/make.d/90-hooks.mk`:
+Add to your root `Makefile`:
 
 ```makefile
 post-release::
@@ -45,7 +47,7 @@ This runs automatically after `make release` completes.
 
 ### Example: Custom Build Steps
 
-Create `.rhiza/make.d/50-custom.mk`:
+Add to your root `Makefile`:
 
 ```makefile
 post-install::
@@ -55,24 +57,6 @@ post-install::
 ##@ Custom Tasks
 train-model: ## Train the ML model
 	@uv run python scripts/train.py
-```
-
-### Ordering
-
-Files in `.rhiza/make.d/` are loaded alphabetically. Use numeric prefixes to control order:
-
-- `00-19`: Configuration & Variables
-- `20-79`: Custom Tasks & Rules
-- `80-99`: Hooks & Lifecycle logic
-
-### Excluding from Template Updates
-
-If you add custom `.mk` files, add them to the exclude list in your `.rhiza/template.yml`:
-
-```yaml
-exclude: |
-  .rhiza/make.d/20-dependencies.mk
-  .rhiza/make.d/90-hooks.mk
 ```
 
 ## 🔒 CodeQL Configuration
@@ -126,11 +110,11 @@ git commit -m "Remove CodeQL workflow"
 
 ## ⚙️ Configuration Variables
 
-You can configure certain aspects of the Makefile by overriding variables. These can be set in your main `Makefile`, a `local.mk` file (for local developer overrides), or passed as environment variables / command-line arguments.
+You can configure certain aspects of the Makefile by overriding variables. These can be set in your main `Makefile` (before the `include` line), a `local.mk` file (for local developer overrides), or passed as environment variables / command-line arguments.
 
 ### Global Configuration
 
-Add these to your `Makefile` or `local.mk` to make them persistent for the project or your environment:
+Add these to your root `Makefile` (before `include .rhiza/rhiza.mk`) or `local.mk`:
 
 ```makefile
 # Override default Python version
@@ -138,6 +122,9 @@ PYTHON_VERSION = 3.12
 
 # Override test coverage threshold (default: 90)
 COVERAGE_FAIL_UNDER = 80
+
+# Include the Rhiza API (template-managed)
+include .rhiza/rhiza.mk
 ```
 
 ### On-Demand Configuration
@@ -175,3 +162,5 @@ For more details on customizing the documentation, see [book/README.md](../book/
 ## 📖 Complete Documentation
 
 For detailed information about extending and customizing the Makefile system, see [.rhiza/make.d/README.md](../.rhiza/make.d/README.md).
+
+For a tutorial walkthrough of these extension points — including the rule about template-managed files, the exclude mechanism, and forking the template for your organisation — see [rhiza-education Lesson 10: Customising Safely](https://github.com/Jebel-Quant/rhiza-education/blob/main/lessons/10-customizing-safely.md).

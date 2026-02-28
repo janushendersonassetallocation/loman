@@ -1457,9 +1457,11 @@ def test_get_calc_node_keys_raises_exception_for_uninitialized_node():
         return ListWithAdd(results)
 
     # We expect this to raise an exception, that means the code is working an noticed the uninitialized node
-    with patch("loman.computeengine.nx.ancestors", side_effect=change_ancestors_order):
-        with pytest.raises(Exception, match="uninitialized"):
-            comp.compute("c")
+    with (
+        patch("loman.computeengine.nx.ancestors", side_effect=change_ancestors_order),
+        pytest.raises(Exception, match="uninitialized"),
+    ):
+        comp.compute("c")
 
 
 # =============================================================================
@@ -3652,7 +3654,7 @@ class TestComputeengineRemainingCoverageCoverage:
 
         # Read back
         with open(file_path, "rb") as f:
-            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data
+            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data  # noqa: S301
 
         # Check structure
         assert loaded.has_node("a")

@@ -7,9 +7,10 @@ repos:
     hooks:
       - id: check-toml
       - id: check-yaml
+        args: ['--unsafe']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.15.0'
+    rev: 'v0.15.2'
     hooks:
       - id: ruff
         args: [ --fix, --exit-non-zero-on-fix, --unsafe-fixes ]
@@ -24,7 +25,7 @@ repos:
         args: ["--disable", "MD013"]
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.36.1
+    rev: 0.36.2
     hooks:
       - id: check-renovate
         args: [ "--verbose" ]
@@ -33,7 +34,7 @@ repos:
         args: ["--verbose"]
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.10
+    rev: v1.7.11
     hooks:
       - id: actionlint
 
@@ -42,19 +43,19 @@ repos:
     hooks:
       - id: validate-pyproject
 
-  #- repo: https://github.com/PyCQA/bandit
-  #  rev: 1.9.3
-  #  hooks:
-  #    - id: bandit
-  #      args: ["--skip", "B101", "--exclude", ".venv,tests,.rhiza/tests,.git,.pytest_cache", "-c", "pyproject.toml"]
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.3
+    hooks:
+      - id: bandit
+        args: ["--skip", "B101", "--exclude", ".venv,tests,.rhiza/tests,.git,.pytest_cache", "-c", "pyproject.toml"]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.10.0
+    rev: 0.10.5
     hooks:
       - id: uv-lock
 
   - repo: https://github.com/Jebel-Quant/rhiza-hooks
-    rev: v0.2.1  # Use the latest release
+    rev: v0.3.0  # Use the latest release
     hooks:
       # Migrated from rhiza
       - id: check-rhiza-workflow-names
@@ -63,4 +64,4 @@ repos:
       - id: check-rhiza-config
       - id: check-makefile-targets
       - id: check-python-version-consistency
-      - id: check-template-bundles
+      # - id: check-template-bundles

@@ -187,17 +187,17 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
             part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]
             parts_append(part)
             nextchar = path_str[end : end + 1]
-            assert nextchar == "" or nextchar == "/"
+            assert nextchar == "" or nextchar == "/"  # noqa: S101
             if nextchar != "":
                 end = end + 1
         else:
             chunk = PART.match(path_str, end)
-            assert chunk is not None
+            assert chunk is not None  # noqa: S101
             end = chunk.end()
             (part,) = chunk.groups()
             parts_append(part)
 
-    assert end == len(path_str)
+    assert end == len(path_str)  # noqa: S101
 
     return NodeKey(tuple(parts))
 

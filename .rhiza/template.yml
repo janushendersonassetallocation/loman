@@ -1,23 +1,13 @@
-template-repository: jebel-quant/rhiza
-template-branch: main
-include:
-- .devcontainer/
-- .github/
-- .rhiza/
-- book/
-- .editorconfig
-# let's not include the pre-commit-config.yaml in an update
-# - .pre-commit-config.yaml
-#- Makefile
-# - presentation/
+template-repository: "jebel-quant/rhiza"
+template-branch: "v0.8.3"
+
+templates:
+  - devcontainer
+  - github
+  - core
+  - book
+  - marimo
+  - tests
 
 exclude:
-# - .github/workflows/rhiza_docker.yml
-- .github/workflows/rhiza_security.yml
-- .rhiza/docs
-- .rhiza/make.d/00-additional-deps.mk
-- book/marimo/notebooks/rhiza.py
-#- book/README.md
-#- book/marimo/README.md
-# if we exclude the file Rhiza will not(!) remove the local file
-#- .pre-commit-config.yaml
+  - book/marimo/notebooks/rhiza.py
