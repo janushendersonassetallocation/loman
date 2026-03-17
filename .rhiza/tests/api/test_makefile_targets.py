@@ -221,6 +221,16 @@ class TestMakefileRootFixture:
         proc = run_make(logger, ["sync-experimental"], dry_run=False)
         assert proc.returncode == 0
 
+    def test_materialize_target_is_deprecated(self, logger):
+        """Materialize target should print a deprecation warning and delegate to sync."""
+        setup_rhiza_git_repo()
+
+        proc = run_make(logger, ["materialize"], dry_run=False)
+        out = strip_ansi(proc.stdout)
+        assert proc.returncode == 0
+        assert "deprecated" in out.lower()
+        assert "sync" in out
+
 
 class TestMakeBump:
     """Tests for the 'make bump' target."""
