@@ -1,5 +1,5 @@
 template-repository: "jebel-quant/rhiza"
-template-branch: "v0.8.13"
+template-branch: "v0.8.16"
 
 templates:
   - devcontainer
