@@ -35,15 +35,13 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Home: index.md
+  - Home: home.md
   - User Guide:
       - Introduction: user/intro.md
       - Installation: user/install.md
       - Quick Start: user/quickstart.md
       - Features:
-          - Overview: user/features/index.md
           - Creating:
-              - Overview: user/features/creating/index.md
               - Constant Values: user/features/creating/constant_values.md
               - Node Decorator: user/features/creating/adding_nodes_using_decorators.md
               - Named Tuples: user/features/creating/automatically_expanding_named_tuples.md
@@ -51,15 +49,12 @@ nav:
               - Non-String Node Names: user/features/creating/non_string_node_names.md
               - Tagging Nodes: user/features/creating/tagging_nodes.md
           - Querying:
-              - Overview: user/features/querying/index.md
               - Show as DataFrame: user/features/querying/show_as_dataframe.md
               - View Inputs and Outputs: user/features/querying/view_inputs_outputs.md
               - Visualizing Graphs: user/features/querying/visualizing_computation_graph.md
           - Manipulating:
-              - Overview: user/features/manipulating/index.md
               - Repointing Nodes: user/features/manipulating/repointing_nodes.md
           - Other:
-              - Overview: user/features/other/index.md
               - Interactive Debugging: user/features/other/interactive_debugging.md
               - Serializing Computations: user/features/other/serializing_computations.md
       - Strategies: user/strategies.md
