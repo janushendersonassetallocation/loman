@@ -1,5 +1,5 @@
 template-repository: "jebel-quant/rhiza"
-template-branch: "v0.8.16"
+template-branch: "v0.8.21"
 
 templates:
   - devcontainer
@@ -7,6 +7,3 @@ templates:
   - book
   - marimo
   - tests
-
-exclude:
-  - book/marimo/notebooks/rhiza.py
