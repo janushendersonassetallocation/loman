@@ -23,6 +23,12 @@ install-graphviz:  ## Install graphviz if not present
 			else \
 				sudo apt-get update && sudo apt-get install -y graphviz; \
 			fi; \
+		elif command -v choco >/dev/null 2>&1; then \
+			echo "Installing via Chocolatey..."; \
+			choco install graphviz -y; \
+		elif command -v winget >/dev/null 2>&1; then \
+			echo "Installing via winget..."; \
+			winget install --id Graphviz.Graphviz -e --silent; \
 		else \
 			echo "Warning: Could not detect a supported package manager. Please install Graphviz manually." >&2; \
 			exit 1; \
