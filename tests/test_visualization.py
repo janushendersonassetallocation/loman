@@ -910,6 +910,7 @@ class TestCollapseNodeMapped:
         assert svg is not None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Tests Linux/macOS 'open' command path")
 class TestViewFunctionOpenBranch:
     """Test the view() function opens the PDF."""
 
@@ -938,6 +939,7 @@ class TestViewFunctionOpenBranch:
         mock_run.assert_called_once()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Tests Linux/macOS 'open' command path")
 class TestVisualizationOpenPdf:
     """Test view() method opens PDF."""
 
@@ -1219,6 +1221,7 @@ class TestVisualizationDropRootNone:
         assert svg is not None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Tests Linux/macOS 'open' command path")
 class TestVisualizationSubprocess:
     """Test view() subprocess call."""
 
