@@ -33,13 +33,13 @@ Loman tracks the state of your computations and their dependencies, enabling int
 
 ## Table of Contents
 
-- ✨ [Features](#-features)
-- 📥 [Installation](#-installation)
-- 🛠️ [Development](#️-development)
-- 🚀 [Quick Start](#-quick-start)
-- 📖 [Documentation](#-documentation)
-- ☁️ [Codespaces](#️-try-loman-in-codespaces)
-- 👥 [Contributing](#-contributing)
+- ✨ [Features](#features)
+- 📥 [Installation](#installation)
+- 🛠️ [Development](#development)
+- 🚀 [Quick Start](#quick-start)
+- 📖 [Documentation](#documentation)
+- ☁️ [Codespaces](#try-loman-in-codespaces)
+- 👥 [Contributing](#contributing)
 
 ## ✨ Features
 

@@ -10,9 +10,8 @@ Nodes can be tagged with string tags, either when the node is added, using the `
 >>> comp.set_tag(['a', 'b'], 'bar')
 ```
 
-:::{note}
-Tags beginning and ending with double-underscores ("\_\_\[tag\]\_\_") are reserved for internal use by Loman.
-:::
+!!! note
+    Tags beginning and ending with double-underscores ("\___\[tag\]___") are reserved for internal use by Loman.
 
 The tags associated with a node can be inspected using the `tags` method, or the `t` attribute-style accessor:
 
