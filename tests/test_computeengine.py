@@ -24,6 +24,7 @@ from loman import (
     States,
     block,
     calc_node,
+    computation_factory,
     input_node,
     node,
 )
@@ -1950,6 +1951,84 @@ def test_computation_factory_calc_node_no_args():
     comp.compute_all()
     assert comp.s.a == States.UPTODATE
     assert comp.v.a == 3
+
+
+def test_computation_factory_preserves_name():
+    """Bare @computation_factory should preserve __name__ of the original class."""
+
+    @computation_factory
+    class MyComp:
+        """My computation docstring."""
+
+        x = input_node()
+
+        @calc_node
+        def y(self):
+            return self + 1
+
+    assert MyComp.__name__ == "MyComp"
+
+
+def test_computation_factory_preserves_qualname():
+    """Bare @computation_factory should preserve __qualname__ of the original class."""
+
+    @computation_factory
+    class MyComp:
+        """My computation docstring."""
+
+        x = input_node()
+
+        @calc_node
+        def y(self):
+            return self + 1
+
+    assert MyComp.__qualname__ == "test_computation_factory_preserves_qualname.<locals>.MyComp"
+
+
+def test_computation_factory_preserves_module():
+    """Bare @computation_factory should preserve __module__ of the original class."""
+
+    @computation_factory
+    class MyComp:
+        """My computation docstring."""
+
+        x = input_node()
+
+        @calc_node
+        def y(self):
+            return self + 1
+
+    assert MyComp.__module__ == __name__
+
+
+def test_computation_factory_preserves_doc():
+    """Bare @computation_factory should preserve __doc__ of the original class."""
+
+    @computation_factory
+    class MyComp:
+        """My computation docstring."""
+
+        x = input_node()
+
+        @calc_node
+        def y(self):
+            return self + 1
+
+    assert MyComp.__doc__ == "My computation docstring."
+
+
+def test_computation_factory_sets_wrapped():
+    """Bare @computation_factory should set __wrapped__ to the original class."""
+
+    class _MyComp:
+        """Docstring."""
+
+        x = input_node()
+
+    original_cls = _MyComp
+    factory = computation_factory(_MyComp)
+
+    assert factory.__wrapped__ is original_cls
 
 
 # =============================================================================
