@@ -1,10 +1,4 @@
-"""Tests for type safety improvements across the loman codebase.
-
-This module covers:
-- Phase 2: Name type alias and NodeKey.parts typing
-- Phase 3: @overload return types for polymorphic methods
-- Phase 4: Assert replacements, Block callable typing
-"""
+"""Tests for type safety improvements across the loman codebase."""
 
 from collections.abc import Hashable
 
@@ -13,8 +7,6 @@ import pytest
 from loman import Computation, States
 from loman.computeengine import NodeData, TimingData
 from loman.nodekey import Name, NodeKey, to_nodekey
-
-# ==================== Phase 2: Name type and NodeKey.parts ====================
 
 
 class TestNodeKeyPartsTyping:
@@ -65,9 +57,6 @@ class TestNameType:
         name: Name = 42
         nk = to_nodekey(name)
         assert nk == NodeKey((42,))
-
-
-# ==================== Phase 3: @overload return types ====================
 
 
 class TestStateReturnType:
@@ -267,9 +256,6 @@ class TestGetOutputsReturnType:
         result = comp.get_outputs(["a", "b"])
         assert isinstance(result, list)
         assert all(isinstance(item, list) for item in result)
-
-
-# ==================== Phase 4: Assert replacements and other ====================
 
 
 class TestNodeKeyParsingErrors:
