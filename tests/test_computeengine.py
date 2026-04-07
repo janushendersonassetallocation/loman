@@ -2031,6 +2031,63 @@ def test_computation_factory_sets_wrapped():
     assert factory.__wrapped__ is original_cls
 
 
+def test_computation_factory_with_parens_preserves_metadata():
+    """@computation_factory() (parens, no args) should preserve class metadata."""
+
+    @computation_factory()
+    class MyComp:
+        """Docstring for parens form."""
+
+        x = input_node()
+
+        @calc_node
+        def y(self):
+            return self * 2
+
+    assert MyComp.__name__ == "MyComp"
+    assert MyComp.__qualname__ == "test_computation_factory_with_parens_preserves_metadata.<locals>.MyComp"
+    assert MyComp.__module__ == __name__
+    assert MyComp.__doc__ == "Docstring for parens form."
+    assert MyComp.__wrapped__.__name__ == "MyComp"
+
+
+def test_computation_factory_with_ignore_self_false_preserves_metadata():
+    """@computation_factory(ignore_self=False) should preserve class metadata."""
+
+    @computation_factory(ignore_self=False)
+    class MyComp:
+        """Docstring for ignore_self=False form."""
+
+        x = input_node()
+
+        @calc_node
+        def y(self, x):
+            return x + 10
+
+    assert MyComp.__name__ == "MyComp"
+    assert MyComp.__qualname__ == ("test_computation_factory_with_ignore_self_false_preserves_metadata.<locals>.MyComp")
+    assert MyComp.__module__ == __name__
+    assert MyComp.__doc__ == "Docstring for ignore_self=False form."
+    assert MyComp.__wrapped__.__name__ == "MyComp"
+
+
+def test_computation_factory_no_docstring_preserves_metadata():
+    """computation_factory on a class with no docstring: __doc__ is None, others intact."""
+
+    @computation_factory
+    class MyComp:
+        x = input_node()
+
+        @calc_node
+        def y(self):
+            return self
+
+    assert MyComp.__name__ == "MyComp"
+    assert MyComp.__module__ == __name__
+    assert MyComp.__doc__ is None
+    assert MyComp.__wrapped__.__name__ == "MyComp"
+
+
 # =============================================================================
 # Computation Structure Tests (from test_computeengine_structure.py)
 # =============================================================================
