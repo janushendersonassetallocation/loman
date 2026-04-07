@@ -130,3 +130,6 @@ line-ending = "auto"
     "PLW2901",  # Allow loop variable overwriting in utility scripts
     "TRY003",   # Allow long exception messages in utility scripts
 ]
+".rhiza/**/*.py" = [
+    "TCH",      # Rhiza template files are externally managed
+]
