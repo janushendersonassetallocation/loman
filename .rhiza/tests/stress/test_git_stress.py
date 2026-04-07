@@ -9,9 +9,12 @@ from __future__ import annotations
 import concurrent.futures
 import shutil
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Get absolute paths for executables
 GIT = shutil.which("git") or "/usr/bin/git"
