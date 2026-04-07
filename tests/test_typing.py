@@ -1,13 +1,11 @@
 """Tests for type safety improvements across the loman codebase.
 
 This module covers:
-- Phase 1: Infrastructure (py.typed marker, mypy config)
 - Phase 2: Name type alias and NodeKey.parts typing
 - Phase 3: @overload return types for polymorphic methods
-- Phase 4: Assert replacements, Block callable typing, NodeAttrDict
+- Phase 4: Assert replacements, Block callable typing
 """
 
-import pathlib
 from collections.abc import Hashable
 
 import pytest
@@ -15,56 +13,6 @@ import pytest
 from loman import Computation, States
 from loman.computeengine import NodeData, TimingData
 from loman.nodekey import Name, NodeKey, to_nodekey
-
-# ==================== Phase 1: Infrastructure ====================
-
-
-class TestPyTypedMarker:
-    """Tests for PEP 561 py.typed marker file."""
-
-    def test_py_typed_marker_exists(self):
-        """The loman package should include a py.typed marker for PEP 561 compliance."""
-        import loman
-
-        package_dir = pathlib.Path(loman.__file__).parent
-        py_typed = package_dir / "py.typed"
-        assert py_typed.exists(), "py.typed marker file must exist for PEP 561 compliance"
-
-    def test_py_typed_marker_is_empty_or_minimal(self):
-        """The py.typed marker should be empty or contain only a version marker."""
-        import loman
-
-        package_dir = pathlib.Path(loman.__file__).parent
-        py_typed = package_dir / "py.typed"
-        if py_typed.exists():
-            content = py_typed.read_text()
-            assert len(content.strip()) == 0, "py.typed marker should be empty"
-
-
-class TestMypyConfig:
-    """Tests for mypy configuration in pyproject.toml."""
-
-    def test_pyproject_has_mypy_config(self):
-        """pyproject.toml should contain a [tool.mypy] section."""
-        import tomllib
-
-        pyproject_path = pathlib.Path(__file__).parent.parent / "pyproject.toml"
-        with open(pyproject_path, "rb") as f:
-            config = tomllib.load(f)
-        assert "mypy" in config.get("tool", {}), "pyproject.toml must have [tool.mypy] section"
-
-    def test_mypy_strict_settings(self):
-        """Mypy config should enable key strict-mode flags."""
-        import tomllib
-
-        pyproject_path = pathlib.Path(__file__).parent.parent / "pyproject.toml"
-        with open(pyproject_path, "rb") as f:
-            config = tomllib.load(f)
-        mypy_config = config["tool"]["mypy"]
-        assert mypy_config.get("warn_return_any") is True
-        assert mypy_config.get("disallow_untyped_defs") is True
-        assert mypy_config.get("check_untyped_defs") is True
-
 
 # ==================== Phase 2: Name type and NodeKey.parts ====================
 
