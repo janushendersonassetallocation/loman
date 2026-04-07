@@ -59,5 +59,18 @@ mypy = "mypy"
 ruff = "ruff"
 dill = "dill"
 
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = false
+check_untyped_defs = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["pydotplus.*", "decorator.*", "dill.*"]
+ignore_missing_imports = true
+
 [tool.bandit]
 skips = ["B301", "B403", "B404"]

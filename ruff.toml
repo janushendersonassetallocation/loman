@@ -73,6 +73,7 @@ extend-select = [
     "PT",    # flake8-pytest-style - Check pytest best practices
     "RUF",   # Ruff-specific rules
     "S",     # flake8-bandit - Find security issues
+    "TCH",   # flake8-type-checking - Move type-only imports behind TYPE_CHECKING
     #"ERA",   # eradicate - Find commented out code
     #"T10",   # flake8-debugger - Check for debugger imports and calls
     "TRY",   # flake8-try-except-raise - Try/except/raise checks
