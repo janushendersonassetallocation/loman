@@ -40,6 +40,13 @@ plugins:
             show_signature_annotations: true
 
 markdown_extensions:
+  - mkdocs_graphviz:
+      node_color: "000000"
+      node_fontcolor: "000000"
+      edge_color: "000000"
+      edge_fontcolor: "000000"
+      graph_color: "000000"
+      graph_fontcolor: "000000"
   - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.snippets:

@@ -21,7 +21,7 @@ mkdocs-build:: install-uv ## build MkDocs documentation site
 	@if [ -f "$(MKDOCS_CONFIG)" ]; then \
 	  rm -rf "$(MKDOCS_OUTPUT)"; \
 	  MKDOCS_OUTPUT_ABS="$$(pwd)/$(MKDOCS_OUTPUT)"; \
-	  ${UVX_BIN} --with "mkdocs-material<10.0" --with "pymdown-extensions>=10.0" --with "mkdocs<2.0" --with "mkdocstrings[python]" mkdocs build \
+	  ${UVX_BIN} --with "mkdocs-material<10.0" --with "pymdown-extensions>=10.0" --with "mkdocs<2.0" --with "mkdocstrings[python]" --with "mkdocs-graphviz" mkdocs build \
 	    -f "$(MKDOCS_CONFIG)" \
 	    -d "$$MKDOCS_OUTPUT_ABS"; \
 	else \

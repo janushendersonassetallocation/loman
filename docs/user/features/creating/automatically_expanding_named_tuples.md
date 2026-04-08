@@ -15,7 +15,7 @@ Often, a calculation will return more than one result. For example, a numerical 
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#9dff00" style=filled]
