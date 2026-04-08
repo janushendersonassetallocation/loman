@@ -21,6 +21,8 @@ extra:
   version:
     provider: mike
 
+use_directory_urls: false
+
 plugins:
   - search
   - mkdocstrings:
