@@ -12,7 +12,7 @@ Loman computations contain methods to see what nodes are inputs to any node, and
 >>> comp
 ```
 
-```{graphviz}
+```dot
     digraph G {
         n0       [fillcolor="#15b01a", label=a, style=filled];
         n1       [fillcolor="#15b01a", label=b, style=filled];

@@ -18,7 +18,7 @@ Loman's computations have a method `draw` which lets us easily see a visualizati
 
     >>> comp.draw()
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#0343df" style=filled]
         n1 [label=b fillcolor="#0343df" style=filled]
@@ -31,7 +31,7 @@ Loman gives us a quick and easy way to visualize our computations as a graph dat
     >>> comp.insert('a', 1)
     >>> comp.draw()
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#9dff00" style=filled]
@@ -43,7 +43,7 @@ Now we see that node **a** is colored dark green, indicating that it is up-to-da
 
     >>> comp.compute_all()
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#15b01a" style=filled]
@@ -179,7 +179,7 @@ For these examples, we define a more complex Computation:
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#0343df" style=filled]
         n1 [label=input2 fillcolor="#0343df" style=filled]
@@ -207,7 +207,7 @@ We insert values into **input1** and **input2**:
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -238,7 +238,7 @@ We saw before that we can use the `compute_all` method to calculate nodes. We ca
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -267,7 +267,7 @@ Often, in real-time systems, updates will come periodically for one or more of t
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -307,7 +307,7 @@ In fact, we are not restricted to inserting data into input nodes. It is perfect
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -336,7 +336,7 @@ As well as inserting data into nodes, we can update the computation they perform
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -361,7 +361,7 @@ As well as inserting data into nodes, we can update the computation they perform
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -398,7 +398,7 @@ We can even add new nodes, and change the dependencies of existing calculations.
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -426,7 +426,7 @@ We can even add new nodes, and change the dependencies of existing calculations.
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=input1 fillcolor="#15b01a" style=filled]
         n1 [label=input2 fillcolor="#15b01a" style=filled]
@@ -470,7 +470,7 @@ If trying to calculate a node causes an exception, then Loman will mark its stat
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#15b01a" style=filled]
@@ -504,7 +504,7 @@ We can use Loman's facilities of changing calculations or overriding values to q
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#15b01a" style=filled]
@@ -527,7 +527,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=b fillcolor="#0343df" style=filled]
         n1 [label=a fillcolor="#f97306" style=filled]
@@ -540,7 +540,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
     >>> comp.add_node('a')
     >>> comp.draw()
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=b fillcolor="#0343df" style=filled]
         n1 [label=a fillcolor="#0343df" style=filled]
@@ -552,7 +552,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
 >>> comp.delete_node('a')
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=b fillcolor="#0343df" style=filled]
         n1 [label=a fillcolor="#f97306" style=filled]

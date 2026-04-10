@@ -17,7 +17,7 @@ By default, in a Jupyter notebook, when a graph is evaluated, it will show a gra
 >>> comp
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", label=a, style=filled];
 n1 [fillcolor="#15b01a", label=b, style=filled];
@@ -35,7 +35,7 @@ This can also be achieved using the `.draw()` method, which allows some customiz
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", label=a, style=filled];
 n1 [fillcolor="#15b01a", label=b, style=filled];
@@ -63,7 +63,7 @@ The following example has been contrived to show every state currently supported
 >>> comp.compute('c')
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", label=a, style=filled];
 n1 [fillcolor="#0343df", label=b, style=filled];
@@ -124,7 +124,7 @@ class ExampleComputation:
 >>> comp.draw(colors='timing')
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#FFFFFF", label=a, style=filled];
 n1 [fillcolor="#15b01a", label=b, style=filled];
@@ -151,7 +151,7 @@ You can control how nodes are rendered using the `style` keyword of the `add_nod
 >>> comp
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", fontsize=8, height=0.2, label=a, style=filled, width=0.3];
 n1 [fillcolor="#15b01a", label=b, peripheries=1, shape=point, style=filled, width=0.1];
@@ -183,7 +183,7 @@ You can ask loman to graphically show type information for nodes by calling `dra
 >>> comp.draw(shapes='type')
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", label=scalar, shape=ellipse, style=filled];
 n1 [fillcolor="#15b01a", label=array, shape=rect, style=filled];
