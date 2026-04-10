@@ -3,13 +3,25 @@
 import itertools
 import types
 from collections.abc import Callable, Generator, Iterable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, overload
 
 import numpy as np
 import pandas as pd
 
 T = TypeVar("T")
 R = TypeVar("R")
+
+
+@overload
+def apply1(f: Callable[..., R], xs: list[T], *args: Any, **kwds: Any) -> list[R]: ...
+
+
+@overload
+def apply1(f: Callable[..., R], xs: T, *args: Any, **kwds: Any) -> R: ...
+
+
+@overload
+def apply1(f: Callable[..., R], xs: Generator[T, None, None], *args: Any, **kwds: Any) -> Generator[R, None, None]: ...
 
 
 def apply1(

@@ -12,7 +12,7 @@ from concurrent.futures import FIRST_COMPLETED, Executor, ThreadPoolExecutor, wa
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, TypeVar, overload
 
 import decorator
 import dill
@@ -36,6 +36,8 @@ from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
 
 LOG = logging.getLogger("loman.computeengine")
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 @dataclass
@@ -84,18 +86,16 @@ def _node(func: Callable[..., Any], *args: Any, **kws: Any) -> Any:  # pragma: n
     return func(*args, **kws)
 
 
-def node(
-    comp: "Computation", name: Name | None = None, *args: Any, **kw: Any
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def node(comp: "Computation", name: Name | None = None, *args: Any, **kw: Any) -> Callable[[F], F]:
     """Decorator to add a function as a node to a computation graph."""
 
-    def inner(f: Callable[..., Any]) -> Callable[..., Any]:
+    def inner(f: F) -> F:
         """Inner decorator that registers the function as a node."""
         if name is None:
-            comp.add_node(f.__name__, f, *args, **kw)  # type: ignore[attr-defined]
+            comp.add_node(f.__name__, f, *args, **kw)
         else:
             comp.add_node(name, f, *args, **kw)
-        result: Callable[..., Any] = decorator.decorate(f, _node)
+        result: F = decorator.decorate(f, _node)
         return result
 
     return inner
@@ -160,14 +160,20 @@ class CalcNode(Node):
         comp.add_node(name, f, **kwds)
 
 
-def calc_node(
-    f: Callable[..., Any] | None = None, **kwds: Any
-) -> Callable[..., Any] | Callable[[Callable[..., Any]], Callable[..., Any]]:
+@overload
+def calc_node(f: F, **kwds: Any) -> F: ...
+
+
+@overload
+def calc_node(f: None = None, **kwds: Any) -> Callable[[F], F]: ...
+
+
+def calc_node(f: F | None = None, **kwds: Any) -> F | Callable[[F], F]:
     """Decorator to mark a function as a calculation node."""
 
-    def wrap(func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrap(func: F) -> F:
         """Wrap function with node info attribute."""
-        func._loman_node_info = CalcNode(func, kwds)  # type: ignore[attr-defined]
+        func._loman_node_info = CalcNode(func, kwds)
         return func
 
     if f is None:
@@ -179,11 +185,11 @@ def calc_node(
 class Block(Node):
     """A node representing a computational block or subgraph."""
 
-    block: "Callable[..., Computation] | Computation"
+    block: "Callable[[], Computation] | Computation"
     args: tuple[Any, ...] = field(default_factory=tuple)
     kwds: dict[str, Any] = field(default_factory=dict)
 
-    def __init__(self, block: "Callable[..., Computation] | Computation", *args: Any, **kwds: Any) -> None:
+    def __init__(self, block: "Callable[[], Computation] | Computation", *args: Any, **kwds: Any) -> None:
         """Initialize a block node with a computation block and arguments."""
         self.block = block
         self.args = args
@@ -1240,7 +1246,13 @@ class Computation:
         state: States = self.dag.nodes[node_key][NodeAttributes.STATE]
         return state
 
-    def state(self, name: Name | Names) -> Any:
+    @overload
+    def state(self, name: Name) -> States: ...
+
+    @overload
+    def state(self, name: Names) -> list[States]: ...
+
+    def state(self, name: Name | Names) -> States | list[States]:
         """Get the state of a node.
 
         This can also be accessed using the attribute-style accessor ``s`` if ``name`` is a valid Python
@@ -1263,7 +1275,13 @@ class Computation:
         node_key = to_nodekey(name)
         return self.dag.nodes[node_key][NodeAttributes.VALUE]
 
-    def value(self, name: Name | Names) -> Any:
+    @overload
+    def value(self, name: Name) -> Any: ...
+
+    @overload
+    def value(self, name: Names) -> list[Any]: ...
+
+    def value(self, name: Name | Names) -> Any | list[Any]:
         """Get the current value of a node.
 
         This can also be accessed using the attribute-style accessor ``v`` if ``name`` is a valid Python
@@ -1314,7 +1332,13 @@ class Computation:
         tags: set[str] = node[NodeAttributes.TAG]
         return tags
 
-    def tags(self, name: Name | Names) -> Any:
+    @overload
+    def tags(self, name: Name) -> set[str]: ...
+
+    @overload
+    def tags(self, name: Names) -> list[set[str]]: ...
+
+    def tags(self, name: Name | Names) -> set[str] | list[set[str]]:
         """Get the tags associated with a node.
 
             >>> comp = Computation()
@@ -1348,7 +1372,13 @@ class Computation:
         style: str | None = node.get(NodeAttributes.STYLE)
         return style
 
-    def styles(self, name: Name | Names) -> Any:
+    @overload
+    def styles(self, name: Name) -> str | None: ...
+
+    @overload
+    def styles(self, name: Names) -> list[str | None]: ...
+
+    def styles(self, name: Name | Names) -> str | None | list[str | None]:
         """Get the tags associated with a node.
 
             >>> comp = Computation()
@@ -1367,7 +1397,13 @@ class Computation:
         node = self.dag.nodes[node_key]
         return NodeData(node[NodeAttributes.STATE], node[NodeAttributes.VALUE])
 
-    def __getitem__(self, name: Name | Names) -> Any:
+    @overload
+    def __getitem__(self, name: Name) -> NodeData: ...
+
+    @overload
+    def __getitem__(self, name: Names) -> list[NodeData]: ...
+
+    def __getitem__(self, name: Name | Names) -> NodeData | list[NodeData]:
         """Get the state and current value of a node.
 
         :param name: Name of the node to get the state and value of
@@ -1381,7 +1417,13 @@ class Computation:
         timing: TimingData | None = node.get(NodeAttributes.TIMING, None)
         return timing
 
-    def get_timing(self, name: Name | Names) -> Any:
+    @overload
+    def get_timing(self, name: Name) -> TimingData | None: ...
+
+    @overload
+    def get_timing(self, name: Names) -> list[TimingData | None]: ...
+
+    def get_timing(self, name: Name | Names) -> TimingData | None | list[TimingData | None]:
         """Get the timing information for a node.
 
         :param name: Name or names of the node to get the timing information of
@@ -1454,7 +1496,13 @@ class Computation:
         node_key = to_nodekey(name)
         return node_keys_to_names([nk for nk in self._get_inputs_one_node_keys(node_key) if nk is not None])
 
-    def get_inputs(self, name: Name | Names) -> Any:
+    @overload
+    def get_inputs(self, name: Name) -> Names: ...
+
+    @overload
+    def get_inputs(self, name: Names) -> list[Names]: ...
+
+    def get_inputs(self, name: Name | Names) -> Names | list[Names]:
         """Get a list of the inputs for a node or set of nodes.
 
         :param name: Name or names of nodes to get inputs for
@@ -1503,7 +1551,13 @@ class Computation:
         output_node_keys = list(self.dag.successors(node_key))
         return node_keys_to_names(output_node_keys)
 
-    def get_outputs(self, name: Name | Names) -> Any:
+    @overload
+    def get_outputs(self, name: Name) -> Names: ...
+
+    @overload
+    def get_outputs(self, name: Names) -> list[Names]: ...
+
+    def get_outputs(self, name: Name | Names) -> Names | list[Names]:
         """Get a list of the outputs for a node or set of nodes.
 
         :param name: Name or names of nodes to get outputs for
