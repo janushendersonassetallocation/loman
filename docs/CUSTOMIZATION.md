@@ -157,10 +157,6 @@ For example, to override the main module template, create `book/pdoc-templates/m
 
 See the [pdoc documentation on templates](https://pdoc.dev/docs/pdoc.html#edit-pdocs-html-template) for full details on how to override specific parts of the documentation.
 
-For more details on customizing the documentation, see [docs/BOOK.md](BOOK.md).
-
 ## 📖 Complete Documentation
-
-For detailed information about extending and customizing the Makefile system, see [.rhiza/make.d/README.md](../.rhiza/make.d/README.md).
 
 For a tutorial walkthrough of these extension points — including the rule about template-managed files, the exclude mechanism, and forking the template for your organisation — see [rhiza-education Lesson 10: Customising Safely](https://github.com/Jebel-Quant/rhiza-education/blob/main/lessons/10-customizing-safely.md).

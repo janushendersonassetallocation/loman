@@ -10,7 +10,7 @@ Loman can serialize computations to disk using the dill package. This can be use
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#15b01a" style=filled]
@@ -26,7 +26,7 @@ Loman can serialize computations to disk using the dill package. This can be use
 >>> comp2.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#15b01a" style=filled]
@@ -47,7 +47,7 @@ It is also possible to request that a particular node not be serialized, in whic
 >>> comp2.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#0343df" style=filled]
         n1 [label=b fillcolor="#15b01a" style=filled]
@@ -55,6 +55,5 @@ It is also possible to request that a particular node not be serialized, in whic
     }
 ```
 
-:::{note}
-The serialization format is not currently stabilized. While it is convenient to be able to inspect the results of previous calculations, this method should *not* be relied on for long-term storage.
-:::
+!!! note
+    The serialization format is not currently stabilized. While it is convenient to be able to inspect the results of previous calculations, this method should *not* be relied on for long-term storage.

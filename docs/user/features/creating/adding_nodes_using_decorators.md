@@ -22,7 +22,7 @@ Loman provide a decorator `@node`, which allows functions to be added to computa
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label=a fillcolor="#15b01a" style=filled]
         n1 [label=b fillcolor="#9dff00" style=filled]

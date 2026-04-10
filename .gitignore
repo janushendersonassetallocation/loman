@@ -15,7 +15,7 @@ __marimo__
 _tests
 _book
 _pdoc
-docs/notebooks
+docs/notebooks/*.html
 docs/reports
 docs/notebooks.md
 docs/reports.md
