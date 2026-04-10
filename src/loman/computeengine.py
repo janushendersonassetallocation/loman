@@ -1,5 +1,6 @@
 """Core computation engine for dependency-aware calculation graphs."""
 
+import functools
 import inspect
 import logging
 import traceback
@@ -229,6 +230,7 @@ def computation_factory(
     def wrap(cls: type) -> Callable[..., "Computation"]:
         """Wrap class to create computation factory function."""
 
+        @functools.wraps(cls, updated=())
         def create_computation(*args: Any, **kwargs: Any) -> "Computation":
             """Create a computation instance from the wrapped class."""
             obj = cls()

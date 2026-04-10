@@ -1,45 +1,71 @@
 site_name: Loman
 site_description: Loman tracks state of computations, and the dependencies between them, allowing full and partial recalculations.
-site_url: https://janusassetallocation.github.io/loman
-repo_url: https://github.com/janusassetallocation/loman
-repo_name: janusassetallocation/loman
+site_url: https://janushendersonassetallocation.github.io/loman
+repo_url: https://github.com/janushendersonassetallocation/loman
+repo_name: janushendersonassetallocation/loman
 
 docs_dir: docs
+site_dir: _mkdocs
 
 theme:
   name: material
-  palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
   features:
+    - navigation.tabs
     - navigation.sections
-    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
     - content.code.copy
 
+extra:
+  version:
+    provider: mike
+
+use_directory_urls: false
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            heading_level: 2
+            members_order: source
+            show_signature_annotations: true
+
 markdown_extensions:
-  - admonition
+  - mkdocs_graphviz:
+      node_color: "000000"
+      node_fontcolor: "000000"
+      edge_color: "000000"
+      edge_fontcolor: "000000"
+      graph_color: "000000"
+      graph_fontcolor: "000000"
   - pymdownx.highlight
   - pymdownx.superfences
-  - pymdownx.details
+  - pymdownx.snippets:
+      base_path: ["."]
+  - admonition
   - toc:
       permalink: true
+      toc_depth: 3
 
 nav:
-  - Home: home.md
+  - Home: index.md
+  - Getting Started: user/quickstart.md
+  - Marimo Notebooks: notebooks.md
+  - Reports: reports.md
+  - API Reference: api.md
   - User Guide:
       - Introduction: user/intro.md
       - Installation: user/install.md
-      - Quick Start: user/quickstart.md
+      - Strategies: user/strategies.md
       - Features:
           - Creating:
               - Constant Values: user/features/creating/constant_values.md
@@ -57,8 +83,7 @@ nav:
           - Other:
               - Interactive Debugging: user/features/other/interactive_debugging.md
               - Serializing Computations: user/features/other/serializing_computations.md
-      - Strategies: user/strategies.md
-  - Developer Guide:
+  - Developer:
       - Release Checklist: dev/release.md
       - Architecture: ARCHITECTURE.md
       - Testing: TESTS.md
@@ -68,5 +93,6 @@ nav:
       - Glossary: GLOSSARY.md
       - Customization: CUSTOMIZATION.md
       - DevContainer: DEVCONTAINER.md
-      - Marimo Notebooks: MARIMO.md
       - Demo: DEMO.md
+      - Contributing: CONTRIBUTING.md
+      - Code of Conduct: CODE_OF_CONDUCT.md
