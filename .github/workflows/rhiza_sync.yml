@@ -12,6 +12,9 @@ permissions:
 
 on:
   push:
+    branches:
+      - 'renovate/jebel-quant-rhiza-**'
+      - 'rhiza/**'
     paths:
       - '.rhiza/template.yml'
   schedule:
