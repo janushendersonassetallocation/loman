@@ -1,7 +1,7 @@
-sha: dc0f57c4510ca0ee4634bfd39f773362997d1b62
+sha: c7eb12c533f64cf88ee818646578e2c6b17600f4
 repo: jebel-quant/rhiza
 host: github
-ref: v0.8.22
+ref: v0.9.4
 include: []
 exclude: []
 templates:
@@ -17,6 +17,7 @@ files:
 - .editorconfig
 - .github/DISCUSSION_TEMPLATE/q-and-a.yml
 - .github/ISSUE_TEMPLATE/bug_report.yml
+- .github/ISSUE_TEMPLATE/config.yml
 - .github/ISSUE_TEMPLATE/feature_request.yml
 - .github/actions/configure-git-auth/README.md
 - .github/actions/configure-git-auth/action.yml
@@ -28,6 +29,7 @@ files:
 - .github/hooks/session-end.sh
 - .github/hooks/session-start.sh
 - .github/secret_scanning.yml
+- .github/semgrep.yml
 - .github/workflows/copilot-setup-steps.yml
 - .github/workflows/rhiza_book.yml
 - .github/workflows/rhiza_ci.yml
@@ -58,7 +60,6 @@ files:
 - .rhiza/make.d/bootstrap.mk
 - .rhiza/make.d/custom-env.mk
 - .rhiza/make.d/custom-task.mk
-- .rhiza/make.d/docs.mk
 - .rhiza/make.d/gh-aw.mk
 - .rhiza/make.d/github.mk
 - .rhiza/make.d/marimo.mk
@@ -71,7 +72,6 @@ files:
 - .rhiza/requirements/tests.txt
 - .rhiza/requirements/tools.txt
 - .rhiza/rhiza.mk
-- .rhiza/semgrep.yml
 - .rhiza/tests/README.md
 - .rhiza/tests/api/conftest.py
 - .rhiza/tests/api/test_gh_aw_targets.py
@@ -81,6 +81,7 @@ files:
 - .rhiza/tests/conftest.py
 - .rhiza/tests/deps/test_dependency_health.py
 - .rhiza/tests/integration/test_book_targets.py
+- .rhiza/tests/integration/test_docs_targets.py
 - .rhiza/tests/integration/test_lfs.py
 - .rhiza/tests/integration/test_sbom.py
 - .rhiza/tests/integration/test_test_mk.py
@@ -103,17 +104,21 @@ files:
 - .rhiza/tests/test_utils.py
 - .rhiza/tests/utils/test_git_repo_fixture.py
 - Makefile
-- book/marimo/notebooks/.gitkeep
-- docs/ARCHITECTURE.md
-- docs/CUSTOMIZATION.md
-- docs/DEMO.md
-- docs/DEVCONTAINER.md
-- docs/GLOSSARY.md
-- docs/MARIMO.md
-- docs/QUICK_REFERENCE.md
-- docs/SECURITY.md
-- docs/TESTS.md
+- docs/adr/0000-adr-template.md
+- docs/assets/rhiza-logo.svg
+- docs/development/DEVCONTAINER.md
+- docs/development/MARIMO.md
+- docs/development/TESTS.md
+- docs/guides/EXTENDING_RHIZA.md
+- docs/guides/QUICK_REFERENCE.md
+- docs/index.md
+- docs/mkdocs-base.yml
+- docs/reference/ARCHITECTURE.md
+- docs/reference/DEPENDENCIES.md
+- docs/reference/GLOSSARY.md
+- docs/reference/SHELL_SCRIPTS.md
+- docs/reference/TOOLS_REFERENCE.md
 - pytest.ini
 - ruff.toml
-synced_at: '2026-04-12T09:24:28Z'
+synced_at: '2026-04-13T11:08:32Z'
 strategy: merge

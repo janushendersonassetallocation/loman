@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/jebel-quant/rhiza/discussions
+    about: Ask questions or discuss ideas in GitHub Discussions rather than opening an issue.

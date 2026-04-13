@@ -454,7 +454,7 @@ Documentation files use SCREAMING_SNAKE_CASE:
 
 - `README.md` - Directory/project overview
 - `ARCHITECTURE.md` - Architecture diagrams
-- `CUSTOMIZATION.md` - Customization guide
+- `EXTENDING_RHIZA.md` - Customization and extension guide
 - `QUICK_REFERENCE.md` - Command reference
 - `SECURITY.md` - Security policy
 
