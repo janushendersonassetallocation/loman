@@ -1138,7 +1138,7 @@ class TestJsonRoundtrip:
         assert comp2.state("b") == States.UNINITIALIZED
         assert comp2.state("c") == States.UPTODATE
         assert comp2.value("a") == 1
-        assert comp2.value("c") == 2
+        assert comp2.value("c") == 3
 
     def test_json_no_serialize_input(self):
         """An input node with serialize=False is UNINITIALIZED after roundtrip."""

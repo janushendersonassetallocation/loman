@@ -1,12 +1,16 @@
 """Object serialization and transformation framework."""
 
+import contextlib
 import dataclasses
 import graphlib
+import importlib
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from enum import Enum
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 try:
     import attrs
@@ -195,6 +199,10 @@ class Transformer:
             return [self.to_dict(x) for x in o]
         elif isinstance(o, dict):
             return self._dict_to_dict(o)
+        # Check registered custom transformers before generic dataclass/attrs paths
+        # so that explicitly registered types (e.g. NodeKey) take priority.
+        elif self.get_transformer_for_obj(o) is not None:
+            return self._to_dict_transformer(o)
         elif isinstance(o, Transformable):
             return {KEY_TYPE: TYPENAME_TRANSFORMABLE, KEY_CLASS: type(o).__name__, KEY_DATA: o.to_dict(self)}
         elif HAS_ATTRS and attrs.has(type(o)):
@@ -354,3 +362,200 @@ class NdArrayTransformer(CustomTransformer):
     def supported_direct_types(self) -> Iterable[type]:
         """Return supported numpy array types."""
         return [np.ndarray]
+
+
+class EnumTransformer(CustomTransformer):
+    """Transformer for Enum subclasses.
+
+    Enum classes must be registered via :meth:`register_enum` before use.
+    """
+
+    def __init__(self) -> None:
+        """Initialise with an empty enum registry."""
+        self._registry: dict[str, type[Enum]] = {}
+
+    def register_enum(self, enum_class: type[Enum]) -> None:
+        """Register an enum class so its members can be deserialized."""
+        self._registry[enum_class.__qualname__] = enum_class
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "enum"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Convert an Enum member to a dict with class qualname and member name."""
+        assert isinstance(o, Enum)  # noqa: S101
+        return {"enum_class": type(o).__qualname__, "value": o.name}
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct an Enum member from its serialized form."""
+        enum_class = self._registry.get(d["enum_class"])
+        if enum_class is None:
+            msg = f"Unknown enum class: {d['enum_class']!r}. Register it with EnumTransformer.register_enum()."
+            raise UnrecognizedTypeError(msg)
+        return enum_class[d["value"]]
+
+    @property
+    def supported_subtypes(self) -> Iterable[type]:
+        """Handle all Enum subclasses."""
+        return [Enum]
+
+
+class FunctionRefTransformer(CustomTransformer):
+    """Transformer for importable callables (module-level functions and methods).
+
+    Lambdas and closures (whose ``__qualname__`` contains ``<lambda>`` or
+    ``<locals>``) are explicitly rejected with a :class:`ValueError`.
+    """
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "func_ref"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Serialize a callable as its module path and qualname."""
+        if not callable(o):
+            msg = f"Object {o!r} is not callable"
+            raise TypeError(msg)
+        qualname = getattr(o, "__qualname__", None)
+        module = getattr(o, "__module__", None)
+        if qualname is None or module is None:
+            msg = f"Cannot serialize {o!r}: missing __qualname__ or __module__"
+            raise ValueError(msg)
+        if "<lambda>" in qualname:
+            msg = f"Cannot serialize lambda function {o!r}: lambdas are not importable"
+            raise ValueError(msg)
+        if "<locals>" in qualname:
+            msg = f"Cannot serialize closure/local function {o!r}: non-importable"
+            raise ValueError(msg)
+        # Verify the callable is actually reachable via import before committing.
+        try:
+            mod = importlib.import_module(module)
+            obj: Any = mod
+            for part in qualname.split("."):
+                obj = getattr(obj, part)
+            if obj is not o:
+                msg = f"Cannot serialize {o!r}: import round-trip returned a different object"
+                raise ValueError(msg)
+        except (ImportError, AttributeError) as exc:
+            msg = f"Cannot serialize {o!r}: not importable ({exc})"
+            raise ValueError(msg) from exc
+        return {"module": module, "qualname": qualname}
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct a callable from its module path and qualname."""
+        module = importlib.import_module(d["module"])
+        obj: Any = module
+        for part in d["qualname"].split("."):
+            obj = getattr(obj, part)
+        return obj
+
+    @property
+    def supported_direct_types(self) -> Iterable[type]:
+        """Register the built-in function types explicitly handled."""
+        # We use supported_subtypes for the broad callable match instead,
+        # but we must list at least one concrete type here to help dispatch.
+        # The broad subtype match on Callable covers everything callable.
+        return []
+
+    @property
+    def supported_subtypes(self) -> Iterable[type]:
+        """Match all callables via Callable ABC."""
+        return [Callable]
+
+
+class DataFrameTransformer(CustomTransformer):
+    """Transformer for :class:`pandas.DataFrame` objects."""
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "dataframe"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Serialize a DataFrame using split orientation."""
+        assert isinstance(o, pd.DataFrame)  # noqa: S101
+        return {
+            "columns": list(o.columns),
+            "index": transformer.to_dict(list(o.index)),
+            "data": transformer.to_dict(o.values.tolist()),
+            "dtypes": {col: str(dtype) for col, dtype in o.dtypes.items()},
+        }
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct a DataFrame from its serialized form."""
+        data = transformer.from_dict(d["data"])
+        columns = d["columns"]
+        index = transformer.from_dict(d["index"])
+        dtypes = d.get("dtypes", {})
+        df = pd.DataFrame(data, columns=columns, index=index)
+        for col, dtype in dtypes.items():
+            with contextlib.suppress(ValueError, TypeError):  # pragma: no cover
+                df[col] = df[col].astype(dtype)
+        return df
+
+    @property
+    def supported_direct_types(self) -> Iterable[type]:
+        """Return supported pandas DataFrame type."""
+        return [pd.DataFrame]
+
+
+class SeriesTransformer(CustomTransformer):
+    """Transformer for :class:`pandas.Series` objects."""
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "series"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Serialize a Series with its name, dtype, index, and data."""
+        assert isinstance(o, pd.Series)  # noqa: S101
+        return {
+            "name": o.name,
+            "dtype": str(o.dtype),
+            "index": transformer.to_dict(list(o.index)),
+            "data": transformer.to_dict(o.tolist()),
+        }
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct a Series from its serialized form."""
+        data = transformer.from_dict(d["data"])
+        index = transformer.from_dict(d["index"])
+        s = pd.Series(data, index=index, name=d.get("name"))
+        with contextlib.suppress(ValueError, TypeError):  # pragma: no cover
+            s = s.astype(d["dtype"])
+        return s
+
+    @property
+    def supported_direct_types(self) -> Iterable[type]:
+        """Return supported pandas Series type."""
+        return [pd.Series]
+
+
+class NodeKeyTransformer(CustomTransformer):
+    """Transformer for :class:`~loman.nodekey.NodeKey` objects."""
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "nodekey"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Serialize a NodeKey as its path string."""
+        return {"path": str(o)}
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct a NodeKey from its path string."""
+        from loman.nodekey import parse_nodekey
+
+        return parse_nodekey(d["path"])
+
+    @property
+    def supported_direct_types(self) -> Iterable[type]:
+        """Return supported NodeKey type."""
+        from loman.nodekey import NodeKey
+
+        return [NodeKey]

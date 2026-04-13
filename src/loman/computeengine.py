@@ -12,7 +12,10 @@ from concurrent.futures import FIRST_COMPLETED, Executor, ThreadPoolExecutor, wa
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, BinaryIO, TypeVar, overload
+from typing import TYPE_CHECKING, Any, BinaryIO, TextIO, TypeVar, overload
+
+if TYPE_CHECKING:
+    from .serialization.computation import ComputationSerializer
 
 import decorator
 import dill
@@ -1714,6 +1717,45 @@ class Computation:
             msg = "Loaded object is not a Computation"
             raise ValidationError(msg)
 
+    def write_json(self, file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> None:
+        """Serialize a computation to a JSON file or file-like object.
+
+        Custom types can be supported by passing a custom *serializer* —
+        either a :class:`~loman.serialization.computation.ComputationSerializer`
+        instance with extra transformers registered, or a subclass that
+        overrides the transformer factory.
+
+        :param file_: Destination file path (str) or text-mode file-like object.
+        :param serializer: Optional custom serializer.  If ``None`` the default
+            :class:`~loman.serialization.computation.ComputationSerializer` is used.
+        """
+        from .serialization.computation import ComputationSerializer
+
+        s = serializer if serializer is not None else ComputationSerializer()
+        if isinstance(file_, str):
+            with open(file_, "w") as f:
+                s.dump(self, f)
+        else:
+            s.dump(self, file_)
+
+    @staticmethod
+    def read_json(file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> "Computation":
+        """Deserialize a computation from a JSON file or file-like object.
+
+        :param file_: Source file path (str) or text-mode file-like object.
+        :param serializer: Optional custom serializer.  If ``None`` the default
+            :class:`~loman.serialization.computation.ComputationSerializer` is used.
+        :rtype: Computation
+        """
+        from .serialization.computation import ComputationSerializer
+
+        s = serializer if serializer is not None else ComputationSerializer()
+        if isinstance(file_, str):
+            with open(file_) as f:
+                return s.load(f)
+        else:
+            return s.load(file_)
+
     def copy(self) -> "Computation":
         """Create a copy of a computation.
 
@@ -1837,6 +1879,11 @@ class Computation:
             node_key = to_nodekey(node_name)
             node_data = block.dag.nodes[node_key]
             tags = node_data.get(NodeAttributes.TAG, None)
+            # strip the serialize tag from the original node: add_block explicitly
+            # sets serialize=False, meaning "don't serialize the function".
+            # Value serialization is controlled separately via keep_values below.
+            if tags is not None:
+                tags = tags - {SystemTags.SERIALIZE}
             style = node_data.get(NodeAttributes.STYLE, None)
             group = node_data.get(NodeAttributes.GROUP, None)
             args_def, kwds_def = block.get_definition_args_kwds(node_key)
@@ -1864,6 +1911,9 @@ class Computation:
                 self._set_state_and_literal_value(
                     new_node_key, node_data[NodeAttributes.STATE], node_data[NodeAttributes.VALUE]
                 )
+                # The node has a concrete value — mark it serializable so the
+                # value survives a JSON roundtrip even though the function is not.
+                self._set_tag_one(new_node_key, SystemTags.SERIALIZE)
         if links is not None:
             for target, source in links.items():
                 self.link(base_path_nk.join_parts(target), source)
