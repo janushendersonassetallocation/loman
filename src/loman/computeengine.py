@@ -1684,9 +1684,18 @@ class Computation:
     def write_dill(self, file_: str | BinaryIO) -> None:
         """Serialize a computation to a file or file-like object.
 
+        .. deprecated::
+            Use :meth:`write_json` instead.  dill-based serialization will be
+            removed in a future release.
+
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
+        warnings.warn(
+            "write_dill is deprecated and will be removed in a future release. Use write_json instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if isinstance(file_, str):
             with open(file_, "wb") as f:
                 dill.dump(self, f)
@@ -1697,6 +1706,10 @@ class Computation:
     def read_dill(file_: str | BinaryIO) -> "Computation":
         """Deserialize a computation from a file or file-like object.
 
+        .. deprecated::
+            Use :meth:`read_json` instead.  dill-based serialization will be
+            removed in a future release.
+
         .. warning::
             This method uses dill.load() which can execute arbitrary code.
             Only load files from trusted sources. Never load data from
@@ -1706,6 +1719,11 @@ class Computation:
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
+        warnings.warn(
+            "read_dill is deprecated and will be removed in a future release. Use read_json instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if isinstance(file_, str):
             with open(file_, "rb") as f:
                 obj = dill.load(f)  # noqa: S301

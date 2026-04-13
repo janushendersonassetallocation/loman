@@ -1,5 +1,6 @@
 """Serialization utilities for Loman computations."""
 
+from .computation import ComputationSerializer
 from .default import default_transformer
 from .transformer import (
     CustomTransformer,
@@ -16,6 +17,7 @@ UnrecognizedTypeException = UnrecognizedTypeError
 UntransformableTypeException = UntransformableTypeError
 
 __all__ = [
+    "ComputationSerializer",
     "CustomTransformer",
     "MissingObject",
     "NdArrayTransformer",

@@ -2645,10 +2645,12 @@ class TestWriteDillCoverage:
         comp.add_node("a", value=42)
 
         path = tmp_path / "comp.dill"
-        comp.write_dill(str(path))
+        with pytest.warns(DeprecationWarning, match="write_dill"):
+            comp.write_dill(str(path))
 
         # Read it back
-        loaded = Computation.read_dill(str(path))
+        with pytest.warns(DeprecationWarning, match="read_dill"):
+            loaded = Computation.read_dill(str(path))
         assert loaded.v.a == 42
 
     def test_write_dill_to_fileobj(self):
@@ -2657,10 +2659,12 @@ class TestWriteDillCoverage:
         comp.add_node("a", value=42)
 
         buf = io.BytesIO()
-        comp.write_dill(buf)
+        with pytest.warns(DeprecationWarning, match="write_dill"):
+            comp.write_dill(buf)
         buf.seek(0)
 
-        loaded = Computation.read_dill(buf)
+        with pytest.warns(DeprecationWarning, match="read_dill"):
+            loaded = Computation.read_dill(buf)
         assert loaded.v.a == 42
 
     def test_read_dill_invalid(self):
@@ -2671,7 +2675,10 @@ class TestWriteDillCoverage:
         dill.dump("not a computation", buf)
         buf.seek(0)
 
-        with pytest.raises(Exception, match=r".*"):  # Intentionally broad
+        with (
+            pytest.raises(Exception, match=r".*"),
+            pytest.warns(DeprecationWarning, match="read_dill"),
+        ):  # Intentionally broad
             Computation.read_dill(buf)
 
 

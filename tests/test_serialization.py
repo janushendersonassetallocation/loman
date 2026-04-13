@@ -412,10 +412,12 @@ def test_dill_serialization():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
 
     f.seek(0)
-    foo = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        foo = Computation.read_dill(f)
 
     assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
@@ -433,7 +435,8 @@ def test_dill_serialization_skip_flag():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
 
     assert comp.state("a") == States.UPTODATE
     assert comp.state("b") == States.UPTODATE
@@ -443,7 +446,8 @@ def test_dill_serialization_skip_flag():
     assert comp.value("c") == 3
 
     f.seek(0)
-    comp2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        comp2 = Computation.read_dill(f)
     assert comp2.state("a") == States.UPTODATE
     assert comp2.state("b") == States.UNINITIALIZED
     assert comp2.state("c") == States.UPTODATE
@@ -460,9 +464,11 @@ def test_no_serialize_flag():
     comp.compute_all()
 
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
     f.seek(0)
-    comp2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        comp2 = Computation.read_dill(f)
     assert comp2.state("a") == States.UNINITIALIZED
     assert comp2["b"] == NodeData(States.UPTODATE, 2)
 
@@ -494,9 +500,11 @@ def test_serialize_nested_loman():
     outer.compute_all()
 
     f = io.BytesIO()
-    outer.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        outer.write_dill(f)
     f.seek(0)
-    outer2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        outer2 = Computation.read_dill(f)
 
     assert outer2.v.COMP.v.b == outer.v.COMP.v.b
     assert outer2.v.out == outer.v.out
@@ -523,10 +531,12 @@ def test_roundtrip_old_dill():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
 
     f.seek(0)
-    foo = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        foo = Computation.read_dill(f)
 
     assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
@@ -573,16 +583,18 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     outer.compute_all()
 
     f = io.BytesIO()
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError), pytest.warns(DeprecationWarning, match="write_dill"):
         outer.write_dill(f)
 
     outer.v.COMP.clear_tag("unserializable", "__serialize__")
 
     f = io.BytesIO()
-    outer.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        outer.write_dill(f)
 
     f.seek(0)
-    outer2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        outer2 = Computation.read_dill(f)
 
     assert outer2.v.COMP.v.a == outer.v.COMP.v.a
     assert outer2.v.out == outer.v.out

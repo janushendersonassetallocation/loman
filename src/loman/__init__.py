@@ -19,6 +19,7 @@ from loman.exception import (
     ValidationError,
 )
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
+from loman.serialization import ComputationSerializer
 from loman.visualization import GraphView
 
 # Backward compatibility alias
@@ -29,6 +30,7 @@ __all__ = [
     "CannotInsertToPlaceholderNodeError",
     "Computation",
     "ComputationFactory",  # Backward compatibility
+    "ComputationSerializer",
     "FittingError",
     "GraphView",
     "InvalidBlockTypeError",
