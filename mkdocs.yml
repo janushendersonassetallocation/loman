@@ -1,14 +1,15 @@
+INHERIT: docs/mkdocs-base.yml
+
 site_name: Loman
 site_description: Loman tracks state of computations, and the dependencies between them, allowing full and partial recalculations.
 site_url: https://janushendersonassetallocation.github.io/loman
 repo_url: https://github.com/janushendersonassetallocation/loman
 repo_name: janushendersonassetallocation/loman
 
-docs_dir: docs
+docs_dir: docs  # must be set explicitly — base resolves relative to docs/mkdocs-base.yml
 site_dir: _mkdocs
 
 theme:
-  name: material
   features:
     - navigation.tabs
     - navigation.sections
@@ -16,12 +17,6 @@ theme:
     - search.suggest
     - search.highlight
     - content.code.copy
-
-extra:
-  version:
-    provider: mike
-
-use_directory_urls: false
 
 plugins:
   - search
@@ -85,14 +80,9 @@ nav:
               - Serializing Computations: user/features/other/serializing_computations.md
   - Developer:
       - Release Checklist: dev/release.md
-      - Architecture: ARCHITECTURE.md
-      - Testing: TESTS.md
-      - Security: SECURITY.md
+      - Architecture: reference/ARCHITECTURE.md
+      - Testing: development/TESTS.md
   - Reference:
-      - Quick Reference: QUICK_REFERENCE.md
-      - Glossary: GLOSSARY.md
-      - Customization: CUSTOMIZATION.md
-      - DevContainer: DEVCONTAINER.md
-      - Demo: DEMO.md
-      - Contributing: CONTRIBUTING.md
-      - Code of Conduct: CODE_OF_CONDUCT.md
+      - Quick Reference: guides/QUICK_REFERENCE.md
+      - Glossary: reference/GLOSSARY.md
+      - DevContainer: development/DEVCONTAINER.md
