@@ -80,15 +80,6 @@ def dill_computation_transformer() -> Transformer:
     return t
 
 
-# ---------------------------------------------------------------------------
-# Error dataclass transformer
-# ---------------------------------------------------------------------------
-
-# We handle Error inline in ComputationSerializer rather than as a
-# CustomTransformer because it needs to produce a reconstructed Error
-# object (with string-ified exception) rather than the original exception.
-
-
 class ComputationSerializer:
     """Serialize and deserialize a :class:`~loman.computeengine.Computation` graph to JSON.
 
@@ -142,10 +133,6 @@ class ComputationSerializer:
             )
         self._t = transformer
         self._use_dill_for_functions = use_dill_for_functions
-
-    # ------------------------------------------------------------------
-    # Serialization
-    # ------------------------------------------------------------------
 
     def dump(self, comp: Any, fp: TextIO) -> None:
         """Serialize *comp* to *fp* (a text-mode file-like object)."""
@@ -213,8 +200,6 @@ class ComputationSerializer:
         serialize_flag: bool = SystemTags.SERIALIZE in tags
 
         if not serialize_flag:
-            # Nodes without the serialize flag are stored as UNINITIALIZED —
-            # matching the behaviour of __getstate__ / write_dill.
             serialized_state = States.UNINITIALIZED
             encoded_value = None
             has_value = False
@@ -261,10 +246,6 @@ class ComputationSerializer:
         edges_out = [self._serialize_edge(src, dst, data) for src, dst, data in comp.dag.edges(data=True)]
         return {"version": FORMAT_VERSION, "nodes": nodes_out, "edges": edges_out}
 
-    # ------------------------------------------------------------------
-    # Deserialization
-    # ------------------------------------------------------------------
-
     def load(self, fp: TextIO) -> Any:
         """Deserialize a Computation from *fp* (a text-mode file-like object)."""
         data = json.load(fp)
@@ -281,7 +262,6 @@ class ComputationSerializer:
 
         comp = Computation()
 
-        # --- Rebuild nodes ---------------------------------------------------
         for node_info in data["nodes"]:
             raw_key = node_info["key"]
             node_key = parse_nodekey(raw_key)
@@ -291,15 +271,12 @@ class ComputationSerializer:
             has_value: bool = node_info.get("has_value", False)
             user_tags: list[str] = node_info.get("tags", [])
 
-            # Reconstruct function
             encoded_func = node_info.get("func")
             func = self._t.from_dict(encoded_func) if encoded_func is not None else None
 
-            # Reconstruct value
             encoded_value = node_info.get("value")
             if has_value and encoded_value is not None:
                 if isinstance(encoded_value, dict) and encoded_value.get("__loman_error__"):
-                    # Reconstruct Error with string exception
                     value = Error(
                         exception=Exception(encoded_value["exception_str"]),
                         traceback=encoded_value["traceback"],
@@ -309,8 +286,6 @@ class ComputationSerializer:
             else:
                 value = None
 
-            # Add the node to the graph with the function (but no edges yet —
-            # those are added below to preserve the exact param mapping).
             comp.dag.add_node(node_key)
             node_data = comp.dag.nodes[node_key]
             node_data[NodeAttributes.STATE] = state if state is not None else States.UNINITIALIZED
@@ -324,13 +299,11 @@ class ComputationSerializer:
             node_data[NodeAttributes.EXECUTOR] = None
             node_data[NodeAttributes.CONVERTER] = None
 
-            # Apply tags
             if serialize_flag:
                 node_data[NodeAttributes.TAG].add(SystemTags.SERIALIZE)
             for tag in user_tags:
                 node_data[NodeAttributes.TAG].add(tag)
 
-        # --- Rebuild edges ---------------------------------------------------
         for edge_info in data["edges"]:
             src_key = parse_nodekey(edge_info["src"])
             dst_key = parse_nodekey(edge_info["dst"])
@@ -343,7 +316,6 @@ class ComputationSerializer:
             else:
                 comp.dag.add_edge(src_key, dst_key)
 
-        # --- Rebuild internal maps -------------------------------------------
         comp._refresh_maps()
 
         return comp
