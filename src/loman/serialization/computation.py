@@ -156,105 +156,109 @@ class ComputationSerializer:
         """Serialize *comp* and return a JSON string."""
         return json.dumps(self._to_dict(comp))
 
-    def _to_dict(self, comp: Any) -> dict[str, Any]:
-        """Convert a Computation to a JSON-serializable dict."""
+    def _serialize_node_value(self, node_key: Any, state: States | None, node_data: dict[str, Any]) -> tuple[Any, bool]:
+        """Return ``(encoded_value, has_value)`` for a node that should be serialized.
+
+        Raises :class:`~loman.exception.SerializationError` if the value cannot
+        be encoded.
+        """
         from loman.computeengine import Error
 
-        nodes_out: list[dict[str, Any]] = []
-        edges_out: list[dict[str, Any]] = []
+        if state not in self._VALUE_STATES:
+            return None, False
 
-        for node_key in comp.dag.nodes():
-            node_data = comp.dag.nodes[node_key]
-            state: States = node_data.get(NodeAttributes.STATE)
-            tags: set[str] = node_data.get(NodeAttributes.TAG, set())
-            serialize_flag: bool = SystemTags.SERIALIZE in tags
-
-            # Nodes without the serialize flag are stored as UNINITIALIZED —
-            # matching the behaviour of __getstate__ / write_dill.
-            if not serialize_flag:
-                serialized_state = States.UNINITIALIZED
-                encoded_value = None
-                has_value = False
-            elif state in self._VALUE_STATES:
-                # Serialize the node value.
-                serialized_state = state
-                raw_value = node_data.get(NodeAttributes.VALUE)
-                if state == States.ERROR and isinstance(raw_value, Error):
-                    # Serialise Error as plain strings for post-mortem inspection
-                    encoded_value = {
-                        "__loman_error__": True,
-                        "exception_type": type(raw_value.exception).__name__,
-                        "exception_str": str(raw_value.exception),
-                        "traceback": raw_value.traceback,
-                    }
-                    has_value = True
-                else:
-                    try:
-                        encoded_value = self._t.to_dict(raw_value)
-                        has_value = True
-                    except (UntransformableTypeError, ValueError) as exc:
-                        msg = f"Cannot serialize value of node {node_key!r}: {exc}"
-                        raise SerializationError(msg) from exc
-            else:
-                serialized_state = state
-                encoded_value = None
-                has_value = False
-
-            # Encode the function reference (if any).
-            # - When use_dill_for_functions is False: lambdas raise SerializationError;
-            #   other non-importable callables (e.g. framework closures) are stored as null.
-            # - When use_dill_for_functions is True: all callables go through
-            #   DillFunctionTransformer; the lambda guard is skipped.
-            raw_func = node_data.get(NodeAttributes.FUNC)
-            if raw_func is not None and serialize_flag:
-                qualname = getattr(raw_func, "__qualname__", "") or ""
-                if not self._use_dill_for_functions and "<lambda>" in qualname:
-                    msg = (
-                        f"Cannot serialize lambda function on node {node_key!r}. "
-                        "Use a module-level importable function, serialize=False, "
-                        "or ComputationSerializer(use_dill_for_functions=True)."
-                    )
-                    raise SerializationError(msg)
-                try:
-                    encoded_func = self._t.to_dict(raw_func)
-                except (UntransformableTypeError, ValueError, TypeError):
-                    # Non-importable callable (e.g. framework closure) — store null.
-                    encoded_func = None
-            else:
-                encoded_func = None
-
-            # Non-system tags to persist
-            user_tags = [t for t in tags if not t.startswith("__")]
-
-            nodes_out.append(
+        raw_value = node_data.get(NodeAttributes.VALUE)
+        if state == States.ERROR and isinstance(raw_value, Error):
+            return (
                 {
-                    "key": str(node_key),
-                    "state": serialized_state.name if serialized_state is not None else None,
-                    "value": encoded_value,
-                    "has_value": has_value,
-                    "func": encoded_func,
-                    "serialize": serialize_flag,
-                    "tags": user_tags,
-                }
+                    "__loman_error__": True,
+                    "exception_type": type(raw_value.exception).__name__,
+                    "exception_str": str(raw_value.exception),
+                    "traceback": raw_value.traceback,
+                },
+                True,
             )
 
-        for src, dst, edge_data in comp.dag.edges(data=True):
-            param = edge_data.get(EdgeAttributes.PARAM)
-            if param is not None:
-                from loman.computeengine import _ParameterType
+        try:
+            return self._t.to_dict(raw_value), True
+        except (UntransformableTypeError, ValueError) as exc:
+            msg = f"Cannot serialize value of node {node_key!r}: {exc}"
+            raise SerializationError(msg) from exc
 
-                param_type, param_val = param
-                edges_out.append(
-                    {
-                        "src": str(src),
-                        "dst": str(dst),
-                        "param_type": "kwd" if param_type == _ParameterType.KWD else "arg",
-                        "param": param_val,
-                    }
-                )
-            else:
-                edges_out.append({"src": str(src), "dst": str(dst), "param_type": None, "param": None})
+    def _serialize_node_func(self, node_key: Any, raw_func: Any) -> Any:
+        """Return the encoded function for a node, or ``None`` if it cannot be serialized.
 
+        Lambdas raise :class:`~loman.exception.SerializationError` unless
+        ``use_dill_for_functions`` is enabled.  Other non-importable callables
+        (e.g. framework closures from ``add_block``) are silently stored as ``null``.
+        """
+        qualname = getattr(raw_func, "__qualname__", "") or ""
+        if not self._use_dill_for_functions and "<lambda>" in qualname:
+            msg = (
+                f"Cannot serialize lambda function on node {node_key!r}. "
+                "Use a module-level importable function, serialize=False, "
+                "or ComputationSerializer(use_dill_for_functions=True)."
+            )
+            raise SerializationError(msg)
+        try:
+            return self._t.to_dict(raw_func)
+        except (UntransformableTypeError, ValueError, TypeError):
+            # Non-importable callable (e.g. framework closure) — store null.
+            return None
+
+    def _serialize_node(self, node_key: Any, node_data: dict[str, Any]) -> dict[str, Any]:
+        """Return the serialized dict for a single node."""
+        state: States | None = node_data.get(NodeAttributes.STATE)
+        tags: set[str] = node_data.get(NodeAttributes.TAG, set())
+        serialize_flag: bool = SystemTags.SERIALIZE in tags
+
+        if not serialize_flag:
+            # Nodes without the serialize flag are stored as UNINITIALIZED —
+            # matching the behaviour of __getstate__ / write_dill.
+            serialized_state = States.UNINITIALIZED
+            encoded_value = None
+            has_value = False
+        else:
+            serialized_state = state
+            encoded_value, has_value = self._serialize_node_value(node_key, state, node_data)
+
+        raw_func = node_data.get(NodeAttributes.FUNC)
+        encoded_func = (
+            self._serialize_node_func(node_key, raw_func) if raw_func is not None and serialize_flag else None
+        )
+
+        user_tags = [t for t in tags if not t.startswith("__")]
+
+        return {
+            "key": str(node_key),
+            "state": serialized_state.name if serialized_state is not None else None,
+            "value": encoded_value,
+            "has_value": has_value,
+            "func": encoded_func,
+            "serialize": serialize_flag,
+            "tags": user_tags,
+        }
+
+    def _serialize_edge(self, src: Any, dst: Any, edge_data: dict[str, Any]) -> dict[str, Any]:
+        """Return the serialized dict for a single edge."""
+        param = edge_data.get(EdgeAttributes.PARAM)
+        if param is None:
+            return {"src": str(src), "dst": str(dst), "param_type": None, "param": None}
+
+        from loman.computeengine import _ParameterType
+
+        param_type, param_val = param
+        return {
+            "src": str(src),
+            "dst": str(dst),
+            "param_type": "kwd" if param_type == _ParameterType.KWD else "arg",
+            "param": param_val,
+        }
+
+    def _to_dict(self, comp: Any) -> dict[str, Any]:
+        """Convert a Computation to a JSON-serializable dict."""
+        nodes_out = [self._serialize_node(k, comp.dag.nodes[k]) for k in comp.dag.nodes()]
+        edges_out = [self._serialize_edge(src, dst, data) for src, dst, data in comp.dag.edges(data=True)]
         return {"version": FORMAT_VERSION, "nodes": nodes_out, "edges": edges_out}
 
     # ------------------------------------------------------------------
