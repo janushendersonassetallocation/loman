@@ -518,7 +518,7 @@ class DillFunctionTransformer(CustomTransformer):
         import dill
 
         blob = base64.b64decode(d["blob"].encode("ascii"))
-        return dill.loads(blob)  # noqa: S301 — intentional: user-controlled data from their own write_json
+        return dill.loads(blob)  # noqa: S301  # nosec B301
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
