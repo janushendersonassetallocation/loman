@@ -466,6 +466,71 @@ class FunctionRefTransformer(CustomTransformer):
         return [Callable]
 
 
+class DillFunctionTransformer(CustomTransformer):
+    """Transformer that serializes any callable — including lambdas and closures — using dill.
+
+    The callable is serialized with :func:`dill.dumps` and the resulting bytes
+    are stored as a base64-encoded string inside the JSON document.  On load the
+    bytes are decoded and passed to :func:`dill.loads`.
+
+    .. note::
+        The embedded dill blob is **not** portable across Python versions and
+        shares the same stability caveats as :meth:`~loman.Computation.write_dill`.
+        Register this transformer when convenient lambda/closure round-trips matter
+        more than portability.
+
+    Example::
+
+        from loman import Computation, ComputationSerializer
+        from loman.serialization import DillFunctionTransformer
+
+        s = ComputationSerializer(use_dill_for_functions=True)
+        comp = Computation()
+        comp.add_node('a', value=1)
+        comp.add_node('b', lambda a: a + 1)
+        comp.compute_all()
+        comp.write_json('comp.json', serializer=s)
+        comp2 = Computation.read_json('comp.json', serializer=s)
+        assert comp2.v.b == 2
+    """
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "dill_func"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Serialize a callable to a base64-encoded dill blob."""
+        import base64
+
+        import dill
+
+        if not callable(o):
+            msg = f"Object {o!r} is not callable"
+            raise TypeError(msg)
+        blob = dill.dumps(o)
+        return {"blob": base64.b64encode(blob).decode("ascii")}
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct a callable from a base64-encoded dill blob."""
+        import base64
+
+        import dill
+
+        blob = base64.b64decode(d["blob"].encode("ascii"))
+        return dill.loads(blob)  # noqa: S301 — intentional: user-controlled data from their own write_json
+
+    @property
+    def supported_direct_types(self) -> Iterable[type]:
+        """No direct type matches — rely on subtype matching."""
+        return []
+
+    @property
+    def supported_subtypes(self) -> Iterable[type]:
+        """Match all callables via Callable ABC."""
+        return [Callable]
+
+
 class DataFrameTransformer(CustomTransformer):
     """Transformer for :class:`pandas.DataFrame` objects."""
 

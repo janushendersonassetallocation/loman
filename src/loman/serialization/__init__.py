@@ -4,6 +4,7 @@ from .computation import ComputationSerializer
 from .default import default_transformer
 from .transformer import (
     CustomTransformer,
+    DillFunctionTransformer,
     MissingObject,
     NdArrayTransformer,
     Transformable,
@@ -19,6 +20,7 @@ UntransformableTypeException = UntransformableTypeError
 __all__ = [
     "ComputationSerializer",
     "CustomTransformer",
+    "DillFunctionTransformer",
     "MissingObject",
     "NdArrayTransformer",
     "Transformable",

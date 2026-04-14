@@ -14,6 +14,7 @@ from loman import Computation, ComputationFactory, SerializationError, States, c
 from loman.computeengine import NodeData
 from loman.nodekey import NodeKey, parse_nodekey
 from loman.serialization import (
+    ComputationSerializer,
     CustomTransformer,
     MissingObject,
     NdArrayTransformer,
@@ -1180,6 +1181,72 @@ class TestJsonRoundtrip:
         buf = io.StringIO()
         with pytest.raises(SerializationError):
             comp.write_json(buf)
+
+    def test_json_lambda_raises_error_message_mentions_dill_option(self):
+        """SerializationError message mentions the use_dill_for_functions option."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        with pytest.raises(SerializationError, match="use_dill_for_functions"):
+            comp.write_json(buf)
+
+    def test_json_use_dill_for_functions_lambda_roundtrip(self):
+        """Lambda functions round-trip when use_dill_for_functions=True."""
+        comp = Computation()
+        comp.add_node("a", value=3)
+        comp.add_node("b", lambda a: a * 2)
+        comp.compute_all()
+
+        s = ComputationSerializer(use_dill_for_functions=True)
+        buf = io.StringIO()
+        comp.write_json(buf, serializer=s)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf, serializer=s)
+
+        assert comp2.state("b") == States.UPTODATE
+        assert comp2.value("b") == 6
+        # The function is restored — re-compute works.
+        comp2.insert("a", 10)
+        comp2.compute_all()
+        assert comp2.value("b") == 20
+
+    def test_json_use_dill_for_functions_closure_roundtrip(self):
+        """Closures capturing free variables round-trip when use_dill_for_functions=True."""
+        offset = 7
+
+        def add_offset(a):
+            return a + offset
+
+        comp = Computation()
+        comp.add_node("a", value=5)
+        comp.add_node("result", add_offset)
+        comp.compute_all()
+
+        s = ComputationSerializer(use_dill_for_functions=True)
+        buf = io.StringIO()
+        comp.write_json(buf, serializer=s)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf, serializer=s)
+
+        assert comp2.value("result") == 12
+        comp2.insert("a", 3)
+        comp2.compute_all()
+        assert comp2.value("result") == 10
+
+    def test_json_use_dill_for_functions_false_by_default(self):
+        """use_dill_for_functions defaults to False — lambdas still raise."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.compute_all()
+
+        s = ComputationSerializer()  # default — dill disabled
+        buf = io.StringIO()
+        with pytest.raises(SerializationError):
+            comp.write_json(buf, serializer=s)
 
     def test_json_roundtrip_with_pandas_values(self):
         """A node whose value is a DataFrame roundtrips correctly."""

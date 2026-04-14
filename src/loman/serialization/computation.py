@@ -11,6 +11,7 @@ from loman.nodekey import parse_nodekey
 
 from .transformer import (
     DataFrameTransformer,
+    DillFunctionTransformer,
     EnumTransformer,
     FunctionRefTransformer,
     NdArrayTransformer,
@@ -52,6 +53,33 @@ def default_computation_transformer() -> Transformer:
     return t
 
 
+def dill_computation_transformer() -> Transformer:
+    """Create a Transformer that serializes all callables — including lambdas and closures — via dill.
+
+    Identical to :func:`default_computation_transformer` except that
+    :class:`~loman.serialization.transformer.DillFunctionTransformer` replaces
+    :class:`~loman.serialization.transformer.FunctionRefTransformer`, so lambdas
+    and locally-defined closures are serialized as base64-encoded dill blobs
+    rather than raising :class:`~loman.exception.SerializationError`.
+    """
+    t = Transformer()
+
+    t.register(NdArrayTransformer())
+
+    enum_t = EnumTransformer()
+    enum_t.register_enum(States)
+    t.register(enum_t)
+
+    # Dill-based callable serializer — handles lambdas and closures.
+    t.register(DillFunctionTransformer())
+
+    t.register(DataFrameTransformer())
+    t.register(SeriesTransformer())
+    t.register(NodeKeyTransformer())
+
+    return t
+
+
 # ---------------------------------------------------------------------------
 # Error dataclass transformer
 # ---------------------------------------------------------------------------
@@ -86,16 +114,34 @@ class ComputationSerializer:
     - ``dst``: string key of the destination node
     - ``param_type``: ``"arg"`` or ``"kwd"``
     - ``param``: positional index (int) for args, parameter name (str) for kwds
+
+    Parameters
+    ----------
+    transformer:
+        Custom :class:`~loman.serialization.transformer.Transformer` instance.
+        If ``None``, a default transformer is built based on *use_dill_for_functions*.
+    use_dill_for_functions:
+        When ``True``, lambdas and closures are serialized as base64-encoded dill
+        blobs rather than raising :class:`~loman.exception.SerializationError`.
+        Has no effect when a custom *transformer* is supplied.  Defaults to ``False``.
     """
 
     # States whose nodes carry a meaningful value that should be preserved.
     _VALUE_STATES: ClassVar[set[States]] = {States.UPTODATE, States.PINNED, States.ERROR}
 
-    def __init__(self, transformer: Transformer | None = None) -> None:
+    def __init__(
+        self,
+        transformer: Transformer | None = None,
+        *,
+        use_dill_for_functions: bool = False,
+    ) -> None:
         """Initialise with an optional custom transformer."""
         if transformer is None:
-            transformer = default_computation_transformer()
+            transformer = (
+                dill_computation_transformer() if use_dill_for_functions else default_computation_transformer()
+            )
         self._t = transformer
+        self._use_dill_for_functions = use_dill_for_functions
 
     # ------------------------------------------------------------------
     # Serialization
@@ -155,16 +201,18 @@ class ComputationSerializer:
                 has_value = False
 
             # Encode the function reference (if any).
-            # - Lambdas always raise SerializationError (user should use importable functions).
-            # - Other non-importable callables (e.g. closures created by the framework)
-            #   are silently stored as null; the node value is preserved instead.
+            # - When use_dill_for_functions is False: lambdas raise SerializationError;
+            #   other non-importable callables (e.g. framework closures) are stored as null.
+            # - When use_dill_for_functions is True: all callables go through
+            #   DillFunctionTransformer; the lambda guard is skipped.
             raw_func = node_data.get(NodeAttributes.FUNC)
             if raw_func is not None and serialize_flag:
                 qualname = getattr(raw_func, "__qualname__", "") or ""
-                if "<lambda>" in qualname:
+                if not self._use_dill_for_functions and "<lambda>" in qualname:
                     msg = (
                         f"Cannot serialize lambda function on node {node_key!r}. "
-                        "Use a module-level importable function instead."
+                        "Use a module-level importable function, serialize=False, "
+                        "or ComputationSerializer(use_dill_for_functions=True)."
                     )
                     raise SerializationError(msg)
                 try:
