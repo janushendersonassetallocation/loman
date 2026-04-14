@@ -87,7 +87,7 @@ class CustomTransformer(ABC):
         return []
 
     @property
-    def supported_subtypes(self) -> Iterable[type]:
+    def supported_subtypes(self) -> Iterable[Any]:
         """Return base types whose subtypes this transformer can handle."""
         return []
 
@@ -461,7 +461,7 @@ class FunctionRefTransformer(CustomTransformer):
         return []
 
     @property
-    def supported_subtypes(self) -> Iterable[type]:
+    def supported_subtypes(self) -> Iterable[Any]:
         """Match all callables via Callable ABC."""
         return [Callable]
 
@@ -526,7 +526,7 @@ class DillFunctionTransformer(CustomTransformer):
         return []
 
     @property
-    def supported_subtypes(self) -> Iterable[type]:
+    def supported_subtypes(self) -> Iterable[Any]:
         """Match all callables via Callable ABC."""
         return [Callable]
 
