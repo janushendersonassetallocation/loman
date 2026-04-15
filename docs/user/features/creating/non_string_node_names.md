@@ -12,7 +12,7 @@ In the previous example, the nodes have all been given strings as keys. This is 
 >>> comp.draw()
 ```
 
-```{graphviz}
+```dot
     digraph {
         n0 [label="('fib', 1)" fillcolor="#15b01a" style=filled]
         n1 [label="('fib', 2)" fillcolor="#15b01a" style=filled]

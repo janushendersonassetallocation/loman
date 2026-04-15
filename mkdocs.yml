@@ -1,0 +1,98 @@
+site_name: Loman
+site_description: Loman tracks state of computations, and the dependencies between them, allowing full and partial recalculations.
+site_url: https://janushendersonassetallocation.github.io/loman
+repo_url: https://github.com/janushendersonassetallocation/loman
+repo_name: janushendersonassetallocation/loman
+
+docs_dir: docs
+site_dir: _mkdocs
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+extra:
+  version:
+    provider: mike
+
+use_directory_urls: false
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            heading_level: 2
+            members_order: source
+            show_signature_annotations: true
+
+markdown_extensions:
+  - mkdocs_graphviz:
+      node_color: "000000"
+      node_fontcolor: "000000"
+      edge_color: "000000"
+      edge_fontcolor: "000000"
+      graph_color: "000000"
+      graph_fontcolor: "000000"
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+  - admonition
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+nav:
+  - Home: index.md
+  - Getting Started: user/quickstart.md
+  - Marimo Notebooks: notebooks.md
+  - Reports: reports.md
+  - API Reference: api.md
+  - User Guide:
+      - Introduction: user/intro.md
+      - Installation: user/install.md
+      - Strategies: user/strategies.md
+      - Features:
+          - Creating:
+              - Constant Values: user/features/creating/constant_values.md
+              - Node Decorator: user/features/creating/adding_nodes_using_decorators.md
+              - Named Tuples: user/features/creating/automatically_expanding_named_tuples.md
+              - Computation Factories: user/features/creating/creating_computation_factories.md
+              - Non-String Node Names: user/features/creating/non_string_node_names.md
+              - Tagging Nodes: user/features/creating/tagging_nodes.md
+          - Querying:
+              - Show as DataFrame: user/features/querying/show_as_dataframe.md
+              - View Inputs and Outputs: user/features/querying/view_inputs_outputs.md
+              - Visualizing Graphs: user/features/querying/visualizing_computation_graph.md
+          - Manipulating:
+              - Repointing Nodes: user/features/manipulating/repointing_nodes.md
+          - Other:
+              - Interactive Debugging: user/features/other/interactive_debugging.md
+              - Serializing Computations: user/features/other/serializing_computations.md
+  - Developer:
+      - Release Checklist: dev/release.md
+      - Architecture: ARCHITECTURE.md
+      - Testing: TESTS.md
+      - Security: SECURITY.md
+  - Reference:
+      - Quick Reference: QUICK_REFERENCE.md
+      - Glossary: GLOSSARY.md
+      - Customization: CUSTOMIZATION.md
+      - DevContainer: DEVCONTAINER.md
+      - Demo: DEMO.md
+      - Contributing: CONTRIBUTING.md
+      - Code of Conduct: CODE_OF_CONDUCT.md

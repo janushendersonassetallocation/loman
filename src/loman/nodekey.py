@@ -2,13 +2,13 @@
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Hashable, Iterable
 from dataclasses import dataclass
-from typing import Any, ClassVar, Optional, Union
+from typing import ClassVar, Optional, Union
 
 from loman.util import as_iterable
 
-Name = Union[str, "NodeKey", object]
+Name = Union[str, "NodeKey", Hashable]
 Names = list[Name]
 
 
@@ -18,7 +18,7 @@ class PathNotFoundError(Exception):
     pass
 
 
-def quote_part(part: object) -> str:
+def quote_part(part: Hashable) -> str:
     """Quote a node key part for safe representation in paths."""
     if isinstance(part, str):
         if "/" in part:
@@ -32,7 +32,7 @@ def quote_part(part: object) -> str:
 class NodeKey:
     """Immutable key for identifying nodes in the computation graph hierarchy."""
 
-    parts: tuple[Any, ...]
+    parts: tuple[Hashable, ...]
 
     def __str__(self) -> str:
         """Return string representation using path notation."""
@@ -80,7 +80,7 @@ class NodeKey:
             result = result.join_parts(*other.parts)
         return result
 
-    def join_parts(self, *parts: Any) -> "NodeKey":
+    def join_parts(self, *parts: Hashable) -> "NodeKey":
         """Join this node key with raw parts to create a new node key."""
         if len(parts) == 0:
             return self
@@ -140,7 +140,7 @@ class NodeKey:
         """Find the common parent of two node keys."""
         nk1 = to_nodekey(nodekey1)
         nk2 = to_nodekey(nodekey2)
-        parts: list[Any] = []
+        parts: list[Hashable] = []
         for p1, p2 in zip(nk1.parts, nk2.parts, strict=False):
             if p1 != p2:
                 break
@@ -187,17 +187,23 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
             part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]
             parts_append(part)
             nextchar = path_str[end : end + 1]
-            assert nextchar == "" or nextchar == "/"  # noqa: S101
+            if nextchar != "" and nextchar != "/":
+                msg = f"Expected end of string or '/' after quoted part, got {nextchar!r} in {path_str!r}"
+                raise ValueError(msg)
             if nextchar != "":
                 end = end + 1
         else:
             chunk = PART.match(path_str, end)
-            assert chunk is not None  # noqa: S101
+            if chunk is None:
+                msg = f"Failed to match node key part at position {end} in {path_str!r}"
+                raise ValueError(msg)
             end = chunk.end()
             (part,) = chunk.groups()
             parts_append(part)
 
-    assert end == len(path_str)  # noqa: S101
+    if end != len(path_str):
+        msg = f"Unexpected trailing content at position {end} in {path_str!r}"
+        raise ValueError(msg)
 
     return NodeKey(tuple(parts))
 
@@ -258,7 +264,7 @@ def _match_pattern_recursive(pattern: NodeKey, target: NodeKey, p_idx: int, t_id
 
 def is_pattern(nodekey: NodeKey) -> bool:
     """Check if a node key contains wildcard patterns."""
-    return any("*" in part or "**" in part for part in nodekey.parts)
+    return any(isinstance(part, str) and ("*" in part or "**" in part) for part in nodekey.parts)
 
 
 def match_pattern(pattern: NodeKey, target: NodeKey) -> bool:

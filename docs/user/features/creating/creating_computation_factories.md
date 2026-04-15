@@ -33,7 +33,7 @@ Once the computation factory is defined, we can use is to instantiate computatio
 >>> comp
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", label=a, style=filled];
 n1 [fillcolor="#15b01a", label=b, style=filled];
@@ -100,7 +100,7 @@ class ExampleComputation3:
 >>> comp
 ```
 
-```{graphviz}
+```dot
 digraph G {
 n0 [fillcolor="#15b01a", label=a, style=filled];
 n1 [fillcolor="#15b01a", label=b, peripheries=1, shape=point, style=filled, width=0.1];

@@ -4,34 +4,11 @@ Loman is a Python library to deal with complex dependencies between sets of calc
 
 ## User Guide
 
-```{toctree}
-:maxdepth: 2
-
-user/intro
-user/install
-user/quickstart
-user/features/index
-user/strategies
-```
-
-## API Reference
-
-```{toctree}
-:maxdepth: 2
-
-api
-```
+- [Introduction](user/intro.md) — What Loman is and why it exists
+- [Installation](user/install.md) — How to install Loman
+- [Quick Start](user/quickstart.md) — Get up and running quickly
+- [Strategies](user/strategies.md) — Strategies for using Loman in the real world
 
 ## Developer Guidelines
 
-```{toctree}
-:maxdepth: 2
-
-dev/release
-```
-
-# Indices and tables
-
-- {ref}`genindex`
-- {ref}`modindex`
-- {ref}`search`
+- [Release Checklist](dev/release.md) — Steps for releasing a new version

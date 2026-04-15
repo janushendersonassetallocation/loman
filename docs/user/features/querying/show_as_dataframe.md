@@ -22,9 +22,9 @@
 | c  | States.UPTODATE |       2 | 2024-11-30 18:49:41.626849 | 2024-11-30 18:49:41.626849 |          0 |
 | d  | States.UPTODATE |       4 | 2024-11-30 18:49:41.626849 | 2024-11-30 18:49:41.626849 |          0 |
 
-:::{tip}
-If your values are not scalars, it can be useful to drop the value column.
-```pycon
->>> comp.to_df().drop(columns='value')
-```
+!!! tip
+    If your values are not scalars, it can be useful to drop the value column.
+    ```pycon
+    >>> comp.to_df().drop(columns='value')
+    ```
 :::
