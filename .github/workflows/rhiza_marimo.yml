@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload notebook artefacts
         if: always()
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: notebook-artefacts-${{ steps.artefact-folder.outputs.name }}
           path: results/${{ steps.artefact-folder.outputs.name }}/
