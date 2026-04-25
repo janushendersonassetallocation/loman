@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any, BinaryIO, TypeVar, overload
 
 import decorator
-import dill
+import dill  # nosec B403
 import networkx as nx
 import pandas as pd
 
@@ -1705,9 +1705,9 @@ class Computation:
         """
         if isinstance(file_, str):
             with open(file_, "rb") as f:
-                obj = dill.load(f)  # noqa: S301
+                obj = dill.load(f)  # noqa: S301  # nosec B301
         else:
-            obj = dill.load(file_)  # noqa: S301
+            obj = dill.load(file_)  # noqa: S301  # nosec B301
         if isinstance(obj, Computation):
             return obj
         else:
