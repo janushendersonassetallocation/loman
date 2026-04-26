@@ -83,6 +83,7 @@ nav:
           - Other:
               - Interactive Debugging: user/features/other/interactive_debugging.md
               - Serializing Computations: user/features/other/serializing_computations.md
+              - Migrating from write_dill: user/features/other/migrating_from_dill.md
   - Developer:
       - Release Checklist: dev/release.md
       - Architecture: ARCHITECTURE.md

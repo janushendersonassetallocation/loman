@@ -1,16 +1,20 @@
 """Tests for serialization and transformation functionality in Loman."""
 
 import io
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 import attrs
 import numpy as np
+import pandas as pd
 import pytest
 
-from loman import Computation, ComputationFactory, States, calc_node, input_node
+from loman import Computation, ComputationFactory, SerializationError, States, calc_node, input_node
 from loman.computeengine import NodeData
+from loman.nodekey import NodeKey, parse_nodekey
 from loman.serialization import (
+    ComputationSerializer,
     CustomTransformer,
     MissingObject,
     NdArrayTransformer,
@@ -20,6 +24,33 @@ from loman.serialization import (
     UntransformableTypeException,
 )
 from loman.serialization.default import default_transformer
+
+# =============================================================================
+# Module-level helper functions for JSON serialization acceptance tests.
+# These must be at module level so they are importable by module + qualname.
+# =============================================================================
+
+
+def _json_add_one(x):
+    """Return x + 1."""
+    return x + 1
+
+
+def _json_double(x):
+    """Return 2 * x."""
+    return 2 * x
+
+
+def _json_add(x, y):
+    """Return x + y."""
+    return x + y
+
+
+def _json_raise_value_error(x):
+    """Raise a ValueError for testing ERROR state serialization."""
+    msg = "deliberate test error"
+    raise ValueError(msg)
+
 
 TEST_OBJS: list[object] = [
     1337,
@@ -382,10 +413,12 @@ def test_dill_serialization():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
 
     f.seek(0)
-    foo = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        foo = Computation.read_dill(f)
 
     assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
@@ -403,7 +436,8 @@ def test_dill_serialization_skip_flag():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
 
     assert comp.state("a") == States.UPTODATE
     assert comp.state("b") == States.UPTODATE
@@ -413,7 +447,8 @@ def test_dill_serialization_skip_flag():
     assert comp.value("c") == 3
 
     f.seek(0)
-    comp2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        comp2 = Computation.read_dill(f)
     assert comp2.state("a") == States.UPTODATE
     assert comp2.state("b") == States.UNINITIALIZED
     assert comp2.state("c") == States.UPTODATE
@@ -430,9 +465,11 @@ def test_no_serialize_flag():
     comp.compute_all()
 
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
     f.seek(0)
-    comp2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        comp2 = Computation.read_dill(f)
     assert comp2.state("a") == States.UNINITIALIZED
     assert comp2["b"] == NodeData(States.UPTODATE, 2)
 
@@ -464,9 +501,11 @@ def test_serialize_nested_loman():
     outer.compute_all()
 
     f = io.BytesIO()
-    outer.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        outer.write_dill(f)
     f.seek(0)
-    outer2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        outer2 = Computation.read_dill(f)
 
     assert outer2.v.COMP.v.b == outer.v.COMP.v.b
     assert outer2.v.out == outer.v.out
@@ -493,10 +532,12 @@ def test_roundtrip_old_dill():
     comp.insert("a", 1)
     comp.compute_all()
     f = io.BytesIO()
-    comp.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        comp.write_dill(f)
 
     f.seek(0)
-    foo = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        foo = Computation.read_dill(f)
 
     assert set(comp.dag.nodes) == set(foo.dag.nodes)
     for n in comp.dag.nodes():
@@ -543,16 +584,18 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     outer.compute_all()
 
     f = io.BytesIO()
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError), pytest.warns(DeprecationWarning, match="write_dill"):
         outer.write_dill(f)
 
     outer.v.COMP.clear_tag("unserializable", "__serialize__")
 
     f = io.BytesIO()
-    outer.write_dill(f)
+    with pytest.warns(DeprecationWarning, match="write_dill"):
+        outer.write_dill(f)
 
     f.seek(0)
-    outer2 = Computation.read_dill(f)
+    with pytest.warns(DeprecationWarning, match="read_dill"):
+        outer2 = Computation.read_dill(f)
 
     assert outer2.v.COMP.v.a == outer.v.COMP.v.a
     assert outer2.v.out == outer.v.out
@@ -947,3 +990,452 @@ class TestTransformerRegisterUnregisterable:
 
         with pytest.raises(ValueError, match="Unable to register"):
             t.register(PlainClass)
+
+
+# =============================================================================
+# Phase 1 Acceptance Tests: JSON Serialization API
+#
+# These tests define the target behaviour for write_json / read_json and the
+# new transformer types that support them. All tests are expected to FAIL
+# until the implementation phases (2-4) are complete.
+# =============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Transformer acceptance tests (7 tests)
+# ---------------------------------------------------------------------------
+
+
+class TestEnumTransformer:
+    """Acceptance tests for EnumTransformer (States enum roundtrip)."""
+
+    def test_enum_transformer_states(self):
+        """States enum values roundtrip through the default computation transformer."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+        for state in States:
+            d = t.to_dict(state)
+            restored = t.from_dict(d)
+            assert restored == state, f"States.{state.name} did not roundtrip correctly"
+
+
+class TestFunctionRefTransformer:
+    """Acceptance tests for FunctionRefTransformer."""
+
+    def test_func_ref_transformer_importable(self):
+        """An importable module-level function serializes and restores correctly."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+        d = t.to_dict(_json_add_one)
+        assert isinstance(d, dict), "Expected a dict from to_dict"
+        restored = t.from_dict(d)
+        assert restored is _json_add_one, "Restored function should be the same object"
+
+    def test_func_ref_transformer_lambda_raises(self):
+        """A lambda raises ValueError when serialized."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+        f = lambda x: x + 1  # noqa: E731
+        with pytest.raises(ValueError, match=r"[Cc]annot serialize|non-importable|lambda"):
+            t.to_dict(f)
+
+    def test_func_ref_transformer_closure_raises(self):
+        """A closure raises ValueError when serialized."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+
+        def outer():
+            y = 10
+
+            def inner(x):
+                return x + y
+
+            return inner
+
+        closure = outer()
+        with pytest.raises(ValueError, match=r"[Cc]annot serialize|non-importable|locals"):
+            t.to_dict(closure)
+
+
+class TestPandasTransformer:
+    """Acceptance tests for Pandas DataFrame and Series transformers."""
+
+    def test_pandas_dataframe_transformer(self):
+        """A DataFrame with mixed dtypes roundtrips correctly."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [1.1, 2.2, 3.3], "c": ["x", "y", "z"]})
+        d = t.to_dict(df)
+        assert isinstance(d, dict)
+        restored = t.from_dict(d)
+        pd.testing.assert_frame_equal(df, restored)
+
+    def test_pandas_series_transformer(self):
+        """A Series roundtrips correctly."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+        s = pd.Series([10, 20, 30], name="my_series")
+        d = t.to_dict(s)
+        assert isinstance(d, dict)
+        restored = t.from_dict(d)
+        pd.testing.assert_series_equal(s, restored)
+
+
+class TestNodeKeyTransformer:
+    """Acceptance tests for NodeKeyTransformer."""
+
+    def test_nodekey_transformer(self):
+        """A hierarchical NodeKey roundtrips correctly."""
+        from loman.serialization.computation import default_computation_transformer
+
+        t = default_computation_transformer()
+        nk = NodeKey(("foo", "bar"))
+        d = t.to_dict(nk)
+        assert isinstance(d, dict)
+        restored = t.from_dict(d)
+        assert restored == nk
+
+
+# ---------------------------------------------------------------------------
+# Computation JSON API acceptance tests (15 tests)
+# ---------------------------------------------------------------------------
+
+
+class TestJsonRoundtrip:
+    """Acceptance tests for Computation.write_json and Computation.read_json."""
+
+    def test_json_roundtrip_basic(self):
+        """4-node graph using module-level functions roundtrips with correct states and values."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", _json_add_one, kwds={"x": "a"})
+        comp.add_node("c", _json_double, kwds={"x": "a"})
+        comp.add_node("d", _json_add, kwds={"x": "b", "y": "c"})
+        comp.insert("a", 1)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert set(comp.dag.nodes) == set(comp2.dag.nodes)
+        for n in comp.dag.nodes():
+            assert comp.state(n) == comp2.state(n)
+            assert comp.value(n) == comp2.value(n)
+
+    def test_json_roundtrip_skip_flag(self):
+        """A node with serialize=False is UNINITIALIZED after roundtrip."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", _json_add_one, kwds={"x": "a"}, serialize=False)
+        comp.add_node("c", _json_add_one, kwds={"x": "b"})
+        comp.insert("a", 1)
+        comp.compute_all()
+
+        assert comp.state("b") == States.UPTODATE
+        assert comp.state("c") == States.UPTODATE
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert comp2.state("a") == States.UPTODATE
+        assert comp2.state("b") == States.UNINITIALIZED
+        assert comp2.state("c") == States.UPTODATE
+        assert comp2.value("a") == 1
+        assert comp2.value("c") == 3
+
+    def test_json_no_serialize_input(self):
+        """An input node with serialize=False is UNINITIALIZED after roundtrip."""
+        comp = Computation()
+        comp.add_node("a", serialize=False)
+        comp.add_node("b", _json_add_one, kwds={"x": "a"})
+        comp.insert("a", 1)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert comp2.state("a") == States.UNINITIALIZED
+        assert comp2.state("b") == States.UPTODATE
+        assert comp2.value("b") == 2
+
+    def test_json_lambda_raises_serialization_error(self):
+        """write_json raises SerializationError when a serializable node has a lambda."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", lambda x: x + 1, kwds={"x": "a"})
+        comp.insert("a", 1)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        with pytest.raises(SerializationError):
+            comp.write_json(buf)
+
+    def test_json_lambda_raises_error_message_mentions_dill_option(self):
+        """SerializationError message mentions the use_dill_for_functions option."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        with pytest.raises(SerializationError, match="use_dill_for_functions"):
+            comp.write_json(buf)
+
+    def test_json_use_dill_for_functions_lambda_roundtrip(self):
+        """Lambda functions round-trip when use_dill_for_functions=True."""
+        comp = Computation()
+        comp.add_node("a", value=3)
+        comp.add_node("b", lambda a: a * 2)
+        comp.compute_all()
+
+        s = ComputationSerializer(use_dill_for_functions=True)
+        buf = io.StringIO()
+        comp.write_json(buf, serializer=s)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf, serializer=s)
+
+        assert comp2.state("b") == States.UPTODATE
+        assert comp2.value("b") == 6
+        # The function is restored — re-compute works.
+        comp2.insert("a", 10)
+        comp2.compute_all()
+        assert comp2.value("b") == 20
+
+    def test_json_use_dill_for_functions_closure_roundtrip(self):
+        """Closures capturing free variables round-trip when use_dill_for_functions=True."""
+        offset = 7
+
+        def add_offset(a):
+            return a + offset
+
+        comp = Computation()
+        comp.add_node("a", value=5)
+        comp.add_node("result", add_offset)
+        comp.compute_all()
+
+        s = ComputationSerializer(use_dill_for_functions=True)
+        buf = io.StringIO()
+        comp.write_json(buf, serializer=s)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf, serializer=s)
+
+        assert comp2.value("result") == 12
+        comp2.insert("a", 3)
+        comp2.compute_all()
+        assert comp2.value("result") == 10
+
+    def test_json_use_dill_for_functions_false_by_default(self):
+        """use_dill_for_functions defaults to False — lambdas still raise."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.compute_all()
+
+        s = ComputationSerializer()  # default — dill disabled
+        buf = io.StringIO()
+        with pytest.raises(SerializationError):
+            comp.write_json(buf, serializer=s)
+
+    def test_json_roundtrip_with_pandas_values(self):
+        """A node whose value is a DataFrame roundtrips correctly."""
+        df = pd.DataFrame({"x": [1, 2, 3], "y": [4.0, 5.0, 6.0]})
+        comp = Computation()
+        comp.add_node("data")
+        comp.insert("data", df)
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert comp2.state("data") == States.UPTODATE
+        pd.testing.assert_frame_equal(comp2.value("data"), df)
+
+    def test_json_roundtrip_with_numpy_values(self):
+        """A node whose value is a numpy array roundtrips correctly."""
+        arr = np.array([[1.0, 2.0], [3.0, 4.0]])
+        comp = Computation()
+        comp.add_node("matrix")
+        comp.insert("matrix", arr)
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert comp2.state("matrix") == States.UPTODATE
+        np.testing.assert_array_equal(comp2.value("matrix"), arr)
+
+    def test_json_roundtrip_empty_graph(self):
+        """An empty Computation roundtrips without error."""
+        comp = Computation()
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert list(comp2.dag.nodes()) == []
+
+    def test_json_roundtrip_file_path(self, tmp_path):
+        """write_json and read_json accept string file paths."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.insert("a", 42)
+
+        path = str(tmp_path / "comp.json")
+        comp.write_json(path)
+        comp2 = Computation.read_json(path)
+
+        assert comp2.state("a") == States.UPTODATE
+        assert comp2.value("a") == 42
+
+    def test_json_output_contains_version(self):
+        """The JSON output contains a top-level 'version' key."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.insert("a", 1)
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        data = json.loads(buf.read())
+
+        assert "version" in data
+
+    def test_json_output_is_valid_json_text(self):
+        """write_json writes text (not binary) that is parseable by json.loads."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.insert("a", 1)
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        raw = buf.getvalue()
+
+        # Must be a non-empty string, not bytes
+        assert isinstance(raw, str)
+        assert len(raw) > 0
+        # Must parse as valid JSON
+        data = json.loads(raw)
+        assert isinstance(data, dict)
+
+    def test_json_roundtrip_preserves_edges(self):
+        """Edge parameter information (arg vs kwd, name/index) is preserved."""
+        comp = Computation()
+        comp.add_node("x")
+        comp.add_node("y")
+        # keyword arg: b depends on x and y as kwargs
+        comp.add_node("z", _json_add, kwds={"x": "x", "y": "y"})
+        comp.insert("x", 3)
+        comp.insert("y", 4)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        # After roundtrip, z should still be computable from x and y
+        comp2.insert("x", 10)
+        comp2.compute_all()
+        assert comp2.value("z") == 14  # 10 + 4
+
+    def test_json_roundtrip_pinned_state(self):
+        """A PINNED node remains PINNED after roundtrip."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", _json_add_one, kwds={"x": "a"})
+        comp.insert("a", 5)
+        comp.compute_all()
+        comp.pin("b", 99)
+
+        assert comp.state("b") == States.PINNED
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert comp2.state("b") == States.PINNED
+        assert comp2.value("b") == 99
+
+    def test_json_roundtrip_error_state(self):
+        """An ERROR node is serialized preserving exception type and message as strings."""
+        # Use a module-level importable function that raises, so the function ref
+        # can be serialized and the error value is also preserved.
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", _json_raise_value_error, kwds={"x": "a"})
+        comp.insert("a", 1)
+        comp.compute_all()
+
+        assert comp.state("b") == States.ERROR
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        assert comp2.state("b") == States.ERROR
+        from loman.computeengine import Error
+
+        error_val = comp2.value("b")
+        assert isinstance(error_val, Error)
+        # Exception type and message must be preserved (as strings after roundtrip)
+        assert "deliberate test error" in str(error_val.traceback)
+
+    def test_json_roundtrip_with_nodekeys(self):
+        """Hierarchical NodeKey node names roundtrip correctly."""
+        comp = Computation()
+        comp.add_node("foo/a")
+        comp.add_node("foo/b", _json_add_one, kwds={"x": "foo/a"})
+        comp.insert("foo/a", 5)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        nk_a = parse_nodekey("foo/a")
+        nk_b = parse_nodekey("foo/b")
+        assert comp2.state(nk_a) == States.UPTODATE
+        assert comp2.state(nk_b) == States.UPTODATE
+        assert comp2.value(nk_a) == 5
+        assert comp2.value(nk_b) == 6
+
+    def test_json_roundtrip_with_block(self, tmp_path):
+        """A computation built with add_block roundtrips correctly."""
+        from tests.conftest import BasicFourNodeComputation
+
+        inner = BasicFourNodeComputation()
+        inner.insert("a", 3)
+        inner.compute_all()
+
+        comp = Computation()
+        comp.add_block("blk", inner, keep_values=True)
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)
+
+        nk_a = parse_nodekey("blk/a")
+        nk_d = parse_nodekey("blk/d")
+        assert comp2.state(nk_a) == States.UPTODATE
+        assert comp2.value(nk_a) == 3
+        assert comp2.state(nk_d) == States.UPTODATE
+        assert comp2.value(nk_d) == inner.value("d")
