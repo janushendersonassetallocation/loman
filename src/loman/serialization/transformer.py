@@ -503,7 +503,7 @@ class DillFunctionTransformer(CustomTransformer):
         """Serialize a callable to a base64-encoded dill blob."""
         import base64
 
-        import dill
+        import dill  # nosec B403  # dill is a trusted dependency for this specific use case and most likely be deprecated in the future in favor of a more portable solution, so we allow it here with a blanket nosec directive
 
         if not callable(o):
             msg = f"Object {o!r} is not callable"
@@ -515,7 +515,7 @@ class DillFunctionTransformer(CustomTransformer):
         """Reconstruct a callable from a base64-encoded dill blob."""
         import base64
 
-        import dill
+        import dill  # nosec B403  # dill is a trusted dependency for this specific use case and most likely be deprecated in the future in favor of a more portable solution, so we allow it here with a blanket nosec directive
 
         blob = base64.b64decode(d["blob"].encode("ascii"))
         return dill.loads(blob)  # noqa: S301  # nosec B301
