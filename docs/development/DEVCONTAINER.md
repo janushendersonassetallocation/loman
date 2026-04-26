@@ -12,7 +12,7 @@ This directory contains the configuration for [GitHub Codespaces](https://github
 The Python version is controlled by the `.python-version` file in the repository root (single source of truth).
 
 **How it works:**
-1. The devcontainer uses a base Python image (3.12)
+1. The devcontainer uses a base Python image
 2. `bootstrap.sh` reads `.python-version` and exports `PYTHON_VERSION`
 3. `make install` uses UV to create a venv with the exact Python version specified
 4. UV automatically downloads the correct Python version if needed
@@ -31,6 +31,8 @@ The `.devcontainer` setup provides:
 - 🔍 **Python Development Tools** - Pylance, Python extension, and optimized settings
 - 🚀 **Port Forwarding** - Port 8080 for development servers
 - 🔐 **SSH Agent Forwarding** - Full Git functionality with your host SSH keys
+
+For a complete list and detailed explanation of all VS Code extensions configured in the Dev Container, see [VSCODE_EXTENSIONS.md](VSCODE_EXTENSIONS.md).
 
 ## Usage
 

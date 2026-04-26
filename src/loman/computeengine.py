@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .serialization.computation import ComputationSerializer
 
 import decorator
-import dill
+import dill  # nosec B403
 import networkx as nx
 import pandas as pd
 

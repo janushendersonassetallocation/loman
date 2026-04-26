@@ -2669,7 +2669,7 @@ class TestWriteDillCoverage:
 
     def test_read_dill_invalid(self):
         """Test read_dill with non-Computation object."""
-        import dill
+        import dill  # nosec B403
 
         buf = io.BytesIO()
         dill.dump("not a computation", buf)
@@ -3773,7 +3773,7 @@ class TestComputeengineRemainingCoverageCoverage:
         """Test write_dill_old with nodes that have TAG but not SERIALIZE - covers line 1508."""
         import warnings
 
-        import dill
+        import dill  # nosec B403
 
         comp = Computation()
         # Add node with serialize=False so it won't have SERIALIZE tag
