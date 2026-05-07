@@ -6,7 +6,7 @@ LOGO_FILE=.rhiza/assets/rhiza-logo.svg
 GH_AW_ENGINE ?= copilot  # Default AI engine for gh-aw workflows (copilot, claude, or codex)
 
 # Override template default: fix quoting bug and typo (mkdocstring -> mkdocstrings)
-MKDOCS_EXTRA_PACKAGES = --with-editable . --with 'mkdocstrings[python]'
+MKDOCS_EXTRA_PACKAGES = --with-editable . --with 'mkdocstrings[python]' --with mkdocs_graphviz
 
 # Always include the Rhiza API (template-managed)
 include .rhiza/rhiza.mk

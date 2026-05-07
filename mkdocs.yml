@@ -5,7 +5,7 @@ repo_url: https://github.com/janushendersonassetallocation/loman
 repo_name: janushendersonassetallocation/loman
 
 docs_dir: docs
-site_dir: _mkdocs
+site_dir: _book
 
 theme:
   name: material
@@ -21,7 +21,7 @@ extra:
   version:
     provider: mike
 
-use_directory_urls: false
+use_directory_urls: true
 
 plugins:
   - search
@@ -58,10 +58,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting Started: user/quickstart.md
-  - Marimo Notebooks: notebooks.md
-  - Reports: reports.md
-  - API Reference: api.md
+  - Quickstart: user/quickstart.md
   - User Guide:
       - Introduction: user/intro.md
       - Installation: user/install.md
@@ -84,16 +81,21 @@ nav:
               - Interactive Debugging: user/features/other/interactive_debugging.md
               - Serializing Computations: user/features/other/serializing_computations.md
               - Migrating from write_dill: user/features/other/migrating_from_dill.md
+  - Notebooks:
+      - Overview: notebooks.md
+      - CDOs: notebooks/cdos.html
+      - Interest Rate Swaps: notebooks/interest_rate_swaps.html
+      - Portfolio: notebooks/portfolio.html
+      - Serialization: notebooks/serialization.html
+  - Reports:
+      - Overview: reports.md
+      - Test Report: reports/html-report/report.html
+      - Coverage Report: reports/html-coverage/index.html
+  - API Reference: api.md
   - Developer:
       - Release Checklist: dev/release.md
-      - Architecture: ARCHITECTURE.md
-      - Testing: TESTS.md
-      - Security: SECURITY.md
-  - Reference:
-      - Quick Reference: QUICK_REFERENCE.md
-      - Glossary: GLOSSARY.md
-      - Customization: CUSTOMIZATION.md
-      - DevContainer: DEVCONTAINER.md
-      - Demo: DEMO.md
+      - DevContainer: development/DEVCONTAINER.md
+      - Marimo: development/MARIMO.md
+      - Testing: development/TESTS.md
       - Contributing: CONTRIBUTING.md
       - Code of Conduct: CODE_OF_CONDUCT.md
