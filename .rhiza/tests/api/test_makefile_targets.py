@@ -181,6 +181,12 @@ class TestMakefile:
         out = proc.stdout
         assert '--fail-on="MIT;Apache"' in out
 
+    def test_serve_target_uses_uv_run_python_http_server(self, logger):
+        """Serve target should use uv run instead of directly calling python3."""
+        proc = run_make(logger, ["serve"])
+        out = proc.stdout
+        assert "uv run python -m http.server 8000" in out
+
 
 class TestMakefileRootFixture:
     """Tests for root fixture usage in Makefile tests."""
