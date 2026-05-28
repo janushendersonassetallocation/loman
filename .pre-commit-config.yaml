@@ -18,6 +18,12 @@ repos:
         entry: Python cache files (__pycache__, .pyc, .pyo, .pyd) must not be committed. Run 'make clean' to remove them.
         files: '(/__pycache__/|\.py[cod]$)'
 
+      - id: no-rej-files
+        name: Reject .rej files
+        entry: "bash -c 'find . -type f -name \"*.rej\" | grep -q . && { echo \"ERROR: .rej files detected\"; find . -type f -name \"*.rej\"; exit 1; } || exit 0'"
+        language: system
+        pass_filenames: false
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: 'v0.15.14'
     hooks:

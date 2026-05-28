@@ -118,7 +118,7 @@ make <TAB>
 # test        -- run all tests
 # fmt         -- check the pre-commit hooks and the linting
 # install     -- install
-# docs        -- create documentation with pdoc
+# book        -- build documentation site via zensical
 # ...
 ```
 

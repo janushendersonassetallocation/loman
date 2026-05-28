@@ -5,6 +5,11 @@
 # Lines with `##` after a target are parsed into help text,
 # and lines starting with `##@` create section headers in the help output.
 #
+# Require GNU Make (MAKE_VERSION is unset in BSD make)
+ifndef MAKE_VERSION
+$(error GNU Make is required. macOS ships BSD make — install GNU Make with: brew install make)
+endif
+
 # Colours for pretty output in help messages
 BLUE := \033[36m
 BOLD := \033[1m
@@ -44,7 +49,7 @@ UVX_BIN ?= $(shell command -v uvx 2>/dev/null || echo ${INSTALL_DIR}/uvx)
 VENV ?= .venv
 
 # Read Python version from .python-version (single source of truth)
-PYTHON_VERSION ?= $(shell cat .python-version 2>/dev/null || echo "3.13")
+PYTHON_VERSION ?= $(strip $(shell cat .python-version 2>/dev/null || echo "3.13"))
 export PYTHON_VERSION
 
 # Read Rhiza version from .rhiza/.rhiza-version (single source of truth for rhiza-tools)
@@ -102,8 +107,8 @@ sync: pre-sync ## sync with template repository as defined in .rhiza/template.ym
 	@if git remote get-url origin 2>/dev/null | grep -iqE 'jebel-quant/rhiza(\.git)?$$'; then \
 		printf "${BLUE}[INFO] Skipping sync in rhiza repository (no template.yml by design)${RESET}\n"; \
 	else \
-		$(MAKE) install-uv; \
-		${UVX_BIN} "rhiza==$(RHIZA_VERSION)" sync .; \
+		$(MAKE) install-uv && \
+		${UVX_BIN} "rhiza==$(RHIZA_VERSION)" sync . && \
 		$(MAKE) _apply-sync-schedule; \
 	fi
 	@$(MAKE) post-sync
