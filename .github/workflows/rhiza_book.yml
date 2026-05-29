@@ -1,0 +1,32 @@
+# This file is part of the jebel-quant/rhiza repository
+# (https://github.com/jebel-quant/rhiza).
+#
+# Workflow: Book
+# Purpose: This workflow builds and deploys comprehensive documentation for the project.
+#          It combines API documentation, test coverage reports, test results, and
+#          interactive notebooks into a single GitHub Pages site.
+#
+# Trigger: This workflow runs on every push to the main or master branch
+#
+# Components:
+#   - 📓 Process Marimo notebooks
+#   - 📖 Build documentation site via zensical
+#   - 🧪 Run tests and generate coverage reports
+#   - 🚀 Deploy combined documentation to GitHub Pages
+
+name: "(RHIZA) BOOK"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  book:
+    uses: jebel-quant/rhiza/.github/workflows/rhiza_book.yml@v0.16.0
+    secrets: inherit
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

@@ -1,0 +1,33 @@
+# This file is part of the jebel-quant/rhiza repository
+# (https://github.com/jebel-quant/rhiza).
+#
+# Workflow: CodeQL
+#
+# Purpose: Automated code scanning for Python and GitHub Actions using
+#          GitHub's CodeQL engine. Free for public repositories; requires
+#          GitHub Advanced Security for private repositories.
+#          Set the CODEQL_ENABLED repository variable to 'true' to force-enable
+#          on private repos, 'false' to disable, or leave unset for auto-detect.
+#
+# Trigger: On push to main/master, pull requests, and weekly schedule.
+
+name: "(RHIZA) CODEQL"
+
+permissions:
+  security-events: write
+  packages: read
+  actions: read
+  contents: read
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  schedule:
+    - cron: '27 1 * * 1'
+
+jobs:
+  codeql:
+    uses: jebel-quant/rhiza/.github/workflows/rhiza_codeql.yml@v0.16.0
+    secrets: inherit

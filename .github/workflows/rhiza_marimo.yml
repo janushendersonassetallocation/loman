@@ -1,0 +1,32 @@
+# This file is part of the jebel-quant/rhiza repository
+# (https://github.com/jebel-quant/rhiza).
+#
+# Workflow: Marimo Notebooks
+#
+# Purpose: This workflow discovers and executes all Marimo notebooks in the
+#          repository. It builds a dynamic matrix to run each notebook in
+#          parallel to surface errors early and keep notebooks reproducible.
+#
+# Trigger: This workflow runs on every push and on pull requests to main/master
+#          branches (including from forks)
+#
+# Components:
+#   - 🔎 Discover notebooks in book/marimo
+#   - 🧪 Run each notebook in parallel using a matrix strategy
+#   - ✅ Fail-fast disabled to report all failing notebooks
+
+name: "(RHIZA) MARIMO"
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  marimo:
+    uses: jebel-quant/rhiza/.github/workflows/rhiza_marimo.yml@v0.16.0
+    secrets: inherit

@@ -6,10 +6,6 @@ include: []
 exclude: []
 templates:
 - devcontainer
-- github
-- book
-- marimo
-- tests
 files:
 - .bandit
 - .devcontainer/README.md
@@ -25,6 +21,11 @@ files:
 - .github/pull_request_template.md
 - .github/release.yml
 - .github/secret_scanning.yml
+- .github/workflows/rhiza_benchmark.yml
+- .github/workflows/rhiza_book.yml
+- .github/workflows/rhiza_ci.yml
+- .github/workflows/rhiza_codeql.yml
+- .github/workflows/rhiza_marimo.yml
 - .github/workflows/rhiza_release.yml
 - .github/workflows/rhiza_sync.yml
 - .github/workflows/rhiza_weekly.yml
@@ -90,5 +91,7 @@ files:
 - pyproject.toml.template
 - pytest.ini
 - ruff.toml
-synced_at: '2026-05-28T17:14:12Z'
+profiles:
+- github-project
+synced_at: '2026-05-29T09:32:04Z'
 strategy: merge

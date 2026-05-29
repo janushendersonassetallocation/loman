@@ -1,0 +1,25 @@
+# This file is part of the jebel-quant/rhiza repository
+# (https://github.com/jebel-quant/rhiza).
+#
+# Workflow: Continuous Integration
+#
+# Purpose: Run tests on multiple Python versions, check dependencies, run
+#          pre-commit hooks, verify documentation coverage, validate the
+#          project, run security scans, and check license compliance.
+#
+# Trigger: On push and pull_request.
+
+name: "(RHIZA) CI"
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    uses: jebel-quant/rhiza/.github/workflows/rhiza_ci.yml@v0.16.0
+    secrets: inherit
