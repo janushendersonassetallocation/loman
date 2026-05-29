@@ -184,7 +184,7 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
         if nextchar == "":
             break
         if nextchar == '"':
-            part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]
+            part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             parts_append(part)
             nextchar = path_str[end : end + 1]
             if nextchar != "" and nextchar != "/":
