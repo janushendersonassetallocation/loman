@@ -49,9 +49,13 @@ echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> ~/.bashrc
 # Add to current PATH so subsequent commands can find uv
 export PATH="$INSTALL_DIR:$PATH"
 
+# Default to a lightweight dependency set in devcontainers.
+# Override with UV_SYNC_ARGS to install different groups.
+export UV_SYNC_ARGS="${UV_SYNC_ARGS:---group lint --group test}"
+
 # Install dependencies with recovery options
 echo "📦 Installing project dependencies..."
-if ! make install; then
+if ! make install UV_SYNC_ARGS="$UV_SYNC_ARGS"; then
     error_with_recovery \
         "Dependency installation" \
         "make install failed" \

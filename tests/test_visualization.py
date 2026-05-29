@@ -1258,3 +1258,39 @@ class TestVisualizationVizDagFormatterNone:
         # Should still produce valid SVG
         svg = v.svg()
         assert svg is not None
+
+
+class TestColorByTimingCompositeNode:
+    """Cover ColorByTiming.format when len(nodes) != 1 (line 160)."""
+
+    def test_format_composite_node_returns_none(self):
+        """Format with multiple nodes returns None (covers line 160)."""
+        from datetime import datetime
+
+        cbt = ColorByTiming()
+        nk = NodeKey(("group",))
+        now = datetime.now()
+        node1 = Node(NodeKey(("group", "a")), nk, {NodeAttributes.TIMING: TimingData(now, now, 0.1)})
+        node2 = Node(NodeKey(("group", "b")), nk, {NodeAttributes.TIMING: TimingData(now, now, 0.5)})
+        result = cbt.format(nk, [node1, node2], is_composite=True)
+        assert result is None
+
+
+class TestShapeByTypeCalibrateAndComposite:
+    """Cover ShapeByType.calibrate (line 168) and composite format (line 191)."""
+
+    def test_calibrate_runs_without_error(self):
+        """Calibrate on ShapeByType is a no-op but must be executed (line 168)."""
+        sbt = ShapeByType()
+        nk = NodeKey(("a",))
+        n = Node(nk, nk, {NodeAttributes.VALUE: 1})
+        sbt.calibrate([n])  # covers the `pass` on line 168
+
+    def test_format_composite_returns_none(self):
+        """Format with multiple nodes returns None (covers line 191)."""
+        sbt = ShapeByType()
+        nk = NodeKey(("group",))
+        node1 = Node(NodeKey(("group", "a")), nk, {NodeAttributes.VALUE: 1})
+        node2 = Node(NodeKey(("group", "b")), nk, {NodeAttributes.VALUE: 2})
+        result = sbt.format(nk, [node1, node2], is_composite=True)
+        assert result is None

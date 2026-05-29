@@ -1439,3 +1439,182 @@ class TestJsonRoundtrip:
         assert comp2.value(nk_a) == 3
         assert comp2.state(nk_d) == States.UPTODATE
         assert comp2.value(nk_d) == inner.value("d")
+
+
+# =============================================================================
+# Additional coverage tests for previously uncovered lines
+# =============================================================================
+
+
+class TestComputationSerializerDumpsLoads:
+    """Cover ComputationSerializer.dumps (line 144) and .loads (lines 256-257)."""
+
+    def test_dumps_returns_json_string(self):
+        """Dumps serializes to a JSON string."""
+        s = ComputationSerializer()
+        comp = Computation()
+        comp.add_node("a", value=1)
+        result = s.dumps(comp)
+        assert isinstance(result, str)
+        data = json.loads(result)
+        assert "nodes" in data
+
+    def test_loads_round_trips(self):
+        """Loads deserializes a JSON string produced by dumps."""
+        s = ComputationSerializer()
+        comp = Computation()
+        comp.add_node("a", value=42)
+        json_str = s.dumps(comp)
+        comp2 = s.loads(json_str)
+        assert comp2.state("a") == States.UPTODATE
+        assert comp2.value("a") == 42
+
+
+class TestSerializeNonValueState:
+    """Cover _serialize_node_value when state is not in VALUE_STATES (line 155)."""
+
+    def test_uninitialized_node_serializes_without_value(self):
+        """An UNINITIALIZED node (no value) is written with has_value=False (covers line 155)."""
+        comp = Computation()
+        comp.add_node("a")  # UNINITIALIZED — state not in {UPTODATE, PINNED, ERROR}
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        data = json.loads(buf.getvalue())
+        a_node = next(n for n in data["nodes"] if n["key"] == "a")
+        assert a_node["has_value"] is False
+
+
+class TestSerializeUnserializableValue:
+    """Cover the SerializationError path in _serialize_node_value (lines 171-173)."""
+
+    def test_unserializable_uptodate_value_raises(self):
+        """A node whose value cannot be encoded raises SerializationError."""
+
+        class _Opaque:
+            pass
+
+        comp = Computation()
+        comp.add_node("a", value=_Opaque())
+
+        s = ComputationSerializer()
+        buf = io.StringIO()
+        with pytest.raises(SerializationError, match="Cannot serialize value"):
+            comp.write_json(buf, serializer=s)
+
+
+class TestSerializeEdgeWithoutParam:
+    """Cover _serialize_edge with no PARAM (line 231) and _from_dict edge without param_type (line 317)."""
+
+    def test_edge_without_param_round_trips(self):
+        """An edge added directly to the DAG without PARAM data serializes with param_type=null."""
+        from loman.nodekey import to_nodekey as tnk
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2)
+        nk_a = tnk("a")
+        nk_b = tnk("b")
+        comp.dag.add_edge(nk_a, nk_b)  # no EdgeAttributes.PARAM
+
+        buf = io.StringIO()
+        comp.write_json(buf)  # covers line 231
+        raw = json.loads(buf.getvalue())
+        edge = next(e for e in raw["edges"] if e["src"] == "a" and e["dst"] == "b")
+        assert edge["param_type"] is None
+
+        buf.seek(0)
+        comp2 = Computation.read_json(buf)  # covers line 317
+        assert comp2.has_node("a")
+        assert comp2.has_node("b")
+
+
+class TestSerializeUserTags:
+    """Cover the user-tag loop in _from_dict (line 305)."""
+
+    def test_user_tag_preserved_after_roundtrip(self):
+        """User tags (not starting with __) survive a JSON roundtrip."""
+        from loman.consts import NodeAttributes
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.set_tag("a", "my_custom_tag")
+
+        s = ComputationSerializer()
+        json_str = s.dumps(comp)
+        comp2 = s.loads(json_str)
+
+        nk = parse_nodekey("a")
+        tags = comp2.dag.nodes[nk][NodeAttributes.TAG]
+        assert "my_custom_tag" in tags
+
+
+class TestEnumTransformerUnknownClass:
+    """Cover EnumTransformer.from_dict with unregistered enum class (lines 395-396)."""
+
+    def test_unknown_enum_class_raises(self):
+        """from_dict raises UnrecognizedTypeException for an unregistered enum class."""
+        from loman.serialization.transformer import EnumTransformer
+
+        et = EnumTransformer()
+        t = Transformer()
+        d = {"enum_class": "NoSuchEnum", "value": "MEMBER"}
+        with pytest.raises(UnrecognizedTypeException, match="Unknown enum class"):
+            et.from_dict(t, d)
+
+
+class TestFunctionRefTransformerEdgeCases:
+    """Cover FunctionRefTransformer error paths (lines 420-421, 425-426, 440-441)."""
+
+    def test_not_callable_raises_type_error(self):
+        """to_dict with a non-callable raises TypeError (lines 420-421)."""
+        from loman.serialization.transformer import FunctionRefTransformer
+
+        frt = FunctionRefTransformer()
+        t = Transformer()
+        with pytest.raises(TypeError, match="not callable"):
+            frt.to_dict(t, "not_a_function")
+
+    def test_missing_qualname_raises_value_error(self):
+        """to_dict with a callable lacking __qualname__ raises ValueError (lines 425-426)."""
+        import functools
+
+        from loman.serialization.transformer import FunctionRefTransformer
+
+        frt = FunctionRefTransformer()
+        t = Transformer()
+        p = functools.partial(len)  # partial objects have no __qualname__
+        with pytest.raises(ValueError, match="missing __qualname__"):
+            frt.to_dict(t, p)
+
+    def test_import_roundtrip_mismatch_raises(self):
+        """to_dict raises ValueError when import round-trip returns a different object (lines 440-441)."""
+        from loman.serialization.transformer import FunctionRefTransformer
+
+        frt = FunctionRefTransformer()
+        t = Transformer()
+
+        class MyCallable:
+            def __call__(self):
+                pass
+
+        # Set instance attributes so the callable *looks* importable as json.dumps,
+        # but is obviously a different object (import json; json.dumps is not obj).
+        obj = MyCallable()
+        obj.__qualname__ = "dumps"  # type: ignore[attr-defined]
+        obj.__module__ = "json"  # type: ignore[attr-defined]
+        with pytest.raises(ValueError, match="import round-trip returned a different object"):
+            frt.to_dict(t, obj)
+
+
+class TestDillFunctionTransformerNotCallable:
+    """Cover DillFunctionTransformer.to_dict with non-callable (lines 509-510)."""
+
+    def test_not_callable_raises_type_error(self):
+        """to_dict with a non-callable raises TypeError."""
+        from loman.serialization import DillFunctionTransformer
+
+        dft = DillFunctionTransformer()
+        t = Transformer()
+        with pytest.raises(TypeError, match="not callable"):
+            dft.to_dict(t, 42)
