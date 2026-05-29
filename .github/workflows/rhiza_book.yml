@@ -24,6 +24,7 @@ on:
 
 jobs:
   book:
+    if: ${{ !github.event.repository.fork }}
     uses: jebel-quant/rhiza/.github/workflows/rhiza_book.yml@v0.16.0
     secrets: inherit
     permissions:
