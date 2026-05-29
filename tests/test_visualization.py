@@ -720,6 +720,7 @@ class TestVisualizationCoverage:
         v.viz_dot = None
         assert v.svg() is None
 
+    @pytest.mark.requires_graphviz
     def test_graph_view_repr_svg(self):
         """Test GraphView._repr_svg_() method."""
         comp = Computation()
@@ -729,6 +730,7 @@ class TestVisualizationCoverage:
         assert svg is not None
         assert "<svg" in svg
 
+    @pytest.mark.requires_graphviz
     @patch("subprocess.run")
     @patch("tempfile.NamedTemporaryFile")
     def test_graph_view_view_linux(self, mock_tempfile, mock_run):
@@ -819,6 +821,7 @@ class TestVisualizationAttrNormalization:
         assert root is not None
 
 
+@pytest.mark.requires_graphviz
 class TestGraphViewCollapse:
     """Tests for GraphView with collapse_all."""
 
@@ -844,6 +847,7 @@ class TestGraphViewCollapse:
         assert svg is not None
 
 
+@pytest.mark.requires_graphviz
 class TestGraphViewEmpty:
     """Test GraphView with empty computation."""
 
@@ -858,6 +862,7 @@ class TestGraphViewEmpty:
         assert "<svg" in svg
 
 
+@pytest.mark.requires_graphviz
 class TestVisualizationWin32Branch:
     """Test the Windows platform branch in view()."""
 
@@ -891,6 +896,7 @@ class TestVisualizationCalibrate:
         f.calibrate([])  # Should do nothing, no error
 
 
+@pytest.mark.requires_graphviz
 class TestCollapseNodeMapped:
     """Test the collapse logic in visualization."""
 
@@ -965,6 +971,7 @@ class TestVisualizationOpenPdf:
         assert "open" in mock_run.call_args[0][0]
 
 
+@pytest.mark.requires_graphviz
 class TestVisualizationWithNoneCmap:
     """Test visualization with None colormap."""
 
@@ -1051,6 +1058,7 @@ class TestRenameMetadataClearBranch:
         assert comp.metadata("new_name") == {}
 
 
+@pytest.mark.requires_graphviz
 class TestGraphViewWithRootNode:
     """Test GraphView with root parameter filtering."""
 
@@ -1067,6 +1075,7 @@ class TestGraphViewWithRootNode:
         assert svg is not None
 
 
+@pytest.mark.requires_graphviz
 class TestGraphViewNoneFormatter:
     """Tests for GraphView with node_formatter=None."""
 
@@ -1080,6 +1089,7 @@ class TestGraphViewNoneFormatter:
         assert svg is not None
 
 
+@pytest.mark.requires_graphviz
 class TestColormapNodeFormatter:
     """Tests for colormap in node formatter."""
 
@@ -1167,6 +1177,7 @@ class TestRectBlocksCoverage:
         assert result is None
 
 
+@pytest.mark.requires_graphviz
 class TestGraphViewTransformations:
     """Test GraphView with transformations."""
 
@@ -1204,6 +1215,7 @@ class TestStandardStylingOverridesCoverage:
         assert result is None
 
 
+@pytest.mark.requires_graphviz
 class TestVisualizationDropRootNone:
     """Test visualization when drop_root returns None."""
 
@@ -1245,6 +1257,7 @@ class TestVisualizationSubprocess:
         assert "open" in call_args
 
 
+@pytest.mark.requires_graphviz
 class TestVisualizationVizDagFormatterNone:
     """Test create_viz_dag with node_formatter=None."""
 

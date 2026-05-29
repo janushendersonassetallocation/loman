@@ -594,7 +594,7 @@ test = [
 requires-dist = [
     { name = "attrs", specifier = ">=25.0" },
     { name = "decorator", specifier = ">=4.0" },
-    { name = "dill", specifier = ">=0.3" },
+    { name = "dill", specifier = ">=0.3.8" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "networkx", specifier = ">=2.6" },
     { name = "numpy", specifier = ">=1.26" },

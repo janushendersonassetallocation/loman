@@ -3519,6 +3519,7 @@ class TestAttributeViewPathCoverage:
         assert "child2" in node_names or any("child2" in str(n) for n in node_names)
 
 
+@pytest.mark.requires_graphviz
 class TestComputationReprSvgCoverage:
     """Test Computation _repr_svg_."""
 
