@@ -24,13 +24,13 @@ classifiers = [
 license = "BSD-3-Clause"
 license-files = ["LICEN[CS]E*"]
 dependencies = [
-    "decorator",
-    "matplotlib",
-    "numpy",
-    "pydotplus",
-    "dill >= 0.2.5",
-    "networkx >= 2.0",
-    "pandas >= 0.19.2",
+    "decorator>=4.0",
+    "matplotlib>=3.8",
+    "numpy>=1.26",
+    "pydotplus>=2.0",
+    "dill >= 0.3",
+    "networkx >= 2.6",
+    "pandas >= 2.2",
     "attrs >= 25.0"
 ]
 
