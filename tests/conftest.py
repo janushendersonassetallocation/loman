@@ -5,22 +5,7 @@ Security Notes:
 - S603/S607 (subprocess usage): Any subprocess calls use controlled inputs in test environments
 """
 
-import shutil
-
-import pytest
-
 from loman import Computation, ComputationFactory, calc_node, input_node
-
-
-def pytest_configure(config):
-    """Register custom markers."""
-    config.addinivalue_line("markers", "requires_graphviz: tests that require the graphviz 'dot' executable")
-
-
-def pytest_runtest_setup(item):
-    """Skip tests marked requires_graphviz when the dot executable is absent."""
-    if item.get_closest_marker("requires_graphviz") and shutil.which("dot") is None:
-        pytest.skip("graphviz (dot) not installed")
 
 
 @ComputationFactory

@@ -184,7 +184,7 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
         if nextchar == "":
             break
         if nextchar == '"':
-            part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+            part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]
             parts_append(part)
             nextchar = path_str[end : end + 1]
             if nextchar != "" and nextchar != "/":
@@ -194,14 +194,14 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
                 end = end + 1
         else:
             chunk = PART.match(path_str, end)
-            if chunk is None:  # pragma: no cover - PART regex always matches
+            if chunk is None:
                 msg = f"Failed to match node key part at position {end} in {path_str!r}"
                 raise ValueError(msg)
             end = chunk.end()
             (part,) = chunk.groups()
             parts_append(part)
 
-    if end != len(path_str):  # pragma: no cover - loop always terminates at end of string
+    if end != len(path_str):
         msg = f"Unexpected trailing content at position {end} in {path_str!r}"
         raise ValueError(msg)
 

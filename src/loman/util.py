@@ -38,8 +38,8 @@ def apply1(
 def as_iterable(xs: T | Iterable[T]) -> Iterable[T]:
     """Convert input to iterable form if not already iterable."""
     if isinstance(xs, (types.GeneratorType, list, set)):
-        return xs  # type: ignore[return-value]  # ty: ignore[invalid-return-type]
-    return (xs,)  # type: ignore[return-value]  # ty: ignore[invalid-return-type]
+        return xs  # type: ignore[return-value]
+    return (xs,)  # type: ignore[return-value]
 
 
 def apply_n(f: Callable[..., Any], *xs: Any, **kwds: Any) -> None:

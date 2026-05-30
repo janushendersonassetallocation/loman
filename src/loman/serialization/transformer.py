@@ -223,7 +223,7 @@ class Transformer:
     def _attrs_to_dict(self, o: object) -> dict[str, Any]:
         """Convert an attrs object to serializable dictionary form."""
         data: dict[str, Any] = {}
-        for a in o.__attrs_attrs__:  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        for a in o.__attrs_attrs__:  # type: ignore[attr-defined]
             data[a.name] = self.to_dict(o.__getattribute__(a.name))
         res: dict[str, Any] = {KEY_TYPE: TYPENAME_ATTRS, KEY_CLASS: type(o).__name__}
         if len(data) > 0:
@@ -233,7 +233,7 @@ class Transformer:
     def _dataclass_to_dict(self, o: object) -> dict[str, Any]:
         """Convert a dataclass object to serializable dictionary form."""
         data: dict[str, Any] = {}
-        for f in dataclasses.fields(o):  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        for f in dataclasses.fields(o):  # type: ignore[arg-type]
             data[f.name] = self.to_dict(getattr(o, f.name))
         res: dict[str, Any] = {KEY_TYPE: TYPENAME_DATACLASS, KEY_CLASS: type(o).__name__}
         if len(data) > 0:
@@ -352,7 +352,7 @@ class NdArrayTransformer(CustomTransformer):
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Convert numpy array to dictionary with shape, dtype, and data."""
         assert isinstance(o, np.ndarray)  # noqa: S101
-        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}  # type: ignore[arg-type]
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct numpy array from dictionary."""
