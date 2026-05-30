@@ -3519,6 +3519,7 @@ class TestAttributeViewPathCoverage:
         assert "child2" in node_names or any("child2" in str(n) for n in node_names)
 
 
+@pytest.mark.requires_graphviz
 class TestComputationReprSvgCoverage:
     """Test Computation _repr_svg_."""
 
@@ -3817,3 +3818,26 @@ class TestComputeengineRemainingCoverageCoverage:
         # Check that names are relative (without "parent/" prefix)
         for name in names:
             assert not str(name).startswith("parent/")
+
+
+class TestPrivateMethodsCoverage:
+    """Coverage for internal methods not exercised through the public API."""
+
+    def test_get_descendents_no_stop_states(self):
+        """_get_descendents without stop_states exercises the default branch (line 935)."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        nk_a = to_nodekey("a")
+        nk_b = to_nodekey("b")
+        result = comp._get_descendents(nk_a)
+        assert nk_b in result
+
+    def test_to_dict_method(self):
+        """Computation.to_dict returns {NodeKey: value} for UPTODATE nodes (lines 1471-1472)."""
+        comp = Computation()
+        comp.add_node("x", value=42)
+        comp.add_node("y", value="hello")
+        result = comp.to_dict()
+        assert result[to_nodekey("x")] == 42
+        assert result[to_nodekey("y")] == "hello"
