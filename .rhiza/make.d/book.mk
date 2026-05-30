@@ -13,7 +13,6 @@ hypothesis-test:: ; @:
 BOOK_OUTPUT ?= _book
 
 MKDOCS_EXTRA_PACKAGES ?=
-ZENSICAL_VERSION ?= >=0.0.36
 
 ##@ Book
 
@@ -45,12 +44,12 @@ _book-notebooks:
 # refuses to serve gitignored directories like _book) is not needed.
 serve: book ## build and serve the book at http://localhost:8000
 	@printf "${BLUE}[INFO] Serving book at http://localhost:8000 (Ctrl-C to stop)${RESET}\n"
-	@cd $(BOOK_OUTPUT) && ${UV_BIN} run python -m http.server 8000
+	@cd $(BOOK_OUTPUT) && python3 -m http.server 8000
 
 book:: _book-reports _book-notebooks ## compile the companion book via MkDocs
 	@rm -rf "$(BOOK_OUTPUT)"
-	@${UVX_BIN} $(MKDOCS_EXTRA_PACKAGES) 'zensical$(ZENSICAL_VERSION)' build -f "$(ROOT)/mkdocs.yml"
-	@mkdir -p "$(BOOK_OUTPUT)" && touch "$(BOOK_OUTPUT)/.nojekyll"
+	@${UVX_BIN} $(MKDOCS_EXTRA_PACKAGES) zensical build -f "$(ROOT)/mkdocs.yml"
+	@touch "$(BOOK_OUTPUT)/.nojekyll"
 	@if [ -f "${ROOT}/_tests/coverage.xml" ]; then \
 	  printf "${BLUE}[INFO] Generating coverage badge${RESET}\n"; \
 	  ${UVX_BIN} "genbadge[coverage]" coverage -i "${ROOT}/_tests/coverage.xml" -o "$(BOOK_OUTPUT)/coverage-badge.svg"; \

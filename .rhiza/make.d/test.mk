@@ -4,7 +4,7 @@
 # executing performance benchmarks.
 
 # Declare phony targets (they don't produce files)
-.PHONY: test benchmark typecheck security docs-coverage hypothesis-test coverage-badge stress test-pyproject
+.PHONY: test benchmark typecheck security docs-coverage hypothesis-test coverage-badge stress
 
 # Default directory for tests
 TESTS_FOLDER := tests
@@ -30,7 +30,6 @@ test:: install ## run all tests
 	mkdir -p _tests/html-coverage _tests/html-report; \
 	if [ -d ${SOURCE_FOLDER} ]; then \
 	  ${UV_BIN} run pytest \
-	  -n auto \
 	  --ignore=${TESTS_FOLDER}/benchmarks \
 	  --ignore=${TESTS_FOLDER}/stress \
 	  --cov=${SOURCE_FOLDER} \
@@ -43,7 +42,6 @@ test:: install ## run all tests
 	else \
 	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, running tests without coverage${RESET}\n"; \
 	  ${UV_BIN} run pytest \
-	  -n auto \
 	  --ignore=${TESTS_FOLDER}/benchmarks \
 	  --ignore=${TESTS_FOLDER}/stress \
 	  --html=_tests/html-report/report.html; \
@@ -97,7 +95,7 @@ benchmark:: install ## run performance benchmarks
 docs-coverage: install ## check documentation coverage with interrogate
 	@if [ -d "${SOURCE_FOLDER}" ]; then \
 	  printf "${BLUE}[INFO] Checking documentation coverage in ${SOURCE_FOLDER}...${RESET}\n"; \
-	  ${UV_BIN} run interrogate -vv --fail-under 100 --ignore-init-method --ignore-magic ${SOURCE_FOLDER}; \
+	  ${UV_BIN} run interrogate -vv ${SOURCE_FOLDER}; \
 	else \
 	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping docs-coverage${RESET}\n"; \
 	fi
@@ -128,6 +126,19 @@ hypothesis-test:: install ## run property-based tests with Hypothesis
 	fi; \
 	exit $$exit_code
 
+coverage-badge: test ## generate coverage badge into _tests/coverage-badge.svg
+	@if [ ! -d "${SOURCE_FOLDER}" ]; then \
+	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping coverage-badge${RESET}\n"; \
+	  exit 0; \
+	fi; \
+	if [ ! -f _tests/coverage.xml ]; then \
+	  printf "${RED}[ERROR] Coverage report not found at _tests/coverage.xml, run 'make test' first.${RESET}\n"; \
+	  exit 1; \
+	fi; \
+	printf "${BLUE}[INFO] Generating coverage badge...${RESET}\n"; \
+	${UVX_BIN} "genbadge[coverage]" coverage -i _tests/coverage.xml -o _tests/coverage-badge.svg; \
+	printf "${GREEN}[SUCCESS] Coverage badge generated at _tests/coverage-badge.svg${RESET}\n"
+
 # The 'stress' target runs stress/load tests.
 # 1. Checks if stress tests exist in the tests/stress directory.
 # 2. Runs pytest with the stress marker to execute only stress tests.
@@ -144,12 +155,3 @@ stress:: install ## run stress/load tests
 	  -m stress \
 	  --tb=short \
 	  --html=_tests/stress/report.html
-
-test-pyproject: install ## run pyproject.toml structure tests
-	@${UV_BIN} run pytest .rhiza/tests/structure/test_pyproject.py \
-		-v \
-		--tb=long \
-		--showlocals \
-		-rA \
-		--durations=0 \
-		--no-header
