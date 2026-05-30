@@ -50,6 +50,38 @@ class TestMakefile:
         assert "Targets:" in out
         assert "Bootstrap" in out or "Meta" in out  # section headers
 
+    def test_doctor_target_appears_in_help(self, logger):
+        """Doctor target should appear in help under the Dev section."""
+        proc = run_make(logger, ["help"])
+        out = proc.stdout
+        assert "Dev" in out
+        assert "doctor" in out
+
+    def test_doctor_fails_when_minimum_version_is_not_met(self, logger, tmp_path):
+        """Doctor should exit non-zero when a prerequisite version is below the minimum."""
+        fake_bin = tmp_path / "fake-bin"
+        fake_bin.mkdir(exist_ok=True)
+
+        for name, content in {
+            "uv": "#!/usr/bin/env sh\necho 'uv 0.3.0'\n",
+            "python": "#!/usr/bin/env sh\necho 'Python 3.12.2'\n",
+            "make": "#!/usr/bin/env sh\necho 'GNU Make 4.4.1'\n",
+            "git": "#!/usr/bin/env sh\necho 'git version 2.44.0'\n",
+        }.items():
+            script = fake_bin / name
+            script.write_text(content)
+            script.chmod(0o755)
+
+        env = os.environ.copy()
+        env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
+
+        proc = run_make(logger, ["doctor"], dry_run=False, check=False, env=env)
+        out = strip_ansi(proc.stdout)
+        assert proc.returncode != 0
+        assert "[❌] uv" in out
+        assert "0.3.0" in out
+        assert "0.4.0" in out
+
     def test_fmt_target_dry_run(self, logger, tmp_path):
         """Fmt target should invoke pre-commit via uvx with Python version in dry-run output."""
         # Create clean environment without PYTHON_VERSION so Makefile reads from .python-version
