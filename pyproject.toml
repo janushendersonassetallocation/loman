@@ -43,6 +43,7 @@ dev = [
 ]
 test = [
     "pytest>=7.0",
+    "pytest-xdist>=3.0",
 ]
 lint = [
     "ruff>=0.12.0",
