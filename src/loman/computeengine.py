@@ -95,7 +95,7 @@ def node(comp: "Computation", name: Name | None = None, *args: Any, **kw: Any) -
     def inner(f: F) -> F:
         """Inner decorator that registers the function as a node."""
         if name is None:
-            comp.add_node(f.__name__, f, *args, **kw)
+            comp.add_node(f.__name__, f, *args, **kw)  # ty: ignore[unresolved-attribute]
         else:
             comp.add_node(name, f, *args, **kw)
         result: F = decorator.decorate(f, _node)
@@ -157,7 +157,7 @@ class CalcNode(Node):
         if ignore_self:
             signature = get_signature(self.f)
             if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
-                f = f.__get__(obj, obj.__class__)  # type: ignore[attr-defined]
+                f = f.__get__(obj, obj.__class__)  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
         if "ignore_self" in kwds:
             del kwds["ignore_self"]
         comp.add_node(name, f, **kwds)
@@ -176,7 +176,7 @@ def calc_node(f: F | None = None, **kwds: Any) -> F | Callable[[F], F]:
 
     def wrap(func: F) -> F:
         """Wrap function with node info attribute."""
-        func._loman_node_info = CalcNode(func, kwds)
+        func._loman_node_info = CalcNode(func, kwds)  # ty: ignore[unresolved-attribute]
         return func
 
     if f is None:
@@ -238,7 +238,7 @@ def computation_factory(
             """Create a computation instance from the wrapped class."""
             obj = cls()
             comp = Computation(*args, **kwargs)
-            comp._definition_object = obj  # type: ignore[attr-defined]
+            comp._definition_object = obj  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             populate_computation_from_class(comp, cls, obj, ignore_self)
             return comp
 
@@ -702,7 +702,7 @@ class Computation:
                 msg = "new_name must not be set if rename_node is passed a dictionary"
                 raise ValueError(msg)
             else:
-                name_mapping = dict(old_name)  # type: ignore[arg-type]
+                name_mapping = dict(old_name)  # type: ignore[arg-type]  # ty: ignore[no-matching-overload]
         else:
             LOG.debug(f"Renaming node {old_name} to {new_name}")
             old_node_key = to_nodekey(old_name)
@@ -1666,8 +1666,8 @@ class Computation:
 
             node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
             obj = self.copy()
-            obj.executor_map = None  # type: ignore[assignment]
-            obj.default_executor = None  # type: ignore[assignment]
+            obj.executor_map = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+            obj.default_executor = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
             for name, tags in node_serialize.items():
                 if SystemTags.SERIALIZE not in tags:
                     obj._set_uninitialized(name)
@@ -1678,7 +1678,7 @@ class Computation:
             else:
                 dill.dump(obj, file_)
         finally:
-            self.__class__.__getstate__ = original_getstate  # type: ignore[method-assign]
+            self.__class__.__getstate__ = original_getstate  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
             self.__class__.__setstate__ = original_setstate
 
     def write_dill(self, file_: str | BinaryIO) -> None:
@@ -1829,7 +1829,7 @@ class Computation:
 
             return get_field_value
 
-        for field_name in namedtuple_type._fields:  # type: ignore[attr-defined]
+        for field_name in namedtuple_type._fields:  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             node_name = f"{name}.{field_name}"
             self.add_node(node_name, make_f(field_name), kwds={"tuple_val": name}, group=group)
             self.set_tag(node_name, SystemTags.EXPANSION)
