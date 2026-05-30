@@ -68,7 +68,7 @@ class NodeFormatter(ABC):
         colors = colors.lower()
         if colors == "state":
             state_cmap = cmap if isinstance(cmap, dict) else None
-            node_formatters.append(ColorByState(state_cmap))  # type: ignore[arg-type]
+            node_formatters.append(ColorByState(state_cmap))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
         elif colors == "timing":
             timing_cmap = cmap if isinstance(cmap, Colormap) else None
             node_formatters.append(ColorByTiming(timing_cmap))
@@ -431,14 +431,14 @@ class GraphView:
         """Generate SVG representation of the visualization."""
         if self.viz_dot is None:
             return None
-        svg_bytes: bytes = self.viz_dot.create_svg()  # type: ignore[attr-defined]
+        svg_bytes: bytes = self.viz_dot.create_svg()  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
         return svg_bytes.decode("utf-8")
 
     def view(self) -> None:  # pragma: no cover
         """Open the visualization in a PDF viewer."""
         assert self.viz_dot is not None  # noqa: S101
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-            f.write(self.viz_dot.create_pdf())  # type: ignore[attr-defined]
+            f.write(self.viz_dot.create_pdf())  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
             if sys.platform == "win32":
                 os.startfile(f.name)  # pragma: no cover  # nosec B606  # noqa: S606
             else:
