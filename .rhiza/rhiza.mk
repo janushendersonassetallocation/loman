@@ -5,11 +5,6 @@
 # Lines with `##` after a target are parsed into help text,
 # and lines starting with `##@` create section headers in the help output.
 #
-# Require GNU Make (MAKE_VERSION is unset in BSD make)
-ifndef MAKE_VERSION
-$(error GNU Make is required. macOS ships BSD make — install GNU Make with: brew install make)
-endif
-
 # Colours for pretty output in help messages
 BLUE := \033[36m
 BOLD := \033[1m
@@ -39,8 +34,7 @@ RESET := \033[0m
 	summarise-sync \
 	sync \
 	validate \
-	version-matrix \
-	ci-os-matrix
+	version-matrix
 
 # we need absolute paths!
 INSTALL_DIR ?= $(abspath ./bin)
@@ -49,17 +43,12 @@ UVX_BIN ?= $(shell command -v uvx 2>/dev/null || echo ${INSTALL_DIR}/uvx)
 VENV ?= .venv
 
 # Read Python version from .python-version (single source of truth)
-PYTHON_VERSION ?= $(strip $(shell cat .python-version 2>/dev/null || echo "3.13"))
+PYTHON_VERSION ?= $(shell cat .python-version 2>/dev/null || echo "3.13")
 export PYTHON_VERSION
 
 # Read Rhiza version from .rhiza/.rhiza-version (single source of truth for rhiza-tools)
 RHIZA_VERSION ?= $(shell cat .rhiza/.rhiza-version 2>/dev/null || echo "0.10.2")
 export RHIZA_VERSION
-
-# Default sync schedule (cron expression for GitHub Actions sync workflow)
-# Override in your root Makefile to customise when sync runs.
-# Example: RHIZA_SYNC_SCHEDULE = 0 9 * * 1-5  (weekdays at 9 AM UTC)
-RHIZA_SYNC_SCHEDULE ?= 0 0 * * 1
 
 export UV_NO_MODIFY_PATH := 1
 export UV_VENV_CLEAR := 1
@@ -87,7 +76,7 @@ endef
 export RHIZA_LOGO
 
 # Declare phony targets for Rhiza Core
-.PHONY: print-logo sync sync-experimental materialize validate readme pre-sync post-sync pre-validate post-validate _apply-sync-schedule
+.PHONY: print-logo sync sync-experimental materialize validate readme pre-sync post-sync pre-validate post-validate
 
 # Hook targets (double-colon rules allow multiple definitions)
 # Note: pre-install/post-install are defined in bootstrap.mk
@@ -107,17 +96,10 @@ sync: pre-sync ## sync with template repository as defined in .rhiza/template.ym
 	@if git remote get-url origin 2>/dev/null | grep -iqE 'jebel-quant/rhiza(\.git)?$$'; then \
 		printf "${BLUE}[INFO] Skipping sync in rhiza repository (no template.yml by design)${RESET}\n"; \
 	else \
-		$(MAKE) install-uv && \
-		${UVX_BIN} "rhiza==$(RHIZA_VERSION)" sync . && \
-		$(MAKE) _apply-sync-schedule; \
+		$(MAKE) install-uv; \
+		${UVX_BIN} "rhiza==$(RHIZA_VERSION)" sync .; \
 	fi
 	@$(MAKE) post-sync
-
-_apply-sync-schedule: ## (internal) apply RHIZA_SYNC_SCHEDULE override to GitHub Actions sync workflow
-	@if [ "$(RHIZA_SYNC_SCHEDULE)" != "0 0 * * 1" ] && [ -f .github/workflows/rhiza_sync.yml ]; then \
-		sed -i.bak "s|cron: '[^']*'|cron: '$(RHIZA_SYNC_SCHEDULE)'|" .github/workflows/rhiza_sync.yml && rm -f .github/workflows/rhiza_sync.yml.bak; \
-		printf "${BLUE}[INFO] Applied custom sync schedule: $(RHIZA_SYNC_SCHEDULE)${RESET}\n"; \
-	fi
 
 materialize: ## [DEPRECATED] use 'make sync' instead — materialize --force is now sync
 	@printf "${YELLOW}[WARN] 'make materialize' is deprecated and will be removed in a future release.${RESET}\n"
@@ -163,9 +145,6 @@ help: print-logo ## Display this help message
 version-matrix: install-uv ## Emit the list of supported Python versions from pyproject.toml
 	@${UVX_BIN} "rhiza-tools>=0.2.2" version-matrix
 
-ci-os-matrix: ## Emit GitHub CI OSes (RHIZA_CI_OS_MATRIX as JSON array, default ["ubuntu-latest"])
-	@printf '%s\n' '$(or $(RHIZA_CI_OS_MATRIX),["ubuntu-latest"])'
-
 print-% : ## print the value of a variable (usage: make print-VARIABLE)
 	@printf "${BLUE}[INFO] Printing value of variable '$*':${RESET}\n"
 	@printf "${BOLD}Value of $*:${RESET}\n"
@@ -176,3 +155,4 @@ print-% : ## print the value of a variable (usage: make print-VARIABLE)
 
 # Optional: repo extensions (committed)
 -include .rhiza/make.d/*.mk
+
