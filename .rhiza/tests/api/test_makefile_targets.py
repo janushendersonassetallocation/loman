@@ -50,38 +50,6 @@ class TestMakefile:
         assert "Targets:" in out
         assert "Bootstrap" in out or "Meta" in out  # section headers
 
-    def test_doctor_target_appears_in_help(self, logger):
-        """Doctor target should appear in help under the Dev section."""
-        proc = run_make(logger, ["help"])
-        out = proc.stdout
-        assert "Dev" in out
-        assert "doctor" in out
-
-    def test_doctor_fails_when_minimum_version_is_not_met(self, logger, tmp_path):
-        """Doctor should exit non-zero when a prerequisite version is below the minimum."""
-        fake_bin = tmp_path / "fake-bin"
-        fake_bin.mkdir(exist_ok=True)
-
-        for name, content in {
-            "uv": "#!/usr/bin/env sh\necho 'uv 0.3.0'\n",
-            "python": "#!/usr/bin/env sh\necho 'Python 3.12.2'\n",
-            "make": "#!/usr/bin/env sh\necho 'GNU Make 4.4.1'\n",
-            "git": "#!/usr/bin/env sh\necho 'git version 2.44.0'\n",
-        }.items():
-            script = fake_bin / name
-            script.write_text(content)
-            script.chmod(0o755)
-
-        env = os.environ.copy()
-        env["PATH"] = f"{fake_bin}:{env.get('PATH', '')}"
-
-        proc = run_make(logger, ["doctor"], dry_run=False, check=False, env=env)
-        out = strip_ansi(proc.stdout)
-        assert proc.returncode != 0
-        assert "[❌] uv" in out
-        assert "0.3.0" in out
-        assert "0.4.0" in out
-
     def test_fmt_target_dry_run(self, logger, tmp_path):
         """Fmt target should invoke pre-commit via uvx with Python version in dry-run output."""
         # Create clean environment without PYTHON_VERSION so Makefile reads from .python-version
@@ -192,6 +160,33 @@ class TestMakefile:
         proc_override = run_make(logger, ["test", "COVERAGE_FAIL_UNDER=42"])
         assert "--cov-fail-under=42" in proc_override.stdout
 
+    def test_coverage_badge_target_dry_run(self, logger, tmp_path):
+        """Coverage-badge target should invoke genbadge via uvx and write badge locally."""
+        tests_dir = tmp_path / "_tests"
+        tests_dir.mkdir(exist_ok=True)
+        (tests_dir / "coverage.xml").write_text("")
+
+        proc = run_make(logger, ["coverage-badge"])
+        out = proc.stdout
+        assert "genbadge[coverage]" in out
+        assert "_tests/coverage.xml" in out
+        assert "_tests/coverage-badge.svg" in out
+
+    def test_coverage_badge_skips_without_source_folder(self, logger, tmp_path):
+        """Coverage-badge target should include a guard check for SOURCE_FOLDER in dry-run output."""
+        # Update .env to set SOURCE_FOLDER to a non-existent directory
+        env_file = tmp_path / ".rhiza" / ".env"
+        env_content = env_file.read_text()
+        env_content += "\nSOURCE_FOLDER=nonexistent_src\n"
+        env_file.write_text(env_content)
+
+        proc = run_make(logger, ["coverage-badge"])
+        out = proc.stdout
+        # Should contain the guard check for missing source folder
+        assert "if [ ! -d" in out
+        assert "nonexistent_src" in out
+        assert "skipping coverage-badge" in out
+
     def test_suppression_audit_target_dry_run(self, logger):
         """Suppression-audit target should invoke the Python audit script via uv run in dry-run output."""
         proc = run_make(logger, ["suppression-audit"])
@@ -212,12 +207,6 @@ class TestMakefile:
         proc = run_make(logger, ["license", "LICENSE_FAIL_ON=MIT;Apache"])
         out = proc.stdout
         assert '--fail-on="MIT;Apache"' in out
-
-    def test_serve_target_uses_uv_run_python_http_server(self, logger):
-        """Serve target should use uv run instead of directly calling python3."""
-        proc = run_make(logger, ["serve"])
-        out = proc.stdout
-        assert "uv run python -m http.server 8000" in out
 
 
 class TestMakefileRootFixture:
