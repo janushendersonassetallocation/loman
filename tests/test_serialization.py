@@ -1515,7 +1515,7 @@ class TestSerializationCoverageGaps:
     def test_enum_transformer_unknown_class_raises(self):
         """EnumTransformer.from_dict rejects an unregistered enum class (covers transformer.py lines 395-396)."""
         t = Transformer()
-        with pytest.raises(UnrecognizedTypeError, match="Unknown enum class"):
+        with pytest.raises(UnrecognizedTypeException, match="Unknown enum class"):
             EnumTransformer().from_dict(t, {"enum_class": "NotRegistered", "value": "X"})
 
     def test_function_ref_non_callable_raises(self):
