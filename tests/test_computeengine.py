@@ -3817,3 +3817,31 @@ class TestComputeengineRemainingCoverageCoverage:
         # Check that names are relative (without "parent/" prefix)
         for name in names:
             assert not str(name).startswith("parent/")
+
+
+class TestCoverageGaps:
+    """Targeted tests closing the last uncovered lines in computeengine.py."""
+
+    def test_get_descendents_default_stop_states(self):
+        """_get_descendents defaults stop_states to an empty set (covers line 935)."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+        comp.compute_all()
+
+        a_key = to_nodekey("a")
+        # Called with no stop_states -> the None default is replaced by an empty set,
+        # so no state stops the traversal and every descendent is returned.
+        descendents = comp._get_descendents(a_key)
+        assert to_nodekey("b") in descendents
+        assert to_nodekey("c") in descendents
+
+    def test_to_dict_returns_node_values(self):
+        """Computation.to_dict returns a mapping of node key to value (covers lines 1471-1472)."""
+        comp = Computation()
+        comp.add_node("foo", value=1)
+        comp.add_node("bar", value=2)
+        result = comp.to_dict()
+        assert result[to_nodekey("foo")] == 1
+        assert result[to_nodekey("bar")] == 2

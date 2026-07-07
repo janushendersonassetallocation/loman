@@ -194,14 +194,16 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
                 end = end + 1
         else:
             chunk = PART.match(path_str, end)
-            if chunk is None:
+            # Defensive: PART = ([^/]*)/? matches the empty string, so match() never returns None here.
+            if chunk is None:  # pragma: no cover
                 msg = f"Failed to match node key part at position {end} in {path_str!r}"
                 raise ValueError(msg)
             end = chunk.end()
             (part,) = chunk.groups()
             parts_append(part)
 
-    if end != len(path_str):
+    # Defensive: the loop above only breaks once the string is fully consumed, so end always equals its length.
+    if end != len(path_str):  # pragma: no cover
         msg = f"Unexpected trailing content at position {end} in {path_str!r}"
         raise ValueError(msg)
 

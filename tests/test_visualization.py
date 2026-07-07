@@ -1258,3 +1258,32 @@ class TestVisualizationVizDagFormatterNone:
         # Should still produce valid SVG
         svg = v.svg()
         assert svg is not None
+
+
+class TestNodeFormatterCompositeCoverage:
+    """Cover the composite (multi-node) return paths of the type/timing formatters."""
+
+    def test_color_by_timing_composite_returns_none(self):
+        """ColorByTiming.format returns None for a composite node (covers line 160)."""
+        cbt = ColorByTiming()
+        nk = NodeKey(("blk",))
+        node1 = Node(nk, nk, {})
+        node2 = Node(nk, nk, {})
+        assert cbt.format(nk, [node1, node2], True) is None
+
+    def test_shape_by_type_calibrate_is_noop(self):
+        """ShapeByType.calibrate is a no-op that can be called safely (covers line 168)."""
+        sbt = ShapeByType()
+        nk = NodeKey(("test",))
+        node1 = Node(nk, nk, {NodeAttributes.VALUE: 1})
+        # Must not raise and must not alter formatting behaviour.
+        assert sbt.calibrate([node1]) is None
+        assert sbt.format(nk, [node1], False)["shape"] == "ellipse"
+
+    def test_shape_by_type_composite_returns_none(self):
+        """ShapeByType.format returns None for a composite node (covers line 191)."""
+        sbt = ShapeByType()
+        nk = NodeKey(("blk",))
+        node1 = Node(nk, nk, {NodeAttributes.VALUE: 1})
+        node2 = Node(nk, nk, {NodeAttributes.VALUE: 2})
+        assert sbt.format(nk, [node1, node2], True) is None
