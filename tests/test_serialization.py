@@ -28,7 +28,6 @@ from loman.serialization.transformer import (
     DillFunctionTransformer,
     EnumTransformer,
     FunctionRefTransformer,
-    UnrecognizedTypeError,
 )
 
 # =============================================================================
