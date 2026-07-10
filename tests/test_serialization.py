@@ -80,14 +80,14 @@ TEST_TRANSFORMED_OBJS: list[object] = [
 ]
 
 
-@pytest.mark.parametrize(("obj", "obj_dict"), zip(TEST_OBJS, TEST_TRANSFORMED_OBJS, strict=False))
+@pytest.mark.parametrize(("obj", "obj_dict"), list(zip(TEST_OBJS, TEST_TRANSFORMED_OBJS, strict=False)))
 def test_serialization(obj, obj_dict):
     """Test serialization."""
     u = Transformer()
     assert u.to_dict(obj) == obj_dict
 
 
-@pytest.mark.parametrize(("obj", "obj_dict"), zip(TEST_OBJS, TEST_TRANSFORMED_OBJS, strict=False))
+@pytest.mark.parametrize(("obj", "obj_dict"), list(zip(TEST_OBJS, TEST_TRANSFORMED_OBJS, strict=False)))
 def test_deserialization(obj, obj_dict):
     """Test deserialization."""
     u = Transformer()
