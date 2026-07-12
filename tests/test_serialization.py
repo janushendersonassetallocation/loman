@@ -606,26 +606,8 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     assert outer2.v.out == outer.v.out
 
 
-# ==================== ADDITIONAL COVERAGE TESTS ====================
-
-
-class TestSerializationDefaultCoverage:
-    """Tests for serialization/default.py coverage."""
-
-    def test_default_transformer(self):
-        """Test default_transformer creates a Transformer with NdArray support."""
-        t = default_transformer()
-        assert isinstance(t, Transformer)
-        # Test that NdArrayTransformer is registered
-        arr = np.array([1, 2, 3])
-        d = t.to_dict(arr)
-        assert d is not None
-        arr_back = t.from_dict(d)
-        assert np.array_equal(arr, arr_back)
-
-
-class TestTransformerCoverage:
-    """Additional tests for serialization/transformer.py coverage."""
+class TestTransformer:
+    """Tests for the Transformer round-trip behaviour and error handling."""
 
     def test_missing_object_repr(self):
         """Test MissingObject repr."""
@@ -716,6 +698,17 @@ class TestTransformerCoverage:
         # Pass something that's not str/None/bool/int/float/list/dict
         with pytest.raises(Exception, match=r".*"):  # Intentionally broad
             t.from_dict(object())
+
+    def test_default_transformer(self):
+        """Test default_transformer creates a Transformer with NdArray support."""
+        t = default_transformer()
+        assert isinstance(t, Transformer)
+        # Test that NdArrayTransformer is registered
+        arr = np.array([1, 2, 3])
+        d = t.to_dict(arr)
+        assert d is not None
+        arr_back = t.from_dict(d)
+        assert np.array_equal(arr, arr_back)
 
 
 class TestTransformerSubtypes:
@@ -1024,6 +1017,12 @@ class TestEnumTransformer:
             restored = t.from_dict(d)
             assert restored == state, f"States.{state.name} did not roundtrip correctly"
 
+    def test_enum_transformer_unknown_class_raises(self):
+        """EnumTransformer.from_dict rejects an unregistered enum class (covers transformer.py lines 395-396)."""
+        t = Transformer()
+        with pytest.raises(UnrecognizedTypeException, match="Unknown enum class"):
+            EnumTransformer().from_dict(t, {"enum_class": "NotRegistered", "value": "X"})
+
 
 class TestFunctionRefTransformer:
     """Acceptance tests for FunctionRefTransformer."""
@@ -1064,6 +1063,45 @@ class TestFunctionRefTransformer:
         closure = outer()
         with pytest.raises(ValueError, match=r"[Cc]annot serialize|non-importable|locals"):
             t.to_dict(closure)
+
+    def test_function_ref_non_callable_raises(self):
+        """FunctionRefTransformer.to_dict rejects non-callables (covers transformer.py lines 420-421)."""
+        t = Transformer()
+        with pytest.raises(TypeError, match="is not callable"):
+            FunctionRefTransformer().to_dict(t, 42)
+
+    def test_function_ref_missing_qualname_raises(self):
+        """A callable without __qualname__/__module__ cannot be serialized (covers transformer.py lines 425-426)."""
+        import functools
+
+        t = Transformer()
+        partial = functools.partial(len)  # partial objects have no __qualname__
+        with pytest.raises(ValueError, match="missing __qualname__ or __module__"):
+            FunctionRefTransformer().to_dict(t, partial)
+
+    def test_function_ref_import_roundtrip_mismatch_raises(self):
+        """A callable whose import path resolves to a different object is rejected (transformer.py 440-441)."""
+        import types
+
+        t = Transformer()
+        # Build a distinct function object that advertises the module + qualname of a
+        # real, importable module-level function. Importing that path yields the real
+        # function, which is not this impostor -> the round-trip check fails.
+        impostor = types.FunctionType(
+            _coverage_module_level_function.__code__,
+            {},
+            name="_coverage_module_level_function",
+        )
+        impostor.__qualname__ = _coverage_module_level_function.__qualname__
+        impostor.__module__ = _coverage_module_level_function.__module__
+        with pytest.raises(ValueError, match="import round-trip returned a different object"):
+            FunctionRefTransformer().to_dict(t, impostor)
+
+    def test_dill_function_non_callable_raises(self):
+        """DillFunctionTransformer.to_dict rejects non-callables (covers transformer.py lines 509-510)."""
+        t = Transformer()
+        with pytest.raises(TypeError, match="is not callable"):
+            DillFunctionTransformer().to_dict(t, 42)
 
 
 class TestPandasTransformer:
@@ -1445,15 +1483,6 @@ class TestJsonRoundtrip:
         assert comp2.state(nk_d) == States.UPTODATE
         assert comp2.value(nk_d) == inner.value("d")
 
-
-def _coverage_module_level_function():
-    """Module-level function used to force an import round-trip mismatch."""
-    return None
-
-
-class TestSerializationCoverageGaps:
-    """Targeted tests closing the last uncovered lines in the serialization package."""
-
     def test_dumps_and_loads_roundtrip(self):
         """dumps/loads use the string entry points (covers computation.py lines 144, 256-257)."""
         s = ComputationSerializer()
@@ -1511,47 +1540,7 @@ class TestSerializationCoverageGaps:
         edges = {(str(u), str(v)) for u, v in restored.dag.edges()}
         assert ("a", "b") in edges
 
-    def test_enum_transformer_unknown_class_raises(self):
-        """EnumTransformer.from_dict rejects an unregistered enum class (covers transformer.py lines 395-396)."""
-        t = Transformer()
-        with pytest.raises(UnrecognizedTypeException, match="Unknown enum class"):
-            EnumTransformer().from_dict(t, {"enum_class": "NotRegistered", "value": "X"})
 
-    def test_function_ref_non_callable_raises(self):
-        """FunctionRefTransformer.to_dict rejects non-callables (covers transformer.py lines 420-421)."""
-        t = Transformer()
-        with pytest.raises(TypeError, match="is not callable"):
-            FunctionRefTransformer().to_dict(t, 42)
-
-    def test_function_ref_missing_qualname_raises(self):
-        """A callable without __qualname__/__module__ cannot be serialized (covers transformer.py lines 425-426)."""
-        import functools
-
-        t = Transformer()
-        partial = functools.partial(len)  # partial objects have no __qualname__
-        with pytest.raises(ValueError, match="missing __qualname__ or __module__"):
-            FunctionRefTransformer().to_dict(t, partial)
-
-    def test_function_ref_import_roundtrip_mismatch_raises(self):
-        """A callable whose import path resolves to a different object is rejected (transformer.py 440-441)."""
-        import types
-
-        t = Transformer()
-        # Build a distinct function object that advertises the module + qualname of a
-        # real, importable module-level function. Importing that path yields the real
-        # function, which is not this impostor -> the round-trip check fails.
-        impostor = types.FunctionType(
-            _coverage_module_level_function.__code__,
-            {},
-            name="_coverage_module_level_function",
-        )
-        impostor.__qualname__ = _coverage_module_level_function.__qualname__
-        impostor.__module__ = _coverage_module_level_function.__module__
-        with pytest.raises(ValueError, match="import round-trip returned a different object"):
-            FunctionRefTransformer().to_dict(t, impostor)
-
-    def test_dill_function_non_callable_raises(self):
-        """DillFunctionTransformer.to_dict rejects non-callables (covers transformer.py lines 509-510)."""
-        t = Transformer()
-        with pytest.raises(TypeError, match="is not callable"):
-            DillFunctionTransformer().to_dict(t, 42)
+def _coverage_module_level_function():
+    """Module-level function used to force an import round-trip mismatch."""
+    return None

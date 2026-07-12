@@ -488,11 +488,8 @@ def test_style_preservation_with_block_links():
     assert expected_styles == actual_styles
 
 
-# ==================== ADDITIONAL COVERAGE TESTS ====================
-
-
-class TestVisualizationCoverage:
-    """Additional tests for visualization.py coverage."""
+class TestColorByTiming:
+    """Tests for color_by_timing node formatting."""
 
     def test_color_by_timing_no_timing(self):
         """Test ColorByTiming with node having no timing data."""
@@ -518,6 +515,33 @@ class TestVisualizationCoverage:
         result = cbt.format(nk1, [node1], False)
         assert "fillcolor" in result
         assert result["fillcolor"] != "#FFFFFF"
+
+    def test_color_by_timing_with_timing_data(self):
+        """Test ColorByTiming with timing data."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.compute_all()
+
+        # Color by timing should work even without timing data
+        formatter = ColorByTiming()
+
+        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
+        result = formatter.format(NodeKey(("a",)), [node], False)
+        # Should return a valid result
+        assert result is not None
+
+    def test_color_by_timing_composite_returns_none(self):
+        """ColorByTiming.format returns None for a composite node (covers line 160)."""
+        cbt = ColorByTiming()
+        nk = NodeKey(("blk",))
+        node1 = Node(nk, nk, {})
+        node2 = Node(nk, nk, {})
+        assert cbt.format(nk, [node1, node2], True) is None
+
+
+class TestShapeByType:
+    """Tests for shape_by_type node formatting."""
 
     def test_shape_by_type_no_value(self):
         """Test ShapeByType with no value."""
@@ -590,70 +614,50 @@ class TestVisualizationCoverage:
         result = sbt.format(nk, [node], False)
         assert result["shape"] == "diamond"
 
-    def test_standard_styling_overrides_small(self):
-        """Test StandardStylingOverrides with 'small' style."""
-        sso = StandardStylingOverrides()
-        nk = NodeKey(("test",))
-        node = Node(nk, nk, {NodeAttributes.STYLE: "small"})
-        result = sso.format(nk, [node], False)
-        assert result["width"] == 0.3
-        assert result["height"] == 0.2
-        assert result["fontsize"] == 8
+    def test_shape_by_type_with_func(self):
+        """Test ShapeByType with a function node."""
+        formatter = ShapeByType()
 
-    def test_standard_styling_overrides_dot(self):
-        """Test StandardStylingOverrides with 'dot' style."""
-        sso = StandardStylingOverrides()
-        nk = NodeKey(("test",))
-        node = Node(nk, nk, {NodeAttributes.STYLE: "dot"})
-        result = sso.format(nk, [node], False)
-        assert result["shape"] == "point"
-        assert result["width"] == 0.1
-        assert result["peripheries"] == 1
-
-    def test_standard_styling_overrides_none(self):
-        """Test StandardStylingOverrides with no style."""
-        sso = StandardStylingOverrides()
-        nk = NodeKey(("test",))
-        node = Node(nk, nk, {})
-        result = sso.format(nk, [node], False)
+        # Node with a function
+        node = Node(
+            NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.FUNC: lambda: 1}
+        )
+        result = formatter.format(NodeKey(("a",)), [node], False)
+        # ShapeByType only returns shapes for nodes with values, not functions
         assert result is None
 
-    def test_node_formatter_create_invalid_shapes(self):
-        """Test NodeFormatter.create with invalid shapes parameter."""
-        with pytest.raises(ValueError, match="is not a valid loman shapes parameter"):
-            NodeFormatter.create(shapes="invalid")
+    def test_shape_by_type_without_func(self):
+        """Test ShapeByType with a value node (no function)."""
+        formatter = ShapeByType()
 
-    def test_node_formatter_create_invalid_colors(self):
-        """Test NodeFormatter.create with invalid colors parameter."""
-        with pytest.raises(ValueError, match="is not a valid loman colors parameter"):
-            NodeFormatter.create(colors="invalid")
-
-    def test_node_formatter_create_type_shapes(self):
-        """Test NodeFormatter.create with shapes='type'."""
-        nf = NodeFormatter.create(shapes="type")
-        assert isinstance(nf, CompositeNodeFormatter)
-
-    def test_node_formatter_create_timing_colors(self):
-        """Test NodeFormatter.create with colors='timing'."""
-        nf = NodeFormatter.create(colors="timing")
-        assert isinstance(nf, CompositeNodeFormatter)
-
-    def test_rect_blocks_composite(self):
-        """Test RectBlocks for composite node."""
-        rb = RectBlocks()
-        nk = NodeKey(("test",))
-        node = Node(nk, nk, {})
-        result = rb.format(nk, [node], is_composite=True)
-        assert result["shape"] == "rect"
-        assert result["peripheries"] == 2
-
-    def test_rect_blocks_non_composite(self):
-        """Test RectBlocks for non-composite node."""
-        rb = RectBlocks()
-        nk = NodeKey(("test",))
-        node = Node(nk, nk, {})
-        result = rb.format(nk, [node], is_composite=False)
+        # Node without a function
+        node = Node(
+            NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.FUNC: None}
+        )
+        result = formatter.format(NodeKey(("a",)), [node], False)
+        # ShapeByType only returns shapes for nodes with values
         assert result is None
+
+    def test_shape_by_type_calibrate_is_noop(self):
+        """ShapeByType.calibrate is a no-op that can be called safely (covers line 168)."""
+        sbt = ShapeByType()
+        nk = NodeKey(("test",))
+        node1 = Node(nk, nk, {NodeAttributes.VALUE: 1})
+        # Must not raise and must not alter formatting behaviour.
+        assert sbt.calibrate([node1]) is None
+        assert sbt.format(nk, [node1], False)["shape"] == "ellipse"
+
+    def test_shape_by_type_composite_returns_none(self):
+        """ShapeByType.format returns None for a composite node (covers line 191)."""
+        sbt = ShapeByType()
+        nk = NodeKey(("blk",))
+        node1 = Node(nk, nk, {NodeAttributes.VALUE: 1})
+        node2 = Node(nk, nk, {NodeAttributes.VALUE: 2})
+        assert sbt.format(nk, [node1, node2], True) is None
+
+
+class TestColorByState:
+    """Tests for color_by_state node formatting."""
 
     def test_color_by_state_composite_all_error(self):
         """Test ColorByState with multiple nodes all having ERROR state."""
@@ -692,6 +696,126 @@ class TestVisualizationCoverage:
         # Mixed states should result in None state
         assert result["fillcolor"] == ColorByState.DEFAULT_STATE_COLORS[None]
 
+
+class TestStandardStylingOverrides:
+    """Tests for standard styling overrides."""
+
+    def test_standard_styling_overrides_small(self):
+        """Test StandardStylingOverrides with 'small' style."""
+        sso = StandardStylingOverrides()
+        nk = NodeKey(("test",))
+        node = Node(nk, nk, {NodeAttributes.STYLE: "small"})
+        result = sso.format(nk, [node], False)
+        assert result["width"] == 0.3
+        assert result["height"] == 0.2
+        assert result["fontsize"] == 8
+
+    def test_standard_styling_overrides_dot(self):
+        """Test StandardStylingOverrides with 'dot' style."""
+        sso = StandardStylingOverrides()
+        nk = NodeKey(("test",))
+        node = Node(nk, nk, {NodeAttributes.STYLE: "dot"})
+        result = sso.format(nk, [node], False)
+        assert result["shape"] == "point"
+        assert result["width"] == 0.1
+        assert result["peripheries"] == 1
+
+    def test_standard_styling_overrides_none(self):
+        """Test StandardStylingOverrides with no style."""
+        sso = StandardStylingOverrides()
+        nk = NodeKey(("test",))
+        node = Node(nk, nk, {})
+        result = sso.format(nk, [node], False)
+        assert result is None
+
+    def test_styling_overrides_with_style(self):
+        """Test StandardStylingOverrides with node style."""
+        formatter = StandardStylingOverrides()
+
+        # Node with style
+        node = Node(
+            NodeKey(("a",)),
+            NodeKey(("a",)),
+            {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.STYLE: {"color": "red"}},
+        )
+        result = formatter.format(NodeKey(("a",)), [node], False)
+        # When a node has an explicit style that's not small/dot, the formatter returns None
+        assert result is None
+
+
+class TestNodeFormatter:
+    """Tests for NodeFormatter construction and calibration."""
+
+    def test_node_formatter_create_invalid_shapes(self):
+        """Test NodeFormatter.create with invalid shapes parameter."""
+        with pytest.raises(ValueError, match="is not a valid loman shapes parameter"):
+            NodeFormatter.create(shapes="invalid")
+
+    def test_node_formatter_create_invalid_colors(self):
+        """Test NodeFormatter.create with invalid colors parameter."""
+        with pytest.raises(ValueError, match="is not a valid loman colors parameter"):
+            NodeFormatter.create(colors="invalid")
+
+    def test_node_formatter_create_type_shapes(self):
+        """Test NodeFormatter.create with shapes='type'."""
+        nf = NodeFormatter.create(shapes="type")
+        assert isinstance(nf, CompositeNodeFormatter)
+
+    def test_node_formatter_create_timing_colors(self):
+        """Test NodeFormatter.create with colors='timing'."""
+        nf = NodeFormatter.create(colors="timing")
+        assert isinstance(nf, CompositeNodeFormatter)
+
+    def test_composite_formatter_calibrate(self):
+        """Test CompositeNodeFormatter calibrate calls all formatters."""
+        from loman.visualization import StandardLabel
+
+        formatter = CompositeNodeFormatter([StandardLabel(), StandardGroup()])
+        nodes = [Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})]
+        formatter.calibrate(nodes)  # Should not raise
+
+
+class TestRectBlocks:
+    """Tests for rect_blocks composite handling."""
+
+    def test_rect_blocks_composite(self):
+        """Test RectBlocks for composite node."""
+        rb = RectBlocks()
+        nk = NodeKey(("test",))
+        node = Node(nk, nk, {})
+        result = rb.format(nk, [node], is_composite=True)
+        assert result["shape"] == "rect"
+        assert result["peripheries"] == 2
+
+    def test_rect_blocks_non_composite(self):
+        """Test RectBlocks for non-composite node."""
+        rb = RectBlocks()
+        nk = NodeKey(("test",))
+        node = Node(nk, nk, {})
+        result = rb.format(nk, [node], is_composite=False)
+        assert result is None
+
+    def test_rect_blocks_composite_coverage(self):
+        """Test RectBlocks with composite node."""
+        formatter = RectBlocks()
+
+        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
+        result = formatter.format(NodeKey(("a",)), [node], is_composite=True)
+        # RectBlocks returns a dict for composite nodes
+        assert isinstance(result, dict)
+
+    def test_rect_blocks_non_composite_coverage(self):
+        """Test RectBlocks with non-composite node returns no blocks."""
+        formatter = RectBlocks()
+
+        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
+        result = formatter.format(NodeKey(("a",)), [node], is_composite=False)
+        assert result is None
+
+
+class TestCreateGraph:
+    """Tests for create_root_graph and create_subgraph."""
+
     def test_create_root_graph_with_attributes(self):
         """Test create_root_graph with various attributes."""
         graph_attr = {"size": "10,8", "label": "Test Graph"}
@@ -712,6 +836,10 @@ class TestVisualizationCoverage:
         group = NodeKey(("group1",))
         sg = create_subgraph(group)
         assert sg is not None
+
+
+class TestGraphViewRendering:
+    """Tests for GraphView SVG rendering and viewing."""
 
     def test_graph_view_svg_none(self):
         """Test GraphView.svg() returns None when viz_dot is None."""
@@ -746,6 +874,10 @@ class TestVisualizationCoverage:
         with patch.object(sys, "platform", "linux"):
             v.view()
             mock_run.assert_called()
+
+
+class TestStandardGroup:
+    """Tests for standard_group grouping."""
 
     def test_standard_group_with_group_attribute(self):
         """Test StandardGroup with group attribute set."""
@@ -1007,25 +1139,6 @@ class TestVisualizationCalibrateWithNodes:
         formatter.calibrate(nodes)
 
 
-class TestColorByTimingCoverage:
-    """Test ColorByTiming formatter."""
-
-    def test_color_by_timing_with_timing_data(self):
-        """Test ColorByTiming with timing data."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.compute_all()
-
-        # Color by timing should work even without timing data
-        formatter = ColorByTiming()
-
-        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
-        result = formatter.format(NodeKey(("a",)), [node], False)
-        # Should return a valid result
-        assert result is not None
-
-
 class TestRenameMetadataClearBranch:
     """Test the metadata clear branch in rename_nodes."""
 
@@ -1106,67 +1219,6 @@ class TestColormapNodeFormatter:
         assert svg is not None
 
 
-class TestCompositeNodeFormatterCoverage:
-    """Test CompositeNodeFormatter."""
-
-    def test_composite_formatter_calibrate(self):
-        """Test CompositeNodeFormatter calibrate calls all formatters."""
-        from loman.visualization import StandardLabel
-
-        formatter = CompositeNodeFormatter([StandardLabel(), StandardGroup()])
-        nodes = [Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})]
-        formatter.calibrate(nodes)  # Should not raise
-
-
-class TestShapeByTypeCoverage:
-    """Test ShapeByType formatter."""
-
-    def test_shape_by_type_with_func(self):
-        """Test ShapeByType with a function node."""
-        formatter = ShapeByType()
-
-        # Node with a function
-        node = Node(
-            NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.FUNC: lambda: 1}
-        )
-        result = formatter.format(NodeKey(("a",)), [node], False)
-        # ShapeByType only returns shapes for nodes with values, not functions
-        assert result is None
-
-    def test_shape_by_type_without_func(self):
-        """Test ShapeByType with a value node (no function)."""
-        formatter = ShapeByType()
-
-        # Node without a function
-        node = Node(
-            NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.FUNC: None}
-        )
-        result = formatter.format(NodeKey(("a",)), [node], False)
-        # ShapeByType only returns shapes for nodes with values
-        assert result is None
-
-
-class TestRectBlocksCoverage:
-    """Test RectBlocks formatter."""
-
-    def test_rect_blocks_composite_coverage(self):
-        """Test RectBlocks with composite node."""
-        formatter = RectBlocks()
-
-        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
-        result = formatter.format(NodeKey(("a",)), [node], is_composite=True)
-        # RectBlocks returns a dict for composite nodes
-        assert isinstance(result, dict)
-
-    def test_rect_blocks_non_composite_coverage(self):
-        """Test RectBlocks with non-composite node returns no blocks."""
-        formatter = RectBlocks()
-
-        node = Node(NodeKey(("a",)), NodeKey(("a",)), {NodeAttributes.STATE: States.UPTODATE})
-        result = formatter.format(NodeKey(("a",)), [node], is_composite=False)
-        assert result is None
-
-
 class TestGraphViewTransformations:
     """Test GraphView with transformations."""
 
@@ -1184,24 +1236,6 @@ class TestGraphViewTransformations:
         v = GraphView(comp, node_transformations=transformations, collapse_all=False)
         svg = v.svg()
         assert svg is not None
-
-
-class TestStandardStylingOverridesCoverage:
-    """Test StandardStylingOverrides formatter."""
-
-    def test_styling_overrides_with_style(self):
-        """Test StandardStylingOverrides with node style."""
-        formatter = StandardStylingOverrides()
-
-        # Node with style
-        node = Node(
-            NodeKey(("a",)),
-            NodeKey(("a",)),
-            {NodeAttributes.STATE: States.UPTODATE, NodeAttributes.STYLE: {"color": "red"}},
-        )
-        result = formatter.format(NodeKey(("a",)), [node], False)
-        # When a node has an explicit style that's not small/dot, the formatter returns None
-        assert result is None
 
 
 class TestVisualizationDropRootNone:
@@ -1258,32 +1292,3 @@ class TestVisualizationVizDagFormatterNone:
         # Should still produce valid SVG
         svg = v.svg()
         assert svg is not None
-
-
-class TestNodeFormatterCompositeCoverage:
-    """Cover the composite (multi-node) return paths of the type/timing formatters."""
-
-    def test_color_by_timing_composite_returns_none(self):
-        """ColorByTiming.format returns None for a composite node (covers line 160)."""
-        cbt = ColorByTiming()
-        nk = NodeKey(("blk",))
-        node1 = Node(nk, nk, {})
-        node2 = Node(nk, nk, {})
-        assert cbt.format(nk, [node1, node2], True) is None
-
-    def test_shape_by_type_calibrate_is_noop(self):
-        """ShapeByType.calibrate is a no-op that can be called safely (covers line 168)."""
-        sbt = ShapeByType()
-        nk = NodeKey(("test",))
-        node1 = Node(nk, nk, {NodeAttributes.VALUE: 1})
-        # Must not raise and must not alter formatting behaviour.
-        assert sbt.calibrate([node1]) is None
-        assert sbt.format(nk, [node1], False)["shape"] == "ellipse"
-
-    def test_shape_by_type_composite_returns_none(self):
-        """ShapeByType.format returns None for a composite node (covers line 191)."""
-        sbt = ShapeByType()
-        nk = NodeKey(("blk",))
-        node1 = Node(nk, nk, {NodeAttributes.VALUE: 1})
-        node2 = Node(nk, nk, {NodeAttributes.VALUE: 2})
-        assert sbt.format(nk, [node1, node2], True) is None

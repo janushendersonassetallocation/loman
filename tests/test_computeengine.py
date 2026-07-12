@@ -2429,9 +2429,6 @@ def test_tree_descendents():
     assert comp.get_tree_descendents() == {"foo", "foo/bar", "foo/bar/baz", "foo/bar2", "beef", "beef/bar"}
 
 
-# ==================== ADDITIONAL COVERAGE TESTS ====================
-
-
 class TestNullObject:
     """Tests for NullObject class."""
 
@@ -2502,8 +2499,8 @@ class TestIdentityFunction:
         assert identity_function(obj) is obj
 
 
-class TestRenameNodeCoverage:
-    """Tests for rename_node coverage."""
+class TestRenameNode:
+    """Tests for rename_node."""
 
     def test_rename_node_with_dict(self):
         """Test rename_node with dictionary mapping."""
@@ -2552,9 +2549,59 @@ class TestRenameNodeCoverage:
 
         assert comp.metadata("b") == {"key": "value"}
 
+    def test_rename_node_no_source_metadata(self):
+        """Test rename_node when source has no metadata but target had metadata."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2, metadata={"key": "old_value"})
 
-class TestRepointCoverage:
-    """Tests for repoint coverage."""
+        # Rename 'a' (no metadata) to 'c'
+        comp.rename_node("a", "c")
+
+        # 'c' should have no metadata
+        assert comp.metadata("c") == {}
+
+    def test_rename_nodes_metadata_transfer(self):
+        """Test rename_nodes properly transfers metadata."""
+        comp = Computation()
+        comp.add_node("a", value=1, metadata={"key": "value"})
+        comp.add_node("b", value=2)
+
+        comp.rename_node("a", "c")
+        comp.rename_node("b", "d")
+
+        assert comp.metadata("c") == {"key": "value"}
+        assert comp.metadata("d") == {}
+
+    def test_rename_nodes_clears_target_metadata(self):
+        """Test rename_nodes clears target's metadata if source has none."""
+        comp = Computation()
+        comp.add_node("source", value=1)  # No metadata
+        # Create target with metadata then delete it
+        comp.add_node("target", value=2, metadata={"old_key": "old_value"})
+        comp.delete_node("target")
+
+        # Now rename source to target - old metadata should be gone
+        comp.rename_node("source", "target")
+
+        assert comp.metadata("target") == {}
+
+    def test_rename_node_deletes_target_metadata(self):
+        """Test renaming to a node with existing metadata properly cleans up."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2, metadata={"key": "value"})
+
+        # Delete b first then rename
+        comp.delete_node("b")
+        comp.rename_node("a", "b")
+
+        # b should have no metadata since a didn't have any
+        assert comp.metadata("b") == {}
+
+
+class TestRepoint:
+    """Tests for repoint."""
 
     def test_repoint_same_node(self):
         """Test repoint when old_name equals new_name."""
@@ -2575,8 +2622,8 @@ class TestRepointCoverage:
         assert comp.s.c == States.PLACEHOLDER
 
 
-class TestMetadataCoverage:
-    """Tests for metadata coverage."""
+class TestMetadata:
+    """Tests for node metadata handling."""
 
     def test_metadata_nonexistent(self):
         """Test metadata on non-existent node."""
@@ -2593,9 +2640,20 @@ class TestMetadataCoverage:
         meta = comp.metadata("a")
         assert meta == {}
 
+    def test_add_node_clears_metadata(self):
+        """Test that add_node clears existing metadata when None is passed."""
+        comp = Computation()
+        comp.add_node("a", value=1, metadata={"key": "value"})
+        assert comp.metadata("a") == {"key": "value"}
 
-class TestDeleteNodeCoverage:
-    """Tests for delete_node coverage."""
+        # Re-add the node without metadata
+        comp.add_node("a", value=2)
+        # Metadata should be cleared
+        assert comp.metadata("a") == {}
+
+
+class TestDeleteNode:
+    """Tests for delete_node."""
 
     def test_delete_node_placeholder_cleanup(self):
         """Test delete_node cleans up placeholder nodes."""
@@ -2612,9 +2670,31 @@ class TestDeleteNodeCoverage:
         assert not comp.has_node("a")
         assert not comp.has_node("b")
 
+    def test_delete_node_with_successors(self):
+        """Test delete_node creates placeholder when node has successors."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
 
-class TestGetTagsForState:
-    """Tests for _get_tags_for_state method."""
+        # Deleting 'a' should make it a placeholder since 'b' depends on it
+        comp.delete_node("a")
+
+        assert comp.s.a == States.PLACEHOLDER
+
+    def test_delete_node_removes_orphaned_preds(self):
+        """Test delete_node removes orphaned predecessors if needed."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+
+        # Delete b - a should still exist
+        comp.delete_node("b")
+
+        assert "a" in [nk.name for nk in comp.dag.nodes]
+
+
+class TestTags:
+    """Tests for node tag handling."""
 
     def test_get_tags_for_state(self):
         """Test _get_tags_for_state method."""
@@ -2626,9 +2706,19 @@ class TestGetTagsForState:
         nodes = comp._get_tags_for_state("tag1")
         assert "a" in nodes or to_nodekey("a") in nodes
 
+    def test_clear_tag(self):
+        """Test clear_tag removes tag."""
+        comp = Computation()
+        comp.add_node("a", value=1, tags=["my_tag"])
 
-class TestWriteDillCoverage:
-    """Tests for write_dill coverage."""
+        assert "my_tag" in comp.t.a
+
+        comp.clear_tag("a", "my_tag")
+        assert "my_tag" not in comp.t.a
+
+
+class TestWriteDill:
+    """Tests for write_dill, write_dill_old and read_dill."""
 
     def test_write_dill_old_deprecated(self, tmp_path):
         """Test write_dill_old is deprecated."""
@@ -2680,6 +2770,49 @@ class TestWriteDillCoverage:
             pytest.warns(DeprecationWarning, match="read_dill"),
         ):  # Intentionally broad
             Computation.read_dill(buf)
+
+    def test_write_dill_old_with_fileobj(self):
+        """Test write_dill_old with file object."""
+        comp = Computation()
+        comp.add_node("a", value=42)
+
+        buf = io.BytesIO()
+        with pytest.warns(DeprecationWarning, match=".*"):
+            comp.write_dill_old(buf)
+
+    def test_write_dill_old_with_tags(self, tmp_path):
+        """Test write_dill_old with nodes that have TAG but not SERIALIZE - covers line 1508."""
+        import warnings
+
+        import dill  # nosec B403
+
+        comp = Computation()
+        # Add node with serialize=False so it won't have SERIALIZE tag
+        comp.add_node("a", value=1, serialize=False)
+
+        def calc_b(a):
+            return a + 1
+
+        comp.add_node("b", calc_b)
+        comp.compute_all()
+
+        # Add a custom tag to 'a' (which already doesn't have SERIALIZE)
+        comp.set_tag("a", "my_custom_tag")
+
+        # Write using write_dill_old (deprecated)
+        # This should set uninitialized for node 'a' that has TAG but not SERIALIZE
+        file_path = tmp_path / "comp.pkl"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            comp.write_dill_old(str(file_path))
+
+        # Read back
+        with open(file_path, "rb") as f:
+            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data  # noqa: S301
+
+        # Check structure
+        assert loaded.has_node("a")
+        assert loaded.has_node("b")
 
 
 class TestPrintErrors:
@@ -2756,8 +2889,8 @@ class TestDrawAndView:
             comp.view()
 
 
-class TestGetTreeListChildren:
-    """Tests for get_tree_list_children method."""
+class TestTreeNavigation:
+    """Tests for tree navigation (get_tree_list_children, get_tree_descendents)."""
 
     def test_get_tree_list_children(self):
         """Test get_tree_list_children method."""
@@ -2769,9 +2902,61 @@ class TestGetTreeListChildren:
         children = comp.get_tree_list_children("parent")
         assert "child1" in children or to_nodekey("child1").name in children
 
+    def test_get_tree_list_children_basic(self):
+        """Test get_tree_list_children basic functionality."""
+        comp = Computation()
+        comp.add_node("parent/child1", value=1)
+        comp.add_node("parent/child2", value=2)
 
-class TestAddMapNode:
-    """Tests for add_map_node method."""
+        children = comp.get_tree_list_children("parent")
+        assert len(children) > 0
+
+    def test_get_tree_descendents_graph_nodes_only(self):
+        """Test get_tree_descendents with graph_nodes_only=True."""
+        comp = Computation()
+        comp.add_node("parent/child1/grandchild", value=1)
+        comp.add_node("parent/child2", value=2)
+
+        # Get only graph nodes (not intermediate paths)
+        result = comp.get_tree_descendents("parent", graph_nodes_only=True)
+        assert len(result) > 0
+
+    def test_get_tree_descendents_include_stem_true(self):
+        """Test get_tree_descendents with include_stem=True."""
+        comp = Computation()
+        comp.add_node("parent/child1/grandchild", value=1)
+
+        result = comp.get_tree_descendents("parent", include_stem=True)
+        assert len(result) > 0
+
+    def test_get_tree_list_children_include_stem_false(self):
+        """Test get_tree_list_children with include_stem=False."""
+        comp = Computation()
+        comp.add_node("parent/child1", value=1)
+        comp.add_node("parent/child2", value=2)
+
+        # This is the base test - just access tree_list_children
+        result = comp.get_tree_list_children("parent")
+        assert len(result) > 0
+
+    def test_get_tree_descendents_without_stem(self):
+        """Test get_tree_descendents with include_stem=False - covers line 1141."""
+        comp = Computation()
+        comp.add_node("parent/child1", value=1)
+        comp.add_node("parent/child2", value=2)
+        comp.add_node("parent/sub/nested", value=3)
+
+        # Get descendents without stem
+        names = comp.get_tree_descendents("parent", include_stem=False)
+        # Names should not include parent prefix
+        assert len(names) >= 0
+        # Check that names are relative (without "parent/" prefix)
+        for name in names:
+            assert not str(name).startswith("parent/")
+
+
+class TestMapNode:
+    """Tests for add_map_node."""
 
     def test_add_map_node(self):
         """Test add_map_node method."""
@@ -2788,9 +2973,29 @@ class TestAddMapNode:
 
         assert comp.v.output == [2, 4, 6]
 
+    def test_add_map_node_with_error(self):
+        """Test add_map_node when subgraph raises an error."""
+        subgraph = Computation()
+        subgraph.add_node("input")
 
-class TestLinkSourceStyle:
-    """Tests for link style handling."""
+        def fail_on_two(input):
+            if input == 2:
+                msg = "Cannot process 2"
+                raise ValueError(msg)
+            return input * 2
+
+        subgraph.add_node("output", fail_on_two)
+
+        comp = Computation()
+        comp.add_node("input", value=[1, 2, 3])
+        comp.add_map_node("output", "input", subgraph, "input", "output")
+
+        with pytest.raises(MapError):
+            comp.compute("output", raise_exceptions=True)
+
+
+class TestLink:
+    """Tests for link and its style handling."""
 
     def test_link_source_style(self):
         """Test link uses source style when target has no style."""
@@ -2800,9 +3005,30 @@ class TestLinkSourceStyle:
 
         assert comp.style.b == "small"
 
+    def test_link_same_node(self):
+        """Test link does nothing when target equals source."""
+        comp = Computation()
+        comp.add_node("a", value=1)
 
-class TestAddBlockCoverage:
-    """Tests for add_block method."""
+        # This should do nothing, not raise an error
+        comp.link("a", "a")
+
+        assert comp.v.a == 1
+
+    def test_link_target_style(self):
+        """Test link uses target style when target has style."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2, style="small")
+
+        # Link from 'b' to 'a' - target is 'b' which has style
+        comp.link("b", "a")
+
+        assert comp.style.b == "small"
+
+
+class TestAddBlock:
+    """Tests for add_block."""
 
     def test_add_block_with_links(self):
         """Test add_block with links parameter."""
@@ -2828,9 +3054,26 @@ class TestAddBlockCoverage:
 
         assert comp.metadata("block1") == {"key": "value"}
 
+    def test_add_block_removes_metadata(self):
+        """Test add_block removes metadata when None is passed."""
+        block_comp = Computation()
+        block_comp.add_node("a", value=1)
 
-class TestInputNodeCoverage:
-    """Tests for InputNode class."""
+        comp = Computation()
+        # First add with metadata
+        comp.add_block("block1", block_comp, metadata={"key": "value"})
+        assert comp.metadata("block1") == {"key": "value"}
+
+        # Then add another block at same path with no metadata
+        block2 = Computation()
+        block2.add_node("b", value=2)
+
+        # This should remove the old metadata
+        comp.add_block("block1", block2, metadata=None)
+
+
+class TestNodeTypes:
+    """Tests for Node subclasses (InputNode, Block, ConstantValue, TimingData) and prepend_path."""
 
     def test_input_node_with_args_kwds(self):
         """Test InputNode stores args and kwds."""
@@ -2847,10 +3090,6 @@ class TestInputNodeCoverage:
         # The node should be added
         assert comp.has_node("my_input")
 
-
-class TestBlockCoverage:
-    """Tests for Block class."""
-
     def test_block_add_to_comp(self):
         """Test Block.add_to_comp method."""
         inner_comp = Computation()
@@ -2863,18 +3102,10 @@ class TestBlockCoverage:
 
         assert outer_comp.has_node("block1/a")
 
-
-class TestConstantValueCoverage:
-    """Tests for ConstantValue class."""
-
     def test_constant_value(self):
         """Test ConstantValue stores value."""
         cv = ConstantValue(42)
         assert cv.value == 42
-
-
-class TestTimingDataCoverage:
-    """Tests for TimingData class."""
 
     def test_timing_data(self):
         """Test TimingData stores timing information."""
@@ -2887,9 +3118,49 @@ class TestTimingDataCoverage:
         assert td.end == end
         assert td.duration == 0.5
 
+    def test_block_with_callable(self):
+        """Test Block with a callable that returns Computation."""
 
-class TestNodeDecoratorCoverage:
-    """Tests for the @node decorator."""
+        def create_block():
+            """Create block."""
+            comp = Computation()
+            comp.add_node("x", value=10)
+            return comp
+
+        block_obj = Block(create_block)
+
+        outer_comp = Computation()
+        block_obj.add_to_comp(outer_comp, "my_block", None, ignore_self=True)
+
+        assert outer_comp.has_node("my_block/x")
+
+    def test_block_with_invalid_type(self):
+        """Test Block with invalid type raises TypeError."""
+        block_obj = Block("not a callable or computation")
+
+        outer_comp = Computation()
+        with pytest.raises(TypeError, match="must be callable or Computation"):
+            block_obj.add_to_comp(outer_comp, "my_block", None, ignore_self=True)
+
+    def test_prepend_path_with_constant(self):
+        """Test prepend_path returns ConstantValue unchanged."""
+        comp = Computation()
+        cv = C(42)
+        result = comp.prepend_path(cv, NodeKey(("prefix",)))
+        assert isinstance(result, ConstantValue)
+        assert result.value == 42
+
+    def test_node_base_class_raises(self):
+        """Test that Node.add_to_comp raises NotImplementedError."""
+        from loman.computeengine import Node
+
+        n = Node()
+        with pytest.raises(NotImplementedError):
+            n.add_to_comp(None, "name", None, False)
+
+
+class TestDecorators:
+    """Tests for the node, calc_node and computation_factory decorators."""
 
     def test_node_decorator_with_name(self):
         """Test @node decorator with explicit name."""
@@ -2921,10 +3192,6 @@ class TestNodeDecoratorCoverage:
 
         assert comp.s.custom_name == States.COMPUTABLE
 
-
-class TestCalcNodeCoverage:
-    """Tests for CalcNode class."""
-
     def test_calc_node_decorator(self):
         """Test calc_node decorator."""
 
@@ -2943,38 +3210,6 @@ class TestCalcNodeCoverage:
 
         assert hasattr(my_calc, "_loman_node_info")
 
-
-class TestBlockCallable:
-    """Tests for Block with callable."""
-
-    def test_block_with_callable(self):
-        """Test Block with a callable that returns Computation."""
-
-        def create_block():
-            """Create block."""
-            comp = Computation()
-            comp.add_node("x", value=10)
-            return comp
-
-        block_obj = Block(create_block)
-
-        outer_comp = Computation()
-        block_obj.add_to_comp(outer_comp, "my_block", None, ignore_self=True)
-
-        assert outer_comp.has_node("my_block/x")
-
-    def test_block_with_invalid_type(self):
-        """Test Block with invalid type raises TypeError."""
-        block_obj = Block("not a callable or computation")
-
-        outer_comp = Computation()
-        with pytest.raises(TypeError, match="must be callable or Computation"):
-            block_obj.add_to_comp(outer_comp, "my_block", None, ignore_self=True)
-
-
-class TestComputationFactoryCoverage:
-    """Tests for computation_factory decorator."""
-
     def test_computation_factory(self):
         """Test computation_factory decorator."""
         from loman.computeengine import computation_factory
@@ -2989,44 +3224,8 @@ class TestComputationFactoryCoverage:
         assert isinstance(comp, Computation)
 
 
-class TestMapNodeErrorCoverage:
-    """Tests for add_map_node with errors."""
-
-    def test_add_map_node_with_error(self):
-        """Test add_map_node when subgraph raises an error."""
-        subgraph = Computation()
-        subgraph.add_node("input")
-
-        def fail_on_two(input):
-            if input == 2:
-                msg = "Cannot process 2"
-                raise ValueError(msg)
-            return input * 2
-
-        subgraph.add_node("output", fail_on_two)
-
-        comp = Computation()
-        comp.add_node("input", value=[1, 2, 3])
-        comp.add_map_node("output", "input", subgraph, "input", "output")
-
-        with pytest.raises(MapError):
-            comp.compute("output", raise_exceptions=True)
-
-
-class TestPrepareConstantValueCoverage:
-    """Test prepend_path with ConstantValue."""
-
-    def test_prepend_path_with_constant(self):
-        """Test prepend_path returns ConstantValue unchanged."""
-        comp = Computation()
-        cv = C(42)
-        result = comp.prepend_path(cv, NodeKey(("prefix",)))
-        assert isinstance(result, ConstantValue)
-        assert result.value == 42
-
-
-class TestAttributeViewForPathCoverage:
-    """Tests for attribute view path access."""
+class TestAttributeView:
+    """Tests for AttributeView access, including tree paths."""
 
     def test_get_many_func_for_path(self):
         """Test getting multiple values via path."""
@@ -3037,355 +3236,6 @@ class TestAttributeViewForPathCoverage:
         # Access multiple values as list
         result = comp.v[["a", "b"]]
         assert result == [1, 2]
-
-
-class TestExpandNamedTupleCoverage:
-    """Tests for add_named_tuple_expansion method."""
-
-    def test_add_named_tuple_expansion(self):
-        """Test add_named_tuple_expansion creates nodes for fields."""
-        Point = namedtuple("Point", ["x", "y"])
-
-        comp = Computation()
-        comp.add_node("point", value=Point(1, 2))
-        comp.add_named_tuple_expansion("point", Point)
-
-        assert comp.has_node("point.x")
-        assert comp.has_node("point.y")
-        comp.compute_all()
-        assert comp.v["point.x"] == 1
-        assert comp.v["point.y"] == 2
-
-
-class TestGetTreeListChildrenWithStemCoverage:
-    """Tests for get_tree_list_children with include_stem."""
-
-    def test_get_tree_list_children_basic(self):
-        """Test get_tree_list_children basic functionality."""
-        comp = Computation()
-        comp.add_node("parent/child1", value=1)
-        comp.add_node("parent/child2", value=2)
-
-        children = comp.get_tree_list_children("parent")
-        assert len(children) > 0
-
-
-class TestGetFinalOutputsCoverage:
-    """Tests for get_final_outputs method."""
-
-    def test_get_final_outputs(self):
-        """Test get_final_outputs returns leaf nodes."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.add_node("c", lambda b: b + 1)
-
-        outputs = comp.get_final_outputs()
-        assert "c" in outputs
-
-    def test_get_final_outputs_with_names(self):
-        """Test get_final_outputs with specific names."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.add_node("c", lambda b: b + 1)
-
-        outputs = comp.get_final_outputs("a")
-        assert "c" in outputs
-
-
-class TestGetOriginalInputsCoverage:
-    """Tests for get_original_inputs method."""
-
-    def test_get_original_inputs(self):
-        """Test get_original_inputs returns input nodes."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", value=2)
-        comp.add_node("c", lambda a, b: a + b)
-
-        inputs = comp.get_original_inputs()
-        assert "a" in inputs
-        assert "b" in inputs
-        assert "c" not in inputs
-
-
-class TestGetDescendentsCoverage:
-    """Tests for get_descendents method."""
-
-    def test_get_descendents(self):
-        """Test get_descendents returns downstream nodes."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.add_node("c", lambda b: b + 1)
-
-        desc = comp.get_descendents("a")
-        assert "b" in desc
-        assert "c" in desc
-
-
-class TestGetAncestorsCoverage:
-    """Tests for get_ancestors method."""
-
-    def test_get_ancestors(self):
-        """Test get_ancestors returns upstream nodes."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.add_node("c", lambda b: b + 1)
-
-        anc = comp.get_ancestors("c")
-        assert "a" in anc
-        assert "b" in anc
-
-
-class TestLinkSameNodeCoverage:
-    """Test link when target equals source."""
-
-    def test_link_same_node(self):
-        """Test link does nothing when target equals source."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        # This should do nothing, not raise an error
-        comp.link("a", "a")
-
-        assert comp.v.a == 1
-
-
-class TestAddBlockMetadataDeletionCoverage:
-    """Test add_block metadata deletion when None."""
-
-    def test_add_block_removes_metadata(self):
-        """Test add_block removes metadata when None is passed."""
-        block_comp = Computation()
-        block_comp.add_node("a", value=1)
-
-        comp = Computation()
-        # First add with metadata
-        comp.add_block("block1", block_comp, metadata={"key": "value"})
-        assert comp.metadata("block1") == {"key": "value"}
-
-        # Then add another block at same path with no metadata
-        block2 = Computation()
-        block2.add_node("b", value=2)
-
-        # This should remove the old metadata
-        comp.add_block("block1", block2, metadata=None)
-
-
-class TestRestrictCoverage:
-    """Tests for restrict method."""
-
-    def test_restrict(self):
-        """Test restrict limits computation to ancestors of outputs."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", value=2)
-        comp.add_node("c", lambda a: a + 1)
-        comp.add_node("d", lambda b: b + 1)
-        comp.add_node("e", lambda c, d: c + d)
-
-        # Restrict to only what's needed for c
-        comp.restrict("c")
-
-        assert comp.has_node("a")
-        assert comp.has_node("c")
-        # b and d might be removed depending on implementation
-
-
-class TestPinUnpinCoverage:
-    """Tests for pin and unpin methods."""
-
-    def test_pin_with_value(self):
-        """Test pin with value."""
-        comp = Computation()
-        comp.add_node("a")
-        comp.add_node("b", lambda a: a + 1)
-
-        comp.pin("a", 10)
-        comp.compute_all()
-
-        assert comp.s.a == States.PINNED
-        assert comp.v.a == 10
-        assert comp.v.b == 11
-
-    def test_unpin(self):
-        """Test unpin sets node to STALE."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.pin("a")
-
-        assert comp.s.a == States.PINNED
-
-        comp.unpin("a")
-        assert comp.s.a == States.STALE
-
-
-class TestSetAndClearStyleCoverage:
-    """Tests for set_style and clear_style methods."""
-
-    def test_set_style(self):
-        """Test set_style method."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        comp.set_style("a", "small")
-        assert comp.style.a == "small"
-
-    def test_clear_style(self):
-        """Test clear_style method."""
-        comp = Computation()
-        comp.add_node("a", value=1, style="small")
-
-        comp.clear_style("a")
-        assert comp.style.a is None
-
-
-class TestClearTagCoverage:
-    """Tests for clear_tag method."""
-
-    def test_clear_tag(self):
-        """Test clear_tag removes tag."""
-        comp = Computation()
-        comp.add_node("a", value=1, tags=["my_tag"])
-
-        assert "my_tag" in comp.t.a
-
-        comp.clear_tag("a", "my_tag")
-        assert "my_tag" not in comp.t.a
-
-
-class TestGetSourceCoverage:
-    """Tests for get_source and print_source methods."""
-
-    def test_get_source(self):
-        """Test get_source returns source code."""
-        comp = Computation()
-
-        def my_func(a):
-            return a + 1
-
-        comp.add_node("a", value=1)
-        comp.add_node("b", my_func)
-
-        source = comp.get_source("b")
-        assert "my_func" in source
-
-    def test_get_source_non_calc(self):
-        """Test get_source for non-calculated node."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        source = comp.get_source("a")
-        assert "NOT A CALCULATED NODE" in source
-
-
-class TestComputeAndGetValueCoverage:
-    """Tests for compute_and_get_value method."""
-
-    def test_compute_and_get_value_uptodate(self):
-        """Test compute_and_get_value when already uptodate."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        result = comp.compute_and_get_value("a")
-        assert result == 1
-
-    def test_compute_and_get_value_needs_compute(self):
-        """Test compute_and_get_value triggers computation."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-
-        result = comp.x.b
-        assert result == 2
-
-
-class TestComputationGetTreeDescendantsCoverage:
-    """Tests for get_tree_descendents with different options."""
-
-    def test_get_tree_descendents_graph_nodes_only(self):
-        """Test get_tree_descendents with graph_nodes_only=True."""
-        comp = Computation()
-        comp.add_node("parent/child1/grandchild", value=1)
-        comp.add_node("parent/child2", value=2)
-
-        # Get only graph nodes (not intermediate paths)
-        result = comp.get_tree_descendents("parent", graph_nodes_only=True)
-        assert len(result) > 0
-
-    def test_get_tree_descendents_include_stem_true(self):
-        """Test get_tree_descendents with include_stem=True."""
-        comp = Computation()
-        comp.add_node("parent/child1/grandchild", value=1)
-
-        result = comp.get_tree_descendents("parent", include_stem=True)
-        assert len(result) > 0
-
-
-class TestRenameNodeMetadataCleanupCoverage:
-    """Test rename_node metadata cleanup when source has no metadata."""
-
-    def test_rename_node_no_source_metadata(self):
-        """Test rename_node when source has no metadata but target had metadata."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", value=2, metadata={"key": "old_value"})
-
-        # Rename 'a' (no metadata) to 'c'
-        comp.rename_node("a", "c")
-
-        # 'c' should have no metadata
-        assert comp.metadata("c") == {}
-
-
-class TestDeleteNodePreservesDependenciesCoverage:
-    """Test delete_node behavior with dependencies."""
-
-    def test_delete_node_with_successors(self):
-        """Test delete_node creates placeholder when node has successors."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-
-        # Deleting 'a' should make it a placeholder since 'b' depends on it
-        comp.delete_node("a")
-
-        assert comp.s.a == States.PLACEHOLDER
-
-
-class TestComputeAndGetValueErrorCoverage:
-    """Test compute_and_get_value when computation fails."""
-
-    def test_compute_and_get_value_failure(self):
-        """Test compute_and_get_value raises error when computation fails."""
-        comp = Computation()
-        comp.add_node("a")  # Uninitialized - will fail to compute
-
-        with pytest.raises(Exception, match=r".*"):  # May raise different exception types
-            _ = comp.x.a
-
-
-class TestRenameNodesMultipleCoverage:
-    """Test rename_nodes with metadata handling."""
-
-    def test_rename_nodes_metadata_transfer(self):
-        """Test rename_nodes properly transfers metadata."""
-        comp = Computation()
-        comp.add_node("a", value=1, metadata={"key": "value"})
-        comp.add_node("b", value=2)
-
-        comp.rename_node("a", "c")
-        comp.rename_node("b", "d")
-
-        assert comp.metadata("c") == {"key": "value"}
-        assert comp.metadata("d") == {}
-
-
-class TestAttributeViewNonExistentKeyCoverage:
-    """Test AttributeView with non-existent key."""
 
     def test_attribute_view_getattr_raises_attribute_error(self):
         """Test AttributeView __getattr__ converts KeyError to AttributeError."""
@@ -3406,90 +3256,6 @@ class TestAttributeViewNonExistentKeyCoverage:
         # Should raise AttributeError on non-existent key
         with pytest.raises(AttributeError):
             _ = av.nonexistent
-
-
-class TestComputationGetTreeListChildrenWithStemTrueCoverage:
-    """Test get_tree_list_children_with_stem parameter."""
-
-    def test_get_tree_list_children_include_stem_false(self):
-        """Test get_tree_list_children with include_stem=False."""
-        comp = Computation()
-        comp.add_node("parent/child1", value=1)
-        comp.add_node("parent/child2", value=2)
-
-        # This is the base test - just access tree_list_children
-        result = comp.get_tree_list_children("parent")
-        assert len(result) > 0
-
-
-class TestDeleteNodeWithNoSuccessorsAndPredsCoverage:
-    """Test delete_node behavior with predecessors."""
-
-    def test_delete_node_removes_orphaned_preds(self):
-        """Test delete_node removes orphaned predecessors if needed."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-
-        # Delete b - a should still exist
-        comp.delete_node("b")
-
-        assert "a" in [nk.name for nk in comp.dag.nodes]
-
-
-class TestRenameNodesWithTargetMetadataCoverage:
-    """Test rename_nodes when new node already has metadata."""
-
-    def test_rename_nodes_clears_target_metadata(self):
-        """Test rename_nodes clears target's metadata if source has none."""
-        comp = Computation()
-        comp.add_node("source", value=1)  # No metadata
-        # Create target with metadata then delete it
-        comp.add_node("target", value=2, metadata={"old_key": "old_value"})
-        comp.delete_node("target")
-
-        # Now rename source to target - old metadata should be gone
-        comp.rename_node("source", "target")
-
-        assert comp.metadata("target") == {}
-
-
-class TestSetStateAndLiteralValueNoOldStateCoverage:
-    """Tests for _set_state_and_literal_value require_old_state branch."""
-
-    def test_require_old_state_false(self):
-        """Test _set_state_and_literal_value with require_old_state=False."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        nk = to_nodekey("a")
-
-        # This should work without error
-        comp._set_state_and_literal_value(nk, States.UPTODATE, 42, require_old_state=False)
-        assert comp.v.a == 42
-
-
-class TestGetDescendantsStopStatesCoverage:
-    """Tests for _get_descendents with stop_states."""
-
-    def test_get_descendents_with_stop_states_pinned(self):
-        """Test _get_descendents stops at pinned nodes."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.add_node("c", lambda b: b + 1)
-
-        comp.compute_all()
-        comp.pin("b")
-
-        # Get descendants of a, should stop at b
-        nk = to_nodekey("a")
-        result = comp._get_descendents(nk, stop_states={States.PINNED})
-
-        assert to_nodekey("c") not in result
-
-
-class TestAttributeViewPathCoverage:
-    """Test AttributeView for tree paths."""
 
     def test_computation_v_tree_path(self):
         """Test accessing tree path through v attribute."""
@@ -3518,66 +3284,6 @@ class TestAttributeViewPathCoverage:
         assert "child1" in node_names or any("child1" in str(n) for n in node_names)
         assert "child2" in node_names or any("child2" in str(n) for n in node_names)
 
-
-class TestComputationReprSvgCoverage:
-    """Test Computation _repr_svg_."""
-
-    def test_computation_repr_svg(self):
-        """Test Computation _repr_svg_ method."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        svg = comp._repr_svg_()
-        assert svg is not None
-        assert "<svg" in svg
-
-
-class TestAddNodeWithMetadataDeleteCoverage:
-    """Test add_node clears existing metadata when None is passed."""
-
-    def test_add_node_clears_metadata(self):
-        """Test that add_node clears existing metadata when None is passed."""
-        comp = Computation()
-        comp.add_node("a", value=1, metadata={"key": "value"})
-        assert comp.metadata("a") == {"key": "value"}
-
-        # Re-add the node without metadata
-        comp.add_node("a", value=2)
-        # Metadata should be cleared
-        assert comp.metadata("a") == {}
-
-
-class TestWriteDillOldFileObjCoverage:
-    """Test write_dill_old with file object."""
-
-    def test_write_dill_old_with_fileobj(self):
-        """Test write_dill_old with file object."""
-        comp = Computation()
-        comp.add_node("a", value=42)
-
-        buf = io.BytesIO()
-        with pytest.warns(DeprecationWarning, match=".*"):
-            comp.write_dill_old(buf)
-
-
-class TestLinkWithTargetStyleCoverage:
-    """Test link uses target style when target has style."""
-
-    def test_link_target_style(self):
-        """Test link uses target style when target has style."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", value=2, style="small")
-
-        # Link from 'b' to 'a' - target is 'b' which has style
-        comp.link("b", "a")
-
-        assert comp.style.b == "small"
-
-
-class TestGetAttributeViewPathKeyErrorCoverage:
-    """Test AttributeView path access raises AttributeError."""
-
     def test_path_raises_attribute_error(self):
         """Test accessing non-existent path raises AttributeError."""
         comp = Computation()
@@ -3587,37 +3293,228 @@ class TestGetAttributeViewPathKeyErrorCoverage:
             _ = comp.v.nonexistent
 
 
-class TestBaseNodeAddToCompCoverage:
-    """Tests for Node base class add_to_comp."""
+class TestNamedTupleExpansion:
+    """Tests for add_named_tuple_expansion."""
 
-    def test_node_base_class_raises(self):
-        """Test that Node.add_to_comp raises NotImplementedError."""
-        from loman.computeengine import Node
+    def test_add_named_tuple_expansion(self):
+        """Test add_named_tuple_expansion creates nodes for fields."""
+        Point = namedtuple("Point", ["x", "y"])
 
-        n = Node()
-        with pytest.raises(NotImplementedError):
-            n.add_to_comp(None, "name", None, False)
+        comp = Computation()
+        comp.add_node("point", value=Point(1, 2))
+        comp.add_named_tuple_expansion("point", Point)
+
+        assert comp.has_node("point.x")
+        assert comp.has_node("point.y")
+        comp.compute_all()
+        assert comp.v["point.x"] == 1
+        assert comp.v["point.y"] == 2
 
 
-class TestRenameNodeMetadataDeleteBranchCoverage:
-    """Test rename_node metadata deletion when new node has metadata but old doesn't."""
+class TestGraphQueries:
+    """Tests for graph queries (final outputs, original inputs, descendents, ancestors)."""
 
-    def test_rename_node_deletes_target_metadata(self):
-        """Test renaming to a node with existing metadata properly cleans up."""
+    def test_get_final_outputs(self):
+        """Test get_final_outputs returns leaf nodes."""
         comp = Computation()
         comp.add_node("a", value=1)
-        comp.add_node("b", value=2, metadata={"key": "value"})
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
 
-        # Delete b first then rename
-        comp.delete_node("b")
-        comp.rename_node("a", "b")
+        outputs = comp.get_final_outputs()
+        assert "c" in outputs
 
-        # b should have no metadata since a didn't have any
-        assert comp.metadata("b") == {}
+    def test_get_final_outputs_with_names(self):
+        """Test get_final_outputs with specific names."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        outputs = comp.get_final_outputs("a")
+        assert "c" in outputs
+
+    def test_get_original_inputs(self):
+        """Test get_original_inputs returns input nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2)
+        comp.add_node("c", lambda a, b: a + b)
+
+        inputs = comp.get_original_inputs()
+        assert "a" in inputs
+        assert "b" in inputs
+        assert "c" not in inputs
+
+    def test_get_descendents(self):
+        """Test get_descendents returns downstream nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        desc = comp.get_descendents("a")
+        assert "b" in desc
+        assert "c" in desc
+
+    def test_get_ancestors(self):
+        """Test get_ancestors returns upstream nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        anc = comp.get_ancestors("c")
+        assert "a" in anc
+        assert "b" in anc
 
 
-class TestSetStateAndLiteralValueKeyErrorCoverage:
-    """Test _set_state_and_literal_value KeyError branch."""
+class TestRestrict:
+    """Tests for restrict."""
+
+    def test_restrict(self):
+        """Test restrict limits computation to ancestors of outputs."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", value=2)
+        comp.add_node("c", lambda a: a + 1)
+        comp.add_node("d", lambda b: b + 1)
+        comp.add_node("e", lambda c, d: c + d)
+
+        # Restrict to only what's needed for c
+        comp.restrict("c")
+
+        assert comp.has_node("a")
+        assert comp.has_node("c")
+
+
+class TestPinUnpin:
+    """Tests for pin and unpin."""
+
+    def test_pin_with_value(self):
+        """Test pin with value."""
+        comp = Computation()
+        comp.add_node("a")
+        comp.add_node("b", lambda a: a + 1)
+
+        comp.pin("a", 10)
+        comp.compute_all()
+
+        assert comp.s.a == States.PINNED
+        assert comp.v.a == 10
+        assert comp.v.b == 11
+
+    def test_unpin(self):
+        """Test unpin sets node to STALE."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.pin("a")
+
+        assert comp.s.a == States.PINNED
+
+        comp.unpin("a")
+        assert comp.s.a == States.STALE
+
+
+class TestStyle:
+    """Tests for set_style and clear_style."""
+
+    def test_set_style(self):
+        """Test set_style method."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        comp.set_style("a", "small")
+        assert comp.style.a == "small"
+
+    def test_clear_style(self):
+        """Test clear_style method."""
+        comp = Computation()
+        comp.add_node("a", value=1, style="small")
+
+        comp.clear_style("a")
+        assert comp.style.a is None
+
+
+class TestSource:
+    """Tests for get_source and print_source."""
+
+    def test_get_source(self):
+        """Test get_source returns source code."""
+        comp = Computation()
+
+        def my_func(a):
+            return a + 1
+
+        comp.add_node("a", value=1)
+        comp.add_node("b", my_func)
+
+        source = comp.get_source("b")
+        assert "my_func" in source
+
+    def test_get_source_non_calc(self):
+        """Test get_source for non-calculated node."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        source = comp.get_source("a")
+        assert "NOT A CALCULATED NODE" in source
+
+    def test_print_source(self, capsys):
+        """Test print_source method - covers line 1449."""
+        comp = Computation()
+
+        def calc_a():
+            return 42
+
+        comp.add_node("a", calc_a)
+        comp.print_source("a")
+
+        captured = capsys.readouterr()
+        assert "def calc_a" in captured.out
+
+
+class TestComputeAndGetValue:
+    """Tests for compute_and_get_value."""
+
+    def test_compute_and_get_value_uptodate(self):
+        """Test compute_and_get_value when already uptodate."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        result = comp.compute_and_get_value("a")
+        assert result == 1
+
+    def test_compute_and_get_value_needs_compute(self):
+        """Test compute_and_get_value triggers computation."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+
+        result = comp.x.b
+        assert result == 2
+
+    def test_compute_and_get_value_failure(self):
+        """Test compute_and_get_value raises error when computation fails."""
+        comp = Computation()
+        comp.add_node("a")  # Uninitialized - will fail to compute
+
+        with pytest.raises(Exception, match=r".*"):  # May raise different exception types
+            _ = comp.x.a
+
+
+class TestSetStateAndLiteralValue:
+    """Tests for _set_state_and_literal_value."""
+
+    def test_require_old_state_false(self):
+        """Test _set_state_and_literal_value with require_old_state=False."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        nk = to_nodekey("a")
+
+        # This should work without error
+        comp._set_state_and_literal_value(nk, States.UPTODATE, 42, require_old_state=False)
+        assert comp.v.a == 42
 
     def test_set_state_require_old_state_false_keyerror(self):
         """Test _set_state_and_literal_value with require_old_state=False doesn't raise."""
@@ -3630,9 +3527,35 @@ class TestSetStateAndLiteralValueKeyErrorCoverage:
         comp._set_state_and_literal_value(nk, States.STALE, None, require_old_state=False)
         assert comp.s.a == States.STALE
 
+    def test_set_state_without_requiring_old(self):
+        """Test setting state without requiring old state."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        nk = to_nodekey("a")
 
-class TestGetDescendentsNoStopStatesCoverage:
-    """Test _get_descendents without stop_states."""
+        # This should work fine
+        comp._set_state_and_literal_value(nk, States.STALE, None, require_old_state=False)
+        assert comp.s.a == States.STALE
+
+
+class TestGetDescendentsInternal:
+    """Tests for the internal _get_descendents traversal."""
+
+    def test_get_descendents_with_stop_states_pinned(self):
+        """Test _get_descendents stops at pinned nodes."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+
+        comp.compute_all()
+        comp.pin("b")
+
+        # Get descendants of a, should stop at b
+        nk = to_nodekey("a")
+        result = comp._get_descendents(nk, stop_states={States.PINNED})
+
+        assert to_nodekey("c") not in result
 
     def test_get_descendents_returns_all(self):
         """Test _get_descendents returns all descendants without stop_states."""
@@ -3649,23 +3572,58 @@ class TestGetDescendentsNoStopStatesCoverage:
         assert to_nodekey("b") in result
         assert to_nodekey("c") in result
 
-
-class TestSetStateRequireOldStateFalseCoverage:
-    """Test _set_state_and_literal_value with require_old_state=False."""
-
-    def test_set_state_without_requiring_old(self):
-        """Test setting state without requiring old state."""
+    def test_get_descendents_stop_states(self):
+        """Test _get_descendents with stop_states - covers line 850."""
         comp = Computation()
         comp.add_node("a", value=1)
-        nk = to_nodekey("a")
 
-        # This should work fine
-        comp._set_state_and_literal_value(nk, States.STALE, None, require_old_state=False)
-        assert comp.s.a == States.STALE
+        def calc_b(a):
+            return a + 1
+
+        def calc_c(b):
+            return b + 1
+
+        comp.add_node("b", calc_b)
+        comp.add_node("c", calc_c)
+        comp.compute_all()
+
+        # Call _get_descendents with stop_states containing UPTODATE
+        # This should return empty set for node 'a' since it's UPTODATE
+        nodekey = NodeKey(("a",))
+        result = comp._get_descendents(nodekey, stop_states={States.UPTODATE})
+        assert result == set()
+
+    def test_get_descendents_default_stop_states(self):
+        """_get_descendents defaults stop_states to an empty set (covers line 935)."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        comp.add_node("c", lambda b: b + 1)
+        comp.compute_all()
+
+        a_key = to_nodekey("a")
+        # Called with no stop_states -> the None default is replaced by an empty set,
+        # so no state stops the traversal and every descendent is returned.
+        descendents = comp._get_descendents(a_key)
+        assert to_nodekey("b") in descendents
+        assert to_nodekey("c") in descendents
 
 
-class TestTrySetComputableMissingPredCoverage:
-    """Test _try_set_computable when predecessor is missing."""
+class TestReprSvg:
+    """Tests for Computation._repr_svg_."""
+
+    def test_computation_repr_svg(self):
+        """Test Computation _repr_svg_ method."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        svg = comp._repr_svg_()
+        assert svg is not None
+        assert "<svg" in svg
+
+
+class TestTrySetComputable:
+    """Tests for _try_set_computable."""
 
     def test_try_set_computable_with_valid_preds(self):
         """Test _try_set_computable with all valid predecessors."""
@@ -3678,8 +3636,8 @@ class TestTrySetComputableMissingPredCoverage:
         comp._try_set_computable(nk)
 
 
-class TestComputeengineRemainingCoverageCoverage:
-    """Tests for remaining uncovered lines in computeengine.py."""
+class TestGetTiming:
+    """Tests for get_timing."""
 
     def test_get_timing(self):
         """Test get_timing method - covers lines 1276-1278, 1286."""
@@ -3705,39 +3663,9 @@ class TestComputeengineRemainingCoverageCoverage:
         timings = comp.get_timing(["a", "b"])
         assert len(timings) == 2
 
-    def test_print_source(self, capsys):
-        """Test print_source method - covers line 1449."""
-        comp = Computation()
 
-        def calc_a():
-            return 42
-
-        comp.add_node("a", calc_a)
-        comp.print_source("a")
-
-        captured = capsys.readouterr()
-        assert "def calc_a" in captured.out
-
-    def test_get_descendents_stop_states(self):
-        """Test _get_descendents with stop_states - covers line 850."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        def calc_b(a):
-            return a + 1
-
-        def calc_c(b):
-            return b + 1
-
-        comp.add_node("b", calc_b)
-        comp.add_node("c", calc_c)
-        comp.compute_all()
-
-        # Call _get_descendents with stop_states containing UPTODATE
-        # This should return empty set for node 'a' since it's UPTODATE
-        nodekey = NodeKey(("a",))
-        result = comp._get_descendents(nodekey, stop_states={States.UPTODATE})
-        assert result == set()
+class TestCompute:
+    """Tests for compute with placeholder/uninitialized inputs."""
 
     def test_compute_placeholder_input(self):
         """Test compute with placeholder input - covers line 1020."""
@@ -3769,73 +3697,9 @@ class TestComputeengineRemainingCoverageCoverage:
         with pytest.raises(Exception, match=r".*"):  # Intentionally broad
             comp.compute("b")
 
-    def test_write_dill_old_with_tags(self, tmp_path):
-        """Test write_dill_old with nodes that have TAG but not SERIALIZE - covers line 1508."""
-        import warnings
 
-        import dill  # nosec B403
-
-        comp = Computation()
-        # Add node with serialize=False so it won't have SERIALIZE tag
-        comp.add_node("a", value=1, serialize=False)
-
-        def calc_b(a):
-            return a + 1
-
-        comp.add_node("b", calc_b)
-        comp.compute_all()
-
-        # Add a custom tag to 'a' (which already doesn't have SERIALIZE)
-        comp.set_tag("a", "my_custom_tag")
-
-        # Write using write_dill_old (deprecated)
-        # This should set uninitialized for node 'a' that has TAG but not SERIALIZE
-        file_path = tmp_path / "comp.pkl"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            comp.write_dill_old(str(file_path))
-
-        # Read back
-        with open(file_path, "rb") as f:
-            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data  # noqa: S301
-
-        # Check structure
-        assert loaded.has_node("a")
-        assert loaded.has_node("b")
-
-    def test_get_tree_descendents_without_stem(self):
-        """Test get_tree_descendents with include_stem=False - covers line 1141."""
-        comp = Computation()
-        comp.add_node("parent/child1", value=1)
-        comp.add_node("parent/child2", value=2)
-        comp.add_node("parent/sub/nested", value=3)
-
-        # Get descendents without stem
-        names = comp.get_tree_descendents("parent", include_stem=False)
-        # Names should not include parent prefix
-        assert len(names) >= 0
-        # Check that names are relative (without "parent/" prefix)
-        for name in names:
-            assert not str(name).startswith("parent/")
-
-
-class TestCoverageGaps:
-    """Targeted tests closing the last uncovered lines in computeengine.py."""
-
-    def test_get_descendents_default_stop_states(self):
-        """_get_descendents defaults stop_states to an empty set (covers line 935)."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        comp.add_node("b", lambda a: a + 1)
-        comp.add_node("c", lambda b: b + 1)
-        comp.compute_all()
-
-        a_key = to_nodekey("a")
-        # Called with no stop_states -> the None default is replaced by an empty set,
-        # so no state stops the traversal and every descendent is returned.
-        descendents = comp._get_descendents(a_key)
-        assert to_nodekey("b") in descendents
-        assert to_nodekey("c") in descendents
+class TestToDict:
+    """Tests for Computation.to_dict."""
 
     def test_to_dict_returns_node_values(self):
         """Computation.to_dict returns a mapping of node key to value (covers lines 1471-1472)."""

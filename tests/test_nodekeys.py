@@ -139,8 +139,8 @@ def test_nodekey_ancestors():
     assert result == {"foo/bar/baz", "foo/bar", "foo", ""}
 
 
-class TestNodeKeyCoverage:
-    """Additional tests for nodekey.py coverage."""
+class TestNodeKey:
+    """Tests for NodeKey construction, comparison and path helpers."""
 
     def test_quote_part_with_slash(self):
         """Test quote_part with a string containing slash."""
