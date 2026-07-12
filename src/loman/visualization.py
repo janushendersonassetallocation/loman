@@ -7,7 +7,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 import matplotlib as mpl
 import networkx as nx
@@ -16,14 +16,35 @@ import pandas as pd
 import pydotplus
 from matplotlib.colors import Colormap
 
-import loman
-
 from .consts import NodeAttributes, NodeTransformations, States
 from .graph_utils import contract_node
 from .nodekey import Name, NodeKey, is_pattern, match_pattern, to_nodekey
 
 if TYPE_CHECKING:
     from .computeengine import Computation
+
+
+@runtime_checkable
+class _ComputationLike(Protocol):
+    """Structural stand-in for :class:`~loman.computeengine.Computation`.
+
+    ``visualization`` is a lower layer than ``computeengine`` (which imports
+    :class:`GraphView`/:class:`NodeFormatter` from here), so importing the
+    top-level ``loman`` package — or ``computeengine`` — at module load would
+    create an import cycle. A nested computation stored as a node value is
+    instead detected structurally, by the attributes that identify a
+    Computation, without importing anything from the upper layer.
+    """
+
+    dag: Any
+
+    def add_node(self, *args: Any, **kwargs: Any) -> Any:
+        """Marker method present on any Computation."""
+        ...
+
+    def compute(self, *args: Any, **kwargs: Any) -> Any:
+        """Marker method present on any Computation."""
+        ...
 
 
 @dataclass
@@ -184,7 +205,7 @@ class ShapeByType(NodeFormatter):
                 return {"shape": "ellipse", "peripheries": 2}
             elif isinstance(value, dict):
                 return {"shape": "house", "peripheries": 2}
-            elif isinstance(value, loman.Computation):
+            elif isinstance(value, _ComputationLike):
                 return {"shape": "hexagon"}
             else:
                 return {"shape": "diamond"}
