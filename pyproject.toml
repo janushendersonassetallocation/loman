@@ -61,3 +61,8 @@ dill = "dill"
 
 [tool.bandit]
 skips = ["B301", "B403", "B404"]
+
+[tool.interrogate]
+# @overload stubs delegate their documentation to the concrete implementation,
+# so they should not count against docstring coverage.
+ignore-overloaded-functions = true

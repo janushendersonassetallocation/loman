@@ -54,6 +54,17 @@ class TestApply1:
         result = apply1(lambda x, y=0: x + y, [1, 2], y=10)
         assert result == [11, 12]
 
+    def test_apply1_with_generator(self):
+        """Test apply1 with a generator input."""
+
+        def double(x):
+            return x * 2
+
+        gen = (x for x in [1, 2, 3])
+        result = apply1(double, gen)
+        # Result should be a generator
+        assert list(result) == [2, 4, 6]
+
 
 class TestAsIterable:
     """Test as_iterable function."""
@@ -196,6 +207,54 @@ class TestAttributeView:
         # get_item should default to get_attribute
         assert new_view["foo"] == 1
 
+    def test_attribute_view_getstate_setstate_from_dict(self):
+        """Test AttributeView serialization methods."""
+        d = {"a": 1, "b": 2}
+        av = AttributeView.from_dict(d)
+
+        state = av.__getstate__()
+        assert "get_attribute_list" in state
+        assert "get_attribute" in state
+        assert "get_item" in state
+
+        # Create new AttributeView and restore state
+        new_av = AttributeView(lambda: [], lambda x: None)
+        new_av.__setstate__(state)
+        assert new_av.a == 1
+
+    def test_attribute_view_setstate_with_none_get_item_manual(self):
+        """Test AttributeView setstate when get_item is None."""
+        d = {"a": 1}
+        # Create AttributeView without using from_dict to have None get_item
+        av = AttributeView.__new__(AttributeView)
+        av.get_attribute_list = d.keys
+        av.get_attribute = d.get
+        av.get_item = None  # Explicitly set to None
+
+        state = av.__getstate__()
+        assert state["get_item"] is None
+
+        new_av = AttributeView(lambda: [], lambda x: None)
+        new_av.__setstate__(state)
+        # After setstate with get_item=None, get_item should default to get_attribute
+        assert new_av["a"] == 1
+
+    def test_attribute_view_from_dict_no_apply1(self):
+        """Test AttributeView.from_dict with use_apply1=False."""
+        d = {"a": 1, "b": 2}
+        av = AttributeView.from_dict(d, use_apply1=False)
+        assert av.a == 1
+        assert av.b == 2
+
+    def test_attribute_view_dir_from_dict(self):
+        """Test AttributeView __dir__ returns attribute list."""
+        d = {"a": 1, "b": 2}
+        av = AttributeView.from_dict(d)
+
+        attrs = dir(av)
+        assert "a" in attrs
+        assert "b" in attrs
+
 
 class TestValueEq:
     """Test value_eq function."""
@@ -317,63 +376,6 @@ class TestValueEq:
         b = np.array([1.0, 2.0, 3.0])
         assert not value_eq(a, b)
 
-
-# ==================== ADDITIONAL COVERAGE TESTS ====================
-
-
-class TestUtilCoverage:
-    """Additional tests for util.py coverage."""
-
-    def test_apply1_with_generator(self):
-        """Test apply1 with a generator input."""
-
-        def double(x):
-            return x * 2
-
-        gen = (x for x in [1, 2, 3])
-        result = apply1(double, gen)
-        # Result should be a generator
-        assert list(result) == [2, 4, 6]
-
-    def test_attribute_view_getstate_setstate(self):
-        """Test AttributeView serialization methods."""
-        d = {"a": 1, "b": 2}
-        av = AttributeView.from_dict(d)
-
-        state = av.__getstate__()
-        assert "get_attribute_list" in state
-        assert "get_attribute" in state
-        assert "get_item" in state
-
-        # Create new AttributeView and restore state
-        new_av = AttributeView(lambda: [], lambda x: None)
-        new_av.__setstate__(state)
-        assert new_av.a == 1
-
-    def test_attribute_view_setstate_with_none_get_item(self):
-        """Test AttributeView setstate when get_item is None."""
-        d = {"a": 1}
-        # Create AttributeView without using from_dict to have None get_item
-        av = AttributeView.__new__(AttributeView)
-        av.get_attribute_list = d.keys
-        av.get_attribute = d.get
-        av.get_item = None  # Explicitly set to None
-
-        state = av.__getstate__()
-        assert state["get_item"] is None
-
-        new_av = AttributeView(lambda: [], lambda x: None)
-        new_av.__setstate__(state)
-        # After setstate with get_item=None, get_item should default to get_attribute
-        assert new_av["a"] == 1
-
-    def test_attribute_view_from_dict_no_apply1(self):
-        """Test AttributeView.from_dict with use_apply1=False."""
-        d = {"a": 1, "b": 2}
-        av = AttributeView.from_dict(d, use_apply1=False)
-        assert av.a == 1
-        assert av.b == 2
-
     def test_value_eq_ndarray_exception(self):
         """Test value_eq when numpy comparison raises exception."""
         a = np.array([1, 2, 3])
@@ -404,17 +406,6 @@ class TestUtilCoverage:
         result = value_eq(a, b)
         assert result is True
 
-
-class TestValueEqDeadCode:
-    """Tests for dead code paths in value_eq."""
-
-    def test_value_eq_pandas_series(self):
-        """Test value_eq with pandas Series."""
-        s1 = pd.Series([1, 2, 3])
-        s2 = pd.Series([1, 2, 3])
-
-        assert value_eq(s1, s2) is True
-
     def test_value_eq_pandas_different(self):
         """Test value_eq with different pandas Series."""
         s1 = pd.Series([1, 2, 3])
@@ -428,23 +419,6 @@ class TestValueEqDeadCode:
         df2 = pd.DataFrame({"a": [1, 2]})
 
         assert value_eq(df1, df2) is True
-
-
-class TestAttributeViewDir:
-    """Tests for AttributeView __dir__."""
-
-    def test_attribute_view_dir(self):
-        """Test AttributeView __dir__ returns attribute list."""
-        d = {"a": 1, "b": 2}
-        av = AttributeView.from_dict(d)
-
-        attrs = dir(av)
-        assert "a" in attrs
-        assert "b" in attrs
-
-
-class TestValueEqException:
-    """Test value_eq with objects that raise on comparison."""
 
     def test_value_eq_raises_exception(self):
         """Test value_eq handles objects that raise on comparison."""
