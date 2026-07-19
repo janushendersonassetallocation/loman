@@ -3,6 +3,8 @@
 ## [unreleased]
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
+- Added utilities for repeated blocks and keyed fan-in/fan-out computations
+- Added a Marimo example of a large repeated instrument pipeline
 
 ## [0.5.3] (2025-06-20)
 

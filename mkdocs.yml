@@ -69,6 +69,7 @@ nav:
               - Node Decorator: user/features/creating/adding_nodes_using_decorators.md
               - Named Tuples: user/features/creating/automatically_expanding_named_tuples.md
               - Computation Factories: user/features/creating/creating_computation_factories.md
+              - Repeated Blocks and Fan-In/Fan-Out: user/features/creating/computation_utilities.md
               - Non-String Node Names: user/features/creating/non_string_node_names.md
               - Tagging Nodes: user/features/creating/tagging_nodes.md
           - Querying:
@@ -86,6 +87,7 @@ nav:
       - CDOs: notebooks/cdos.html
       - Interest Rate Swaps: notebooks/interest_rate_swaps.html
       - Portfolio: notebooks/portfolio.html
+      - Large Repeated Pipeline: notebooks/pipeline_example.html
       - Serialization: notebooks/serialization.html
   - Reports:
       - Overview: reports.md
