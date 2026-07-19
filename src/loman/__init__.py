@@ -19,6 +19,7 @@ from loman.exception import (
     ValidationError,
 )
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
+from loman.planning import ExecutionPlan, ValidationReport
 from loman.serialization import ComputationSerializer
 from loman.visualization import GraphView
 
@@ -31,6 +32,7 @@ __all__ = [
     "Computation",
     "ComputationFactory",  # Backward compatibility
     "ComputationSerializer",
+    "ExecutionPlan",
     "FittingError",
     "GraphView",
     "InvalidBlockTypeError",
@@ -44,6 +46,7 @@ __all__ = [
     "SerializationError",
     "States",
     "ValidationError",
+    "ValidationReport",
     "block",
     "calc_node",
     "computation_factory",
