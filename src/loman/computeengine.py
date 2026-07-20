@@ -1137,7 +1137,7 @@ class Computation:
         return node_keys_to_names(self._get_calc_node_keys(node_key))
 
     def compute(self, name: Name | Iterable[Name], raise_exceptions: bool = False) -> None:
-        """Compute a node and all necessary predecessors.
+        """Compute a node or block and all necessary predecessors.
 
         Following the computation, if successful, the target node, and all necessary ancestors that were not already
         UPTODATE will have been calculated and set to UPTODATE. Any node that did not need to be calculated will not
@@ -1148,20 +1148,26 @@ class Computation:
         will proceed as far as it can, until no more nodes that would be required to calculate the target are
         COMPUTABLE.
 
-        :param name: Name of the node to compute
+        A block name computes every node below that path. Multiple node and block
+        names may be supplied in a list or generator.
+
+        :param name: Name of the node or block to compute
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        calc_nodes: set[NodeKey] | list[NodeKey]
-        if isinstance(name, (types.GeneratorType, list)):
-            calc_nodes = set()
-            for name0 in name:
-                node_key = to_nodekey(name0)
-                for n in self._get_calc_node_keys(node_key):
-                    calc_nodes.add(n)
-        else:
-            node_key = to_nodekey(name)
-            calc_nodes = self._get_calc_node_keys(node_key)
+        calc_nodes: set[NodeKey] = set()
+        names = name if isinstance(name, (types.GeneratorType, list)) else [name]
+        for name0 in names:
+            node_key = to_nodekey(name0)
+            targets = (
+                [node_key]
+                if self.has_node(node_key)
+                else names_to_node_keys(self.get_tree_descendents(node_key, graph_nodes_only=True))
+            )
+            if not targets:
+                targets = [node_key]
+            for target in targets:
+                calc_nodes.update(self._get_calc_node_keys(target))
         self._compute_nodes(calc_nodes, raise_exceptions=raise_exceptions)
 
     def compute_all(self, raise_exceptions: bool = False) -> None:
