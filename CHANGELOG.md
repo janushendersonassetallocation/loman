@@ -1,6 +1,7 @@
 # Change Log
 
 ## [unreleased]
+- Allow `Computation.compute` to compute one or more blocks
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
