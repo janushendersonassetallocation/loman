@@ -1137,6 +1137,76 @@ def test_compute_multiple():
     assert comp.s.d != States.UPTODATE
 
 
+def test_compute_block():
+    """Computing a block runs its nodes but not nodes outside the block."""
+    comp = Computation()
+    comp.add_node("input", value=2)
+    comp.add_node("foo/a", lambda input: input + 1, kwds={"input": "input"})
+    comp.add_node("foo/b", lambda a: a * 2)
+    comp.add_node("outside", lambda input: input - 1)
+
+    comp.compute("foo")
+
+    assert comp.s[["foo/a", "foo/b"]] == [States.UPTODATE, States.UPTODATE]
+    assert comp.v["foo/b"] == 6
+    assert comp.s.outside == States.COMPUTABLE
+
+
+def test_compute_nested_block():
+    """Computing a block includes nodes in nested blocks."""
+    comp = Computation()
+    comp.add_node("foo/a", value=2)
+    comp.add_node("foo/bar/b", lambda a: a + 1, kwds={"a": "foo/a"})
+
+    comp.compute("foo")
+
+    assert comp.s["foo/bar/b"] == States.UPTODATE
+
+
+def test_compute_multiple_blocks():
+    """A list of block names computes each selected block."""
+    comp = Computation()
+    comp.add_node("foo/a", lambda: 1)
+    comp.add_node("bar/a", lambda: 2)
+    comp.add_node("baz/a", lambda: 3)
+
+    comp.compute(["foo", "bar"])
+
+    assert comp.s[["foo/a", "bar/a"]] == [States.UPTODATE, States.UPTODATE]
+    assert comp.s["baz/a"] == States.COMPUTABLE
+
+
+def test_compute_blocks_from_generator():
+    """A generator of block names remains supported."""
+    comp = Computation()
+    comp.add_node("foo/a", lambda: 1)
+    comp.add_node("bar/a", lambda: 2)
+
+    comp.compute(name for name in ["foo", "bar"])
+
+    assert comp.s[["foo/a", "bar/a"]] == [States.UPTODATE, States.UPTODATE]
+
+
+def test_compute_node_takes_precedence_over_block_path():
+    """An exact node target retains the existing single-node behavior."""
+    comp = Computation()
+    comp.add_node("foo", lambda: 1)
+    comp.add_node("foo/a", lambda: 2)
+
+    comp.compute("foo")
+
+    assert comp.s.foo == States.UPTODATE
+    assert comp.s["foo/a"] == States.COMPUTABLE
+
+
+def test_compute_unknown_target_retains_existing_error():
+    """An unknown target continues to raise NetworkXError."""
+    comp = Computation()
+
+    with pytest.raises(nx.NetworkXError):
+        comp.compute("unknown")
+
+
 def test_state_map_with_adding_existing_node():
     """Test state map with adding existing node."""
     comp = Computation()
