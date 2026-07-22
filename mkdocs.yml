@@ -87,6 +87,7 @@ nav:
       - Interest Rate Swaps: notebooks/interest_rate_swaps.html
       - Portfolio: notebooks/portfolio.html
       - Serialization: notebooks/serialization.html
+      - Validation and Planning: notebooks/validation_and_planning.html
   - Reports:
       - Overview: reports.md
       - Test Report: reports/html-report/report.html
