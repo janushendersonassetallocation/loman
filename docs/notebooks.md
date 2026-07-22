@@ -8,3 +8,4 @@ practice. Each notebook is exported as a self-contained HTML page.
 - [Portfolio](notebooks/portfolio.html)
 - [Large Repeated Pipeline](notebooks/pipeline_example.html)
 - [Serialization](notebooks/serialization.html)
+- [Validation and Planning](notebooks/validation_and_planning.html)
