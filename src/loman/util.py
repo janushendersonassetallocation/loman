@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 import types
-from collections.abc import Callable, Generator, Hashable, Iterable, Mapping
+from collections.abc import Callable, Generator, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
 
@@ -25,11 +25,56 @@ K = TypeVar("K", bound=Hashable)
 
 
 @dataclass(frozen=True)
-class RepeatedPipeline(Generic[K]):
-    """Nodes created by :func:`add_repeated_pipeline`."""
+class FanOut(Generic[K]):
+    """Wire one source node to a relative input in every repeated block."""
+
+    source: Name
+    target: Name
+    transform: Callable[[Any, K], Any] | None = None
+
+
+@dataclass(frozen=True)
+class FanIn(Generic[K, R]):
+    """Collect one relative output from every repeated block."""
+
+    source: Name
+    result: Name
+    combine: Callable[[Mapping[K, Any]], R] | None = None
+
+
+@dataclass(frozen=True)
+class BuiltRepeatedBlocks(Generic[K]):
+    """Node paths created by :meth:`RepeatedBlocks.add_to`."""
 
     blocks: dict[K, NodeKey]
-    result: NodeKey
+    results: dict[Name, NodeKey]
+
+
+@dataclass(frozen=True)
+class RepeatedBlocks(Generic[K]):
+    """Reusable definition for keyed copies of a computation block.
+
+    ``fan_out`` entries connect outer computation nodes to relative inputs in
+    every block. ``fan_in`` entries collect relative block outputs into outer
+    result nodes.
+    """
+
+    block: Computation
+    keys: Sequence[K]
+    base_path: Name
+    fan_out: Sequence[FanOut[K]] = ()
+    fan_in: Sequence[FanIn[K, Any]] = ()
+    keep_values: bool = False
+
+    def __post_init__(self) -> None:
+        """Freeze collection inputs as tuples for reusable definitions."""
+        object.__setattr__(self, "keys", tuple(self.keys))
+        object.__setattr__(self, "fan_out", tuple(self.fan_out))
+        object.__setattr__(self, "fan_in", tuple(self.fan_in))
+
+    def add_to(self, comp: Computation) -> BuiltRepeatedBlocks[K]:
+        """Add this repeated-block definition to a computation."""
+        return _add_repeated_blocks_definition(comp, self)
 
 
 def _apply_keyed_transform(value: Any, key: Hashable, transform: Callable[[Any, Hashable], Any]) -> Any:
@@ -225,83 +270,82 @@ def add_fan_in(
     return result_node_key
 
 
-def add_repeated_pipeline(
-    comp: Computation,
-    block: Computation,
-    keys: Iterable[K],
-    *,
-    base_path: Name,
-    source: Name,
-    block_input: Name,
-    block_output: Name,
-    result: Name,
-    transform: Callable[[Any, K], Any] | None = None,
-    combine: Callable[[Mapping[K, Any]], R] | None = None,
-    keep_values: bool = False,
-) -> RepeatedPipeline[K]:
-    """Create a keyed fan-out, repeated block, and fan-in pipeline.
-
-    Args:
-        comp: Computation to add the pipeline to.
-        block: Computation used as the repeated block template.
-        keys: Unique keys identifying block instances.
-        base_path: Parent path for all generated blocks.
-        source: Node fanned out to each block.
-        block_input: Input node path relative to each block.
-        block_output: Output node path relative to each block.
-        result: Name of the fan-in result node.
-        transform: Optional ``transform(value, key)`` for each block input.
-        combine: Optional ``combine(mapping)`` for block outputs.
-        keep_values: Whether to copy current values from the block template.
-
-    Returns:
-        The generated block paths and result node key.
-    """
+def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlocks[K]) -> BuiltRepeatedBlocks[K]:
+    """Validate and add a :class:`RepeatedBlocks` definition atomically."""
     from loman.consts import NodeAttributes
     from loman.nodekey import to_nodekey
 
-    blocks = _repeated_block_paths(keys, base_path)
-    _validate_repeated_block_nodes(comp, block, blocks)
-    block_input_node_key = to_nodekey(block_input)
-    block_output_node_key = to_nodekey(block_output)
-    if not block.has_node(block_input_node_key):
-        msg = f"Repeated pipeline block input does not exist: {block_input_node_key!r}"
+    if definition.block is comp:
+        msg = "Repeated block template must be a different computation"
         raise ValueError(msg)
-    if block.dag.nodes[block_input_node_key].get(NodeAttributes.FUNC) is not None:
-        msg = f"Repeated pipeline block input must be an input node: {block_input_node_key!r}"
-        raise ValueError(msg)
-    if not block.has_node(block_output_node_key):
-        msg = f"Repeated pipeline block output does not exist: {block_output_node_key!r}"
-        raise ValueError(msg)
-    result_node_key = to_nodekey(result)
-    if comp.has_node(result_node_key) or result_node_key in {
-        block_path.join(node_name) for block_path in blocks.values() for node_name in block.nodes()
-    }:
-        msg = f"Repeated pipeline result node already exists: {result_node_key!r}"
-        raise ValueError(msg)
-    source_node_key = to_nodekey(source)
-    if source_node_key == result_node_key:
-        msg = "Repeated pipeline source cannot also be the result node"
-        raise ValueError(msg)
-    targets = {key: path.join(block_input_node_key) for key, path in blocks.items()}
-    if transform is not None and source_node_key in targets.values():
-        msg = "A transformed fan-out target cannot also be the source node"
-        raise ValueError(msg)
+
+    blocks = _repeated_block_paths(definition.keys, definition.base_path)
+    _validate_repeated_block_nodes(comp, definition.block, blocks)
+    generated_nodes = {
+        block_path.join(node_name) for block_path in blocks.values() for node_name in definition.block.nodes()
+    }
+
+    fan_outs: list[tuple[FanOut[K], NodeKey, dict[K, NodeKey]]] = []
+    target_nodes: set[NodeKey] = set()
+    for fan_out in definition.fan_out:
+        target_node_key = to_nodekey(fan_out.target)
+        if not definition.block.has_node(target_node_key):
+            msg = f"Repeated block fan-out target does not exist: {target_node_key!r}"
+            raise ValueError(msg)
+        target_node = definition.block.dag.nodes[target_node_key]
+        if (
+            target_node.get(NodeAttributes.FUNC) is not None
+            or next(definition.block.dag.predecessors(target_node_key), None) is not None
+        ):
+            msg = f"Repeated block fan-out target must be an input node: {target_node_key!r}"
+            raise ValueError(msg)
+        targets = {key: path.join(target_node_key) for key, path in blocks.items()}
+        duplicate_targets = target_nodes.intersection(targets.values())
+        if duplicate_targets:
+            duplicate_target_names = sorted(str(node_key) for node_key in duplicate_targets)
+            msg = f"Repeated block fan-out targets must be unique: {duplicate_target_names!r}"
+            raise ValueError(msg)
+        target_nodes.update(targets.values())
+        fan_outs.append((fan_out, to_nodekey(fan_out.source), targets))
+
+    fan_ins: list[tuple[FanIn[K, Any], NodeKey, dict[K, NodeKey]]] = []
+    result_nodes: set[NodeKey] = set()
+    for fan_in in definition.fan_in:
+        source_node_key = to_nodekey(fan_in.source)
+        if not definition.block.has_node(source_node_key):
+            msg = f"Repeated block fan-in source does not exist: {source_node_key!r}"
+            raise ValueError(msg)
+        result_node_key = to_nodekey(fan_in.result)
+        if result_node_key in result_nodes:
+            msg = f"Repeated block fan-in result must be unique: {result_node_key!r}"
+            raise ValueError(msg)
+        if comp.has_node(result_node_key) or result_node_key in generated_nodes:
+            msg = f"Repeated block fan-in result node already exists: {result_node_key!r}"
+            raise ValueError(msg)
+        result_nodes.add(result_node_key)
+        sources = {key: path.join(source_node_key) for key, path in blocks.items()}
+        fan_ins.append((fan_in, result_node_key, sources))
+
     generated_edges = [
         (block_path.join(source_node), block_path.join(target_node))
         for block_path in blocks.values()
-        for source_node, target_node in block.dag.edges()
+        for source_node, target_node in definition.block.dag.edges()
     ]
-    generated_edges.extend((source_node_key, target) for target in targets.values())
-    generated_edges.extend((path.join(block_output_node_key), result_node_key) for path in blocks.values())
+    for _fan_out, source_node_key, targets in fan_outs:
+        generated_edges.extend((source_node_key, target) for target in targets.values())
+    for _fan_in, result_node_key, sources in fan_ins:
+        generated_edges.extend((source, result_node_key) for source in sources.values())
     _validate_acyclic_edges(comp, generated_edges)
 
     for block_path in blocks.values():
-        comp.add_block(block_path, block, keep_values=keep_values)
-    add_fan_out(comp, source, targets, transform=transform)
-    sources = {key: path.join(block_output_node_key) for key, path in blocks.items()}
-    result_node_key = add_fan_in(comp, result_node_key, sources, combine=combine)
-    return RepeatedPipeline(blocks, result_node_key)
+        comp.add_block(block_path, definition.block, keep_values=definition.keep_values)
+
+    results: dict[Name, NodeKey] = {}
+    for fan_in, result_node_key, sources in fan_ins:
+        results[fan_in.result] = add_fan_in(comp, result_node_key, sources, combine=fan_in.combine)
+    for fan_out, source_node_key, targets in fan_outs:
+        add_fan_out(comp, source_node_key, targets, transform=fan_out.transform)
+    return BuiltRepeatedBlocks(blocks, results)
 
 
 @overload

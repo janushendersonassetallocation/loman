@@ -5,7 +5,7 @@ same block for a collection of keys. The helpers add ordinary Loman nodes and
 dependencies: they do not read values or execute calculations while building
 the graph.
 
-## Building a repeated pipeline
+## Defining repeated blocks
 
 Suppose one input dataframe contains data for several instruments and the same
 calculation should run independently for each instrument:
@@ -32,18 +32,18 @@ def concat_values(values):
 comp = Computation()
 comp.add_node("positions")
 
-pipeline = util.add_repeated_pipeline(
-    comp,
-    price_block,
-    ["AAPL", "MSFT"],
+repeated = util.RepeatedBlocks(
+    block=price_block,
+    keys=("AAPL", "MSFT"),
     base_path="instruments",
-    source="positions",
-    block_input="data",
-    block_output="value",
-    result="portfolio_values",
-    transform=select_instrument,
-    combine=concat_values,
+    fan_out=(
+        util.FanOut("positions", "data", transform=select_instrument),
+    ),
+    fan_in=(
+        util.FanIn("value", "portfolio_values", combine=concat_values),
+    ),
 )
+built = repeated.add_to(comp)
 ```
 
 This creates two block paths, `instruments/AAPL` and `instruments/MSFT`.
@@ -65,10 +65,18 @@ For process executors, `transform` and `combine` must be pickleable, just like
 ordinary node functions. The generated adapter nodes use the computation's
 default executor.
 
-## Composing the helpers
+`built.blocks` maps each key to its generated block path, while
+`built.results` maps each declared result name to its generated result node.
 
-The pipeline helper combines three independent utilities. They can also be used
-separately for more complex graphs.
+`RepeatedBlocks` accepts multiple `FanOut` and `FanIn` definitions, so a block
+can consume several shared or keyed inputs and produce several aggregates. The
+frozen dataclass can also be reused to add the same graph structure to multiple
+computations.
+
+## Low-level helpers
+
+The dataclass builder composes three independent utilities. They can also be
+used directly for more dynamic graph construction.
 
 ### Repeated blocks
 

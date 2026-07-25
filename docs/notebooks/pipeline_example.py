@@ -1,4 +1,4 @@
-"""Example: Building a large computation with repeated pipelines."""
+"""Example: Building a large computation with repeated blocks."""
 
 # ruff: noqa: TRY003
 
@@ -24,7 +24,7 @@ app = marimo.App(width="full")
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Large Repeated Pipelines
+    # Large Repeated Blocks
 
     This notebook builds a portfolio computation with one reusable block per
     instrument. It demonstrates every computation utility in `loman.util`:
@@ -32,7 +32,7 @@ def _(mo):
     - `add_repeated_blocks` creates keyed copies of a calculation block.
     - `add_fan_out` slices shared market data and broadcasts shared settings.
     - `add_fan_in` concatenates instrument reports and calculates totals.
-    - `add_repeated_pipeline` builds a second stress pipeline in one call.
+    - `RepeatedBlocks`, `FanOut`, and `FanIn` define a reusable graph builder.
 
     The example uses 24 instruments and finishes with more than 220 ordinary
     Loman nodes. The utilities only build the graph: values are still evaluated
@@ -317,11 +317,11 @@ def _(States, blocks, comp, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 5. Add a second pipeline with one helper
+    ## 5. Add a second repeated-block definition
 
-    `add_repeated_pipeline` is the concise form for the common one-input,
-    one-output pattern. Here it creates another 24 blocks for a downside stress
-    scenario and combines their outputs into `stress_report`.
+    The dataclass API packages block, key, fan-out, and fan-in configuration in
+    one reusable definition. Here it creates another 24 blocks for a downside
+    stress scenario and combines their outputs into `stress_report`.
     """)
     return
 
@@ -360,28 +360,24 @@ def _(
     stress_market_data = market_data.assign(shock=market_data["sector"].map(sector_shocks))
     comp.add_node("stress_market_data", value=stress_market_data)
 
-    stress_pipeline = util.add_repeated_pipeline(
-        comp,
-        stress_block,
-        instrument_ids,
+    stress_definition = util.RepeatedBlocks(
+        block=stress_block,
+        keys=instrument_ids,
         base_path="stress/instruments",
-        source="stress_market_data",
-        block_input="data",
-        block_output="scenario",
-        result="stress_report",
-        transform=select_instrument,
-        combine=concat_instruments,
+        fan_out=(util.FanOut("stress_market_data", "data", transform=select_instrument),),
+        fan_in=(util.FanIn("scenario", "stress_report", combine=concat_instruments),),
     )
-    stress_pipeline
-    return (stress_pipeline,)
+    built_stress = stress_definition.add_to(comp)
+    built_stress
+    return (built_stress,)
 
 
 @app.cell
 def _(comp, graph_size, pd):
     expanded_graph_size = pd.DataFrame(
         {
-            "before stress pipeline": graph_size,
-            "after stress pipeline": pd.Series(
+            "before stress blocks": graph_size,
+            "after stress blocks": pd.Series(
                 {
                     "nodes": len(comp.nodes()),
                     "dependency_edges": comp.dag.number_of_edges(),
@@ -397,18 +393,18 @@ def _(comp, graph_size, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Even though the whole stress pipeline exists, we can request one scenario
+    Even though all stress blocks exist, we can request one scenario
     node. Only that block's required calculations become up to date.
     """)
     return
 
 
 @app.cell
-def _(States, comp, pd, stress_pipeline):
-    selected_stress_node = stress_pipeline.blocks["INST-007"] / "scenario"
+def _(States, built_stress, comp, pd):
+    selected_stress_node = built_stress.blocks["INST-007"] / "scenario"
     comp.compute(selected_stress_node)
     stress_block_states = pd.Series(
-        {key: comp.state(path / "scenario").name for key, path in stress_pipeline.blocks.items()},
+        {key: comp.state(path / "scenario").name for key, path in built_stress.blocks.items()},
         name="scenario state",
     )
     assert stress_block_states["INST-007"] == States.UPTODATE.name
@@ -419,7 +415,7 @@ def _(States, comp, pd, stress_pipeline):
 @app.cell
 def _(comp):
     # single computed row
-    comp.v["stress/instruments/INST-001/scenario"]
+    comp.v["stress/instruments/INST-007/scenario"]
     return
 
 

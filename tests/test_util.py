@@ -19,10 +19,12 @@ import pytest
 from loman import Computation, NodeKey, States
 from loman.util import (
     AttributeView,
+    FanIn,
+    FanOut,
+    RepeatedBlocks,
     add_fan_in,
     add_fan_out,
     add_repeated_blocks,
-    add_repeated_pipeline,
     apply1,
     apply_n,
     as_iterable,
@@ -214,91 +216,116 @@ class TestComputationUtilities:
         with pytest.raises(ValueError, match="already exists"):
             add_fan_in(comp, "result", {"a": "source"})
 
+    def test_repeated_blocks_adds_multiple_fan_outs_and_fan_ins(self):
+        """Build a reusable definition with several inputs and outputs."""
+        block = Computation()
+        block.add_node("data")
+        block.add_node("scale")
+        block.add_node("result", lambda data, scale: data * scale)
+        block.add_node("squared", lambda result: result**2)
+        comp = Computation()
+        comp.add_node("all_values", value={"a": 2, "b": 3})
+        comp.add_node("scale", value=10)
+
+        def select_value(values, key):
+            return values[key]
+
+        definition = RepeatedBlocks(
+            block=block,
+            keys=["a", "b"],
+            base_path="blocks",
+            fan_out=(
+                FanOut("all_values", "data", transform=select_value),
+                FanOut("scale", "scale"),
+            ),
+            fan_in=(
+                FanIn("result", "results"),
+                FanIn("squared", "total_squared", combine=lambda values: sum(values.values())),
+            ),
+        )
+
+        built = definition.add_to(comp)
+        comp.compute(["results", "total_squared"])
+
+        assert definition.keys == ("a", "b")
+        assert built.blocks == {"a": NodeKey(("blocks", "a")), "b": NodeKey(("blocks", "b"))}
+        assert built.results == {"results": NodeKey(("results",)), "total_squared": NodeKey(("total_squared",))}
+        assert comp.v.results == {"a": 20, "b": 30}
+        assert comp.v.total_squared == 1300
+
     @pytest.mark.parametrize(
-        ("block_input", "block_output", "message"),
+        ("fan_out", "fan_in", "message"),
         [
-            ("missing", "result", "block input does not exist"),
-            ("data", "missing", "block output does not exist"),
-            ("result", "data", "block input must be an input node"),
+            ((FanOut("source", "missing"),), (), "fan-out target does not exist"),
+            ((FanOut("source", "result"),), (), "fan-out target must be an input node"),
+            ((), (FanIn("missing", "combined"),), "fan-in source does not exist"),
         ],
     )
-    def test_add_repeated_pipeline_validates_ports_before_mutating(self, block_input, block_output, message):
-        """Validate block ports before adding any pipeline nodes."""
+    def test_repeated_blocks_validates_ports_before_mutating(self, fan_out, fan_in, message):
+        """Validate all relative ports before adding any nodes."""
         comp = Computation()
+        definition = RepeatedBlocks(
+            block=_double_block(),
+            keys=("a",),
+            base_path="blocks",
+            fan_out=fan_out,
+            fan_in=fan_in,
+        )
 
         with pytest.raises(ValueError, match=message):
-            add_repeated_pipeline(
-                comp,
-                _double_block(),
-                ["a"],
-                base_path="blocks",
-                source="source",
-                block_input=block_input,
-                block_output=block_output,
-                result="combined",
-            )
+            definition.add_to(comp)
 
         assert comp.nodes() == []
 
-    def test_add_repeated_pipeline_rejects_existing_result_before_mutating(self):
-        """Preserve an existing result node when pipeline validation fails."""
+    def test_repeated_blocks_rejects_duplicate_wiring_before_mutating(self):
+        """Reject duplicate targets and result nodes atomically."""
+        comp = Computation()
+        duplicate_targets = RepeatedBlocks(
+            _double_block(),
+            ("a",),
+            "blocks",
+            fan_out=(FanOut("one", "data"), FanOut("two", "data")),
+        )
+        with pytest.raises(ValueError, match="fan-out targets must be unique"):
+            duplicate_targets.add_to(comp)
+        assert comp.nodes() == []
+
+        duplicate_results = RepeatedBlocks(
+            _double_block(),
+            ("a",),
+            "blocks",
+            fan_in=(FanIn("result", "combined"), FanIn("result", "combined")),
+        )
+        with pytest.raises(ValueError, match="fan-in result must be unique"):
+            duplicate_results.add_to(comp)
+        assert comp.nodes() == []
+
+    def test_repeated_blocks_rejects_existing_result_before_mutating(self):
+        """Preserve an existing fan-in result when validation fails."""
         comp = Computation()
         comp.add_node("combined", value=10)
+        definition = RepeatedBlocks(
+            _double_block(),
+            ("a",),
+            "blocks",
+            fan_in=(FanIn("result", "combined"),),
+        )
 
         with pytest.raises(ValueError, match="result node already exists"):
-            add_repeated_pipeline(
-                comp,
-                _double_block(),
-                ["a"],
-                base_path="blocks",
-                source="source",
-                block_input="data",
-                block_output="result",
-                result="combined",
-            )
+            definition.add_to(comp)
 
         assert comp.nodes() == ["combined"]
         assert comp.v.combined == 10
 
-    def test_add_repeated_pipeline_rejects_transformed_self_link_before_mutating(self):
-        """Reject a transformed source that is also a generated block input."""
-        comp = Computation()
+    def test_repeated_blocks_rejects_destination_as_template(self):
+        """Reject expansion from a template that is being mutated."""
+        comp = _double_block()
+        definition = RepeatedBlocks(comp, ("a", "b"), "blocks")
 
-        with pytest.raises(ValueError, match="cannot also be the source"):
-            add_repeated_pipeline(
-                comp,
-                _double_block(),
-                ["a"],
-                base_path="blocks",
-                source="blocks/a/data",
-                block_input="data",
-                block_output="result",
-                result="combined",
-                transform=lambda value, key: value,
-            )
+        with pytest.raises(ValueError, match="template must be a different computation"):
+            definition.add_to(comp)
 
-        assert comp.nodes() == []
-
-    def test_add_repeated_pipeline_rejects_source_result_overlap_before_mutating(self):
-        """Reject a source/result overlap without adding a partial pipeline."""
-        comp = Computation()
-        block = Computation()
-        block.add_node("data")
-        block.add_node("result", lambda: 1)
-
-        with pytest.raises(ValueError, match="source cannot also be the result"):
-            add_repeated_pipeline(
-                comp,
-                block,
-                ["a"],
-                base_path="blocks",
-                source="combined",
-                block_input="data",
-                block_output="result",
-                result="combined",
-            )
-
-        assert comp.nodes() == []
+        assert comp.nodes() == ["data", "result"]
 
     def test_public_utility_type_hints_are_runtime_resolvable(self):
         """Support runtime introspection of public utility annotations."""
@@ -307,58 +334,33 @@ class TestComputationUtilities:
         assert get_type_hints(add_repeated_blocks)["return"] is not None
         assert get_type_hints(add_fan_out)["return"] is not None
         assert get_type_hints(add_fan_in)["return"] is not None
-        assert get_type_hints(add_repeated_pipeline)["return"] is not None
+        assert get_type_hints(RepeatedBlocks.add_to)["return"] is not None
 
-    def test_add_repeated_pipeline_rejects_block_output_source_before_mutating(self):
+    def test_repeated_blocks_rejects_cycles_before_mutating(self):
         """Reject using a generated output as the source for its own block."""
         comp = Computation()
+        definition = RepeatedBlocks(
+            _double_block(),
+            ("a",),
+            "blocks",
+            fan_out=(FanOut("blocks/a/result", "data"),),
+            fan_in=(FanIn("result", "combined"),),
+        )
 
         with pytest.raises(ValueError, match="would create a cycle"):
-            add_repeated_pipeline(
-                comp,
-                _double_block(),
-                ["a"],
-                base_path="blocks",
-                source="blocks/a/result",
-                block_input="data",
-                block_output="result",
-                result="combined",
-            )
+            definition.add_to(comp)
 
         assert comp.nodes() == []
 
-    def test_add_repeated_pipeline_composes_fan_out_blocks_and_fan_in(self):
-        """Build and recalculate a complete keyed repeated-block pipeline."""
+    def test_repeated_blocks_can_copy_template_values(self):
+        """Pass keep-values behavior through the declarative definition."""
+        block = _double_block()
+        block.insert("data", 4)
+        block.compute_all()
         comp = Computation()
-        comp.add_node("all_values")
-
-        def select_value(values, key):
-            return values[key]
-
-        pipeline = add_repeated_pipeline(
-            comp,
-            _double_block(),
-            ["a", "b"],
-            base_path="blocks",
-            source="all_values",
-            block_input="data",
-            block_output="result",
-            result="total",
-            transform=select_value,
-            combine=lambda values: sum(values.values()),
-        )
-
-        assert pipeline.blocks == {"a": NodeKey(("blocks", "a")), "b": NodeKey(("blocks", "b"))}
-        assert pipeline.result == NodeKey(("total",))
-        assert comp.state("total") == States.UNINITIALIZED
-
-        comp.insert("all_values", {"a": 2, "b": 3})
-        comp.compute("total")
-        assert comp.v[["blocks/a/result", "blocks/b/result", "total"]] == [4, 6, 10]
-
-        comp.insert("all_values", {"a": 5, "b": 7})
-        comp.compute("total")
-        assert comp.v[["blocks/a/result", "blocks/b/result", "total"]] == [10, 14, 24]
+        definition = RepeatedBlocks(block, ("a",), "blocks", keep_values=True)
+        definition.add_to(comp)
+        assert comp.v[["blocks/a/data", "blocks/a/result"]] == [4, 8]
 
 
 class TestApply1:
