@@ -79,6 +79,15 @@ class TestComputationUtilities:
 
         assert comp.nodes() == ["blocks/a/data"]
 
+    def test_add_repeated_blocks_rejects_destination_as_template(self):
+        """Reject expansion from a template that is being mutated."""
+        comp = _double_block()
+
+        with pytest.raises(ValueError, match="template must be a different computation"):
+            add_repeated_blocks(comp, comp, ["a", "b"], base_path="blocks")
+
+        assert comp.nodes() == ["data", "result"]
+
     def test_add_repeated_blocks_does_not_copy_values_by_default(self):
         """Treat a populated block as a calculation template by default."""
         block = _double_block()
@@ -204,6 +213,34 @@ class TestComputationUtilities:
         comp.compute("total")
 
         assert comp.v.total == 30
+
+    def test_add_fan_in_defines_a_forward_referenced_result(self):
+        """Define a result node that an existing node already refers to."""
+        comp = Computation()
+        comp.add_node("a", value=10)
+        comp.add_node("b", value=20)
+        comp.add_node("doubled", lambda total: 2 * total)
+        assert comp.state("total") == States.PLACEHOLDER
+
+        add_fan_in(comp, "total", {"a": "a", "b": "b"}, combine=lambda values: sum(values.values()))
+        comp.compute_all()
+
+        assert comp.v.total == 30
+        assert comp.v.doubled == 60
+
+    def test_repeated_blocks_define_forward_referenced_block_nodes(self):
+        """Define block nodes that an existing node already refers to."""
+        comp = Computation()
+        comp.add_node("source", value=3)
+        comp.add_node("checked", lambda x: x + 1, kwds={"x": "blocks/a/result"})
+        assert comp.state("blocks/a/result") == States.PLACEHOLDER
+
+        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", fan_out=(FanOut("source", "data"),))
+        definition.add_to(comp)
+        comp.compute_all()
+
+        assert comp.v["blocks/a/result"] == 6
+        assert comp.v.checked == 7
 
     def test_add_fan_in_validates_source_nodes(self):
         """Reject ambiguous fan-in dependencies and result cycles."""

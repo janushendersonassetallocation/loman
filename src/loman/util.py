@@ -106,10 +106,34 @@ def _repeated_block_paths(keys: Iterable[K], base_path: Name) -> dict[K, NodeKey
     return blocks
 
 
+def _validate_block_template(comp: Computation, block: Computation) -> None:
+    """Ensure a block template is not the computation being added to."""
+    if block is comp:
+        msg = "Repeated block template must be a different computation"
+        raise ValueError(msg)
+
+
+def _is_placeholder(comp: Computation, node_key: NodeKey) -> bool:
+    """Return whether a node exists only as an unfulfilled forward reference."""
+    from loman.consts import NodeAttributes, States
+
+    return comp.dag.nodes[node_key][NodeAttributes.STATE] == States.PLACEHOLDER
+
+
+def _is_defined(comp: Computation, node_key: NodeKey) -> bool:
+    """Return whether a node already has a definition or a value in a computation.
+
+    Placeholder nodes do not count as defined: they record that another node
+    refers to a name that has not been defined yet, so generated nodes are free
+    to supply that definition.
+    """
+    return comp.has_node(node_key) and not _is_placeholder(comp, node_key)
+
+
 def _validate_repeated_block_nodes(comp: Computation, block: Computation, blocks: Mapping[K, NodeKey]) -> None:
     """Ensure repeated blocks will not replace existing nodes."""
     generated_nodes = [block_path.join(node_name) for block_path in blocks.values() for node_name in block.nodes()]
-    collisions = [node_key for node_key in generated_nodes if comp.has_node(node_key)]
+    collisions = [node_key for node_key in generated_nodes if _is_defined(comp, node_key)]
     if collisions:
         msg = f"Repeated blocks would replace existing nodes: {collisions!r}"
         raise ValueError(msg)
@@ -151,8 +175,10 @@ def add_repeated_blocks(
         A mapping from each key to its generated block path.
 
     Raises:
-        ValueError: If ``keys`` contains a duplicate.
+        ValueError: If ``keys`` contains a duplicate, or ``block`` is the
+            computation being added to.
     """
+    _validate_block_template(comp, block)
     blocks = _repeated_block_paths(keys, base_path)
     _validate_repeated_block_nodes(comp, block, blocks)
     for block_path in blocks.values():
@@ -257,7 +283,7 @@ def add_fan_in(
     if result_node_key in source_node_keys:
         msg = "A fan-in result cannot also be a source node"
         raise ValueError(msg)
-    if comp.has_node(result_node_key):
+    if _is_defined(comp, result_node_key):
         msg = f"Fan-in result node already exists: {result_node_key!r}"
         raise ValueError(msg)
 
@@ -275,10 +301,7 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
     from loman.consts import NodeAttributes
     from loman.nodekey import to_nodekey
 
-    if definition.block is comp:
-        msg = "Repeated block template must be a different computation"
-        raise ValueError(msg)
-
+    _validate_block_template(comp, definition.block)
     blocks = _repeated_block_paths(definition.keys, definition.base_path)
     _validate_repeated_block_nodes(comp, definition.block, blocks)
     generated_nodes = {
@@ -319,7 +342,7 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
         if result_node_key in result_nodes:
             msg = f"Repeated block fan-in result must be unique: {result_node_key!r}"
             raise ValueError(msg)
-        if comp.has_node(result_node_key) or result_node_key in generated_nodes:
+        if _is_defined(comp, result_node_key) or result_node_key in generated_nodes:
             msg = f"Repeated block fan-in result node already exists: {result_node_key!r}"
             raise ValueError(msg)
         result_nodes.add(result_node_key)
