@@ -6,7 +6,16 @@ where nodes represent data or calculations, and edges represent dependencies.
 
 import loman.util as util
 import loman.visualization as viz
-from loman.computeengine import C, Computation, block, calc_node, computation_factory, input_node, node
+from loman.computeengine import (
+    C,
+    Computation,
+    block,
+    calc_node,
+    computation_factory,
+    input_node,
+    node,
+    repeated_blocks,
+)
 from loman.consts import NodeTransformations, States
 from loman.exception import (
     CannotInsertToPlaceholderNodeError,
@@ -21,6 +30,7 @@ from loman.exception import (
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.planning import ExecutionPlan, ValidationReport
 from loman.serialization import ComputationSerializer
+from loman.util import FanIn, FanOut
 from loman.visualization import GraphView
 
 # Backward compatibility alias
@@ -33,6 +43,8 @@ __all__ = [
     "ComputationFactory",  # Backward compatibility
     "ComputationSerializer",
     "ExecutionPlan",
+    "FanIn",
+    "FanOut",
     "FittingError",
     "GraphView",
     "InvalidBlockTypeError",
@@ -52,6 +64,7 @@ __all__ = [
     "computation_factory",
     "input_node",
     "node",
+    "repeated_blocks",
     "to_nodekey",
     "util",
     "viz",

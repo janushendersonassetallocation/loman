@@ -73,6 +73,66 @@ can consume several shared or keyed inputs and produce several aggregates. The
 frozen dataclass can also be reused to add the same graph structure to multiple
 computations.
 
+## Repeated blocks in a computation factory
+
+`repeated_blocks` declares the same structure inside a
+[`@ComputationFactory`](creating_computation_factories.md) class, alongside
+`input_node`, `calc_node` and `block`. The attribute name becomes the base path,
+so the class below generates `instruments/AAPL` and `instruments/MSFT`:
+
+```python
+from loman import ComputationFactory, FanIn, FanOut, calc_node, input_node, repeated_blocks
+
+
+@ComputationFactory
+class InstrumentBlock:
+    data = input_node()
+
+    @calc_node
+    def value(self, data):
+        return data.assign(value=data["quantity"] * data["price"])
+
+
+@ComputationFactory
+class Portfolio:
+    positions = input_node()
+
+    def select_instrument(self, positions, instrument_id):
+        return positions.loc[[instrument_id]]
+
+    instruments = repeated_blocks(
+        InstrumentBlock,
+        keys=("AAPL", "MSFT"),
+        fan_out=(FanOut("positions", "data", transform=select_instrument),),
+        fan_in=(FanIn("value", "portfolio_values", combine=concat_values),),
+    )
+
+    @calc_node
+    def total_value(self, portfolio_values):
+        return portfolio_values["value"].sum()
+
+
+comp = Portfolio()
+```
+
+The block may be a `Computation` or, as above, another computation factory,
+matching `block`. `keep_values` is also accepted, and defaults to `False`.
+
+`fan_out` sources, `fan_in` results and generated block nodes can be referred to
+from anywhere in the class, regardless of the order in which class members are
+declared: a node that is only referred to remains a placeholder until the member
+that defines it is added. A name that another member *defines*, however, cannot
+also be a fan-in result — declaring both `portfolio_values = input_node()` and a
+`FanIn(..., "portfolio_values")` is an error.
+
+Callbacks follow the same `self` convention as `calc_node`: `select_instrument`
+above is declared with `self` as its first parameter and is bound to the
+definition object, so it is called as `select_instrument(positions, key)` and can
+use other methods of the class. Callbacks that do not take `self` — module-level
+functions, lambdas, or `staticmethod`s — are used unchanged. Pass
+`ignore_self=False` to `@ComputationFactory` to disable binding for the whole
+class.
+
 ## Low-level helpers
 
 The dataclass builder composes three independent utilities. They can also be

@@ -7,7 +7,7 @@ import traceback
 import types
 import warnings
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Executor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -36,7 +36,7 @@ from .exception import (
 from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .planning import ExecutionPlan, ValidationReport, create_execution_plan, validate_graph
-from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
+from .util import AttributeView, FanIn, FanOut, RepeatedBlocks, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
 
 LOG = logging.getLogger("loman.computeengine")
@@ -143,6 +143,16 @@ class InputNode(Node):
 input_node = InputNode
 
 
+def _bind_self(f: Callable[..., Any] | None, obj: object, ignore_self: bool) -> Callable[..., Any] | None:
+    """Bind a callback to the definition object when its first parameter is 'self'."""
+    if f is None or not ignore_self:
+        return f
+    signature = get_signature(f)
+    if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
+        return types.MethodType(f, obj)
+    return f
+
+
 @dataclass
 class CalcNode(Node):
     """A node representing a calculation in the computation graph."""
@@ -185,6 +195,16 @@ def calc_node(f: F | None = None, **kwds: Any) -> F | Callable[[F], F]:
     return wrap(f)
 
 
+def _resolve_block(block: "Callable[[], Computation] | Computation") -> "Computation":
+    """Resolve a block definition, calling computation factories to build the block."""
+    if isinstance(block, Computation):
+        return block
+    if callable(block):
+        return block()
+    msg = f"Block {block} must be callable or Computation"
+    raise TypeError(msg)
+
+
 @dataclass
 class Block(Node):
     """A node representing a computational block or subgraph."""
@@ -201,17 +221,65 @@ class Block(Node):
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
         """Add this block node to the computation graph."""
-        if isinstance(self.block, Computation):
-            comp.add_block(name, self.block, *self.args, **self.kwds)
-        elif callable(self.block):
-            block0 = self.block()
-            comp.add_block(name, block0, *self.args, **self.kwds)
-        else:
-            msg = f"Block {self.block} must be callable or Computation"
-            raise TypeError(msg)
+        comp.add_block(name, _resolve_block(self.block), *self.args, **self.kwds)
 
 
 block = Block
+
+
+@dataclass
+class RepeatedBlocksNode(Node):
+    """A node representing one keyed copy of a computation block per key.
+
+    The attribute name used in a computation factory class becomes the base path
+    for the generated blocks, so ``instruments = repeated_blocks(...)`` with keys
+    ``('AAPL', 'MSFT')`` creates the blocks ``instruments/AAPL`` and
+    ``instruments/MSFT``. ``fan_out`` and ``fan_in`` wire outer nodes to relative
+    block inputs and outputs, exactly as for :class:`loman.util.RepeatedBlocks`.
+    """
+
+    block: "Callable[[], Computation] | Computation"
+    keys: tuple[Hashable, ...] = field(default_factory=tuple)
+    fan_out: tuple[FanOut[Any], ...] = field(default_factory=tuple)
+    fan_in: tuple[FanIn[Any, Any], ...] = field(default_factory=tuple)
+    keep_values: bool = False
+
+    def __init__(
+        self,
+        block: "Callable[[], Computation] | Computation",
+        keys: Iterable[Hashable],
+        *,
+        fan_out: Sequence[FanOut[Any]] = (),
+        fan_in: Sequence[FanIn[Any, Any]] = (),
+        keep_values: bool = False,
+    ) -> None:
+        """Initialize a repeated blocks node with a block template and its keys."""
+        self.block = block
+        self.keys = tuple(keys)
+        self.fan_out = tuple(fan_out)
+        self.fan_in = tuple(fan_in)
+        self.keep_values = keep_values
+
+    def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
+        """Add the repeated blocks and their fan-out and fan-in wiring."""
+        definition: RepeatedBlocks[Hashable] = RepeatedBlocks(
+            block=_resolve_block(self.block),
+            keys=self.keys,
+            base_path=name,
+            fan_out=[
+                FanOut(fan_out.source, fan_out.target, _bind_self(fan_out.transform, obj, ignore_self))
+                for fan_out in self.fan_out
+            ],
+            fan_in=[
+                FanIn(fan_in.source, fan_in.result, _bind_self(fan_in.combine, obj, ignore_self))
+                for fan_in in self.fan_in
+            ],
+            keep_values=self.keep_values,
+        )
+        definition.add_to(comp)
+
+
+repeated_blocks = RepeatedBlocksNode
 
 
 def populate_computation_from_class(comp: "Computation", cls: type, obj: object, ignore_self: bool = True) -> None:
