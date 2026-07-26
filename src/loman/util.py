@@ -34,12 +34,12 @@ class FanOut(Generic[K]):
 
 
 @dataclass(frozen=True)
-class FanIn(Generic[K, R]):
+class FanIn(Generic[K]):
     """Collect one relative output from every repeated block."""
 
     source: Name
     result: Name
-    combine: Callable[[Mapping[K, Any]], R] | None = None
+    combine: Callable[[Mapping[K, Any]], Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -57,13 +57,21 @@ class RepeatedBlocks(Generic[K]):
     ``fan_out`` entries connect outer computation nodes to relative inputs in
     every block. ``fan_in`` entries collect relative block outputs into outer
     result nodes.
+
+    ``keep_values`` defaults to ``False``, so only the structure of ``block`` is
+    copied. This differs from :meth:`Computation.add_block`, which copies values
+    by default: that call adds one specific block, which may be a sub-model that
+    has already been populated, whereas this one stamps out many copies of a
+    template. To give every copy the same value, broadcast it with a
+    :class:`FanOut` that has no ``transform``, which keeps one outer node as the
+    single place to set it.
     """
 
     block: Computation
     keys: Sequence[K]
     base_path: Name
     fan_out: Sequence[FanOut[K]] = ()
-    fan_in: Sequence[FanIn[K, Any]] = ()
+    fan_in: Sequence[FanIn[K]] = ()
     keep_values: bool = False
 
     def __post_init__(self) -> None:
@@ -162,7 +170,8 @@ def add_repeated_blocks(
 
     Each key becomes one path segment below ``base_path``. Block values are not
     copied by default, making the supplied block a reusable calculation
-    template.
+    template. This differs from :meth:`Computation.add_block`, which copies
+    values by default; see :class:`RepeatedBlocks` for why the defaults differ.
 
     Args:
         comp: Computation to add the blocks to.
@@ -170,6 +179,8 @@ def add_repeated_blocks(
         keys: Unique keys identifying the block instances.
         base_path: Parent path for all generated blocks.
         keep_values: Whether to copy current values from the template block.
+            Prefer a broadcast :func:`add_fan_out` over ``True`` when every copy
+            needs the same value.
 
     Returns:
         A mapping from each key to its generated block path.
@@ -251,7 +262,7 @@ def add_fan_in(
     result: Name,
     sources: Mapping[K, Name],
     *,
-    combine: Callable[[Mapping[K, Any]], R] | None = None,
+    combine: Callable[[Mapping[K, Any]], Any] | None = None,
 ) -> NodeKey:
     """Collect keyed source nodes into one result node.
 
@@ -331,7 +342,7 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
         target_nodes.update(targets.values())
         fan_outs.append((fan_out, to_nodekey(fan_out.source), targets))
 
-    fan_ins: list[tuple[FanIn[K, Any], NodeKey, dict[K, NodeKey]]] = []
+    fan_ins: list[tuple[FanIn[K], NodeKey, dict[K, NodeKey]]] = []
     result_nodes: set[NodeKey] = set()
     for fan_in in definition.fan_in:
         source_node_key = to_nodekey(fan_in.source)

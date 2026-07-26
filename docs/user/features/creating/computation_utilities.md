@@ -73,6 +73,39 @@ can consume several shared or keyed inputs and produce several aggregates. The
 frozen dataclass can also be reused to add the same graph structure to multiple
 computations.
 
+## Sharing a value across every block
+
+Blocks are copied structure-first: `keep_values` defaults to `False`, so the
+values currently held by the template are not carried into the generated copies.
+This is the opposite of `Computation.add_block`, which defaults to `True`. The
+defaults differ because the two calls do different jobs. `add_block` adds one
+specific block, often a sub-model that has already been populated or calibrated
+and would not compute without its values. The repeated-block utilities stamp out
+many copies of one template, where whatever the template happened to hold when it
+was last run is rarely what all of the copies should start from.
+
+When every copy does need the same value, broadcast it with a `FanOut` that has
+no `transform` rather than reaching for `keep_values=True`:
+
+```python
+comp.add_node("scale", value=100)
+
+util.RepeatedBlocks(
+    block=price_block,
+    keys=("AAPL", "MSFT"),
+    base_path="instruments",
+    fan_out=(
+        util.FanOut("positions", "data", transform=select_instrument),
+        util.FanOut("scale", "scale"),
+    ),
+).add_to(comp)
+```
+
+Every block now reads `scale` from one outer node, so changing it is a single
+`comp.insert("scale", 10)` rather than an insert into each generated copy. Use
+`keep_values=True` when the copies really should start from a snapshot of the
+template.
+
 ## Repeated blocks in a computation factory
 
 `repeated_blocks` declares the same structure inside a

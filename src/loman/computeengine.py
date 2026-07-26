@@ -241,7 +241,7 @@ class RepeatedBlocksNode(Node):
     block: "Callable[[], Computation] | Computation"
     keys: tuple[Hashable, ...] = field(default_factory=tuple)
     fan_out: tuple[FanOut[Any], ...] = field(default_factory=tuple)
-    fan_in: tuple[FanIn[Any, Any], ...] = field(default_factory=tuple)
+    fan_in: tuple[FanIn[Any], ...] = field(default_factory=tuple)
     keep_values: bool = False
 
     def __init__(
@@ -250,7 +250,7 @@ class RepeatedBlocksNode(Node):
         keys: Iterable[Hashable],
         *,
         fan_out: Sequence[FanOut[Any]] = (),
-        fan_in: Sequence[FanIn[Any, Any]] = (),
+        fan_in: Sequence[FanIn[Any]] = (),
         keep_values: bool = False,
     ) -> None:
         """Initialize a repeated blocks node with a block template and its keys."""
@@ -1986,11 +1986,25 @@ class Computation:
         base_path: Name,
         block: "Computation",
         *,
-        keep_values: bool | None = True,
+        keep_values: bool = True,
         links: dict[str, Name] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Add a computation block as a subgraph to this computation."""
+        """Add a computation block as a subgraph to this computation.
+
+        ``keep_values`` defaults to ``True``, so values already held by ``block``
+        are copied along with its structure: a block added this way is often a
+        sub-model that has already been populated or calibrated, and would not be
+        computable without them. The repeated-block utilities in
+        :mod:`loman.util` default to ``False`` instead, because they stamp out
+        many copies of one template. See :class:`loman.util.RepeatedBlocks`.
+
+        :param base_path: Parent path to add the block's nodes below
+        :param block: Computation to copy into this computation
+        :param keep_values: Whether to copy the block's current values
+        :param links: Mapping from the block's relative input names to outer nodes
+        :param metadata: Metadata to attach to the block path
+        """
         base_path_nk = to_nodekey(base_path)
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
