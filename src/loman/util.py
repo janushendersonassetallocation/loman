@@ -5,8 +5,8 @@ from __future__ import annotations
 import itertools
 import types
 from collections.abc import Callable, Generator, Hashable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, overload
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
 
 import numpy as np
 import pandas as pd
@@ -26,9 +26,14 @@ K = TypeVar("K", bound=Hashable)
 
 @dataclass(frozen=True)
 class FanOut(Generic[K]):
-    """Wire one source node to a relative input in every repeated block."""
+    """Wire one source node to a relative input in every repeated block.
 
-    source: Name
+    ``source`` normally names a single outer node feeding every block. Passing a
+    callable instead resolves a source node per key, as ``source(key)``, so each
+    block can read from a different outer node.
+    """
+
+    source: Name | Callable[[K], Name]
     target: Name
     transform: Callable[[Any, K], Any] | None = None
 
@@ -48,6 +53,7 @@ class BuiltRepeatedBlocks(Generic[K]):
 
     blocks: dict[K, NodeKey]
     results: dict[Name, NodeKey]
+    id_nodes: dict[K, NodeKey] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -57,6 +63,9 @@ class RepeatedBlocks(Generic[K]):
     ``fan_out`` entries connect outer computation nodes to relative inputs in
     every block. ``fan_in`` entries collect relative block outputs into outer
     result nodes.
+
+    ``id_node``, if given, names a node created inside every block holding that
+    block's own key, so block functions can depend on their key by name.
 
     ``keep_values`` defaults to ``False``, so only the structure of ``block`` is
     copied. This differs from :meth:`Computation.add_block`, which copies values
@@ -72,6 +81,7 @@ class RepeatedBlocks(Generic[K]):
     base_path: Name
     fan_out: Sequence[FanOut[K]] = ()
     fan_in: Sequence[FanIn[K]] = ()
+    id_node: Name | None = None
     keep_values: bool = False
 
     def __post_init__(self) -> None:
@@ -98,6 +108,33 @@ def _combine_keyed_values(
     if combine is None:
         return keyed_values
     return combine(keyed_values)
+
+
+def _to_node_name(name: Name, description: str) -> NodeKey:
+    """Convert a node name to a key, rejecting a callable given by mistake.
+
+    ``Name`` admits any hashable, so a callable would otherwise silently become a
+    node whose key is the function object itself. Only a fan-out source may be a
+    callable, where it resolves a different source node for each key.
+    """
+    from loman.nodekey import to_nodekey
+
+    if callable(name):
+        msg = f"{description} must be a node name, not a callable: {name!r}"
+        raise TypeError(msg)
+    return to_nodekey(name)
+
+
+def _resolve_fan_out_sources(source: Name | Callable[[K], Name], keys: Iterable[K]) -> dict[K, NodeKey]:
+    """Resolve a fan-out source to one source node per key.
+
+    A callable is applied to each key, so every target can read from a different
+    node. Any other value names one node broadcast to every key.
+    """
+    if not callable(source):
+        return dict.fromkeys(keys, _to_node_name(source, "Fan-out source"))
+    resolve = cast("Callable[[K], Name]", source)
+    return {key: _to_node_name(resolve(key), f"Fan-out source for key {key!r}") for key in keys}
 
 
 def _repeated_block_paths(keys: Iterable[K], base_path: Name) -> dict[K, NodeKey]:
@@ -199,20 +236,24 @@ def add_repeated_blocks(
 
 def add_fan_out(
     comp: Computation,
-    source: Name,
+    source: Name | Callable[[K], Name],
     targets: Mapping[K, Name],
     *,
     transform: Callable[[Any, K], Any] | None = None,
 ) -> dict[K, NodeKey]:
-    """Connect one source node to a keyed collection of target nodes.
+    """Connect one or more source nodes to a keyed collection of target nodes.
 
-    With no ``transform``, each target receives the source value unchanged. If
+    With no ``transform``, each target receives its source value unchanged. If
     supplied, ``transform(value, key)`` is evaluated independently for each
     target when the target is computed.
 
+    ``source`` normally names one node broadcast to every target. Passing a
+    callable instead resolves a source node per key, as ``source(key)``, so each
+    target can read from a different node.
+
     Args:
         comp: Computation to add the fan-out nodes to.
-        source: Source node to broadcast or transform.
+        source: Source node to broadcast, or a function of the key returning one.
         targets: Mapping from target keys to target node names.
         transform: Optional keyed transformation applied at computation time.
 
@@ -221,18 +262,18 @@ def add_fan_out(
 
     Raises:
         ValueError: If targets are repeated, replace calculation nodes, or a
-            transformed target is also the source node.
+            transformed target is also its own source.
+        TypeError: If a node name is a callable, or ``source`` resolves one.
     """
     from loman.computeengine import C
     from loman.consts import NodeAttributes
-    from loman.nodekey import to_nodekey
 
-    source_node_key = to_nodekey(source)
-    target_node_keys = {key: to_nodekey(target) for key, target in targets.items()}
+    source_node_keys = _resolve_fan_out_sources(source, targets)
+    target_node_keys = {key: _to_node_name(target, "Fan-out target") for key, target in targets.items()}
     if len(set(target_node_keys.values())) != len(target_node_keys):
         msg = "Fan-out targets must be unique"
         raise ValueError(msg)
-    if transform is not None and source_node_key in target_node_keys.values():
+    if transform is not None and any(source_node_keys[key] == target_node_keys[key] for key in target_node_keys):
         msg = "A transformed fan-out target cannot also be the source node"
         raise ValueError(msg)
     for target_node_key in target_node_keys.values():
@@ -242,16 +283,16 @@ def add_fan_out(
         ):
             msg = f"Fan-out target must be an input or placeholder node: {target_node_key!r}"
             raise ValueError(msg)
-    _validate_acyclic_edges(comp, ((source_node_key, target) for target in target_node_keys.values()))
+    _validate_acyclic_edges(comp, ((source_node_keys[key], target) for key, target in target_node_keys.items()))
 
     for key, target_node_key in target_node_keys.items():
         if transform is None:
-            comp.link(target_node_key, source_node_key)
+            comp.link(target_node_key, source_node_keys[key])
         else:
             comp.add_node(
                 target_node_key,
                 _apply_keyed_transform,
-                args=[source_node_key, C(key), C(transform)],
+                args=[source_node_keys[key], C(key), C(transform)],
                 inspect=False,
             )
     return target_node_keys
@@ -282,12 +323,12 @@ def add_fan_in(
     Raises:
         ValueError: If source nodes are repeated, the result already exists, or
             the result is also a source.
+        TypeError: If a node name is a callable.
     """
     from loman.computeengine import C
-    from loman.nodekey import to_nodekey
 
-    result_node_key = to_nodekey(result)
-    source_node_keys = [to_nodekey(source) for source in sources.values()]
+    result_node_key = _to_node_name(result, "Fan-in result")
+    source_node_keys = [_to_node_name(source, "Fan-in source") for source in sources.values()]
     if len(set(source_node_keys)) != len(source_node_keys):
         msg = "Fan-in source nodes must be unique"
         raise ValueError(msg)
@@ -307,10 +348,45 @@ def add_fan_in(
     return result_node_key
 
 
+def add_id_nodes(comp: Computation, blocks: Mapping[K, NodeKey], name: Name) -> dict[K, NodeKey]:
+    """Give each block a node holding its own key.
+
+    Block functions can then depend on their key by name, to look data up or to
+    branch on it, without the key being wired in from outside. Unlike a fan-out,
+    the generated nodes have no predecessors: each simply holds its key as a
+    value.
+
+    Args:
+        comp: Computation holding the blocks.
+        blocks: Mapping from each key to its block path.
+        name: Relative node name to create inside every block.
+
+    Returns:
+        A mapping from each key to its generated identifier node key.
+
+    Raises:
+        ValueError: If a generated node would replace a calculation node.
+        TypeError: If ``name`` is a callable.
+    """
+    from loman.consts import NodeAttributes
+
+    id_node_key = _to_node_name(name, "Identifier node name")
+    id_nodes = {key: block_path.join(id_node_key) for key, block_path in blocks.items()}
+    for node_key in id_nodes.values():
+        if comp.has_node(node_key) and (
+            comp.dag.nodes[node_key].get(NodeAttributes.FUNC) is not None
+            or next(comp.dag.predecessors(node_key), None) is not None
+        ):
+            msg = f"Identifier node must be an input or placeholder node: {node_key!r}"
+            raise ValueError(msg)
+    for key, node_key in id_nodes.items():
+        comp.add_node(node_key, value=key)
+    return id_nodes
+
+
 def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlocks[K]) -> BuiltRepeatedBlocks[K]:
     """Validate and add a :class:`RepeatedBlocks` definition atomically."""
     from loman.consts import NodeAttributes
-    from loman.nodekey import to_nodekey
 
     _validate_block_template(comp, definition.block)
     blocks = _repeated_block_paths(definition.keys, definition.base_path)
@@ -319,12 +395,29 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
         block_path.join(node_name) for block_path in blocks.values() for node_name in definition.block.nodes()
     }
 
-    fan_outs: list[tuple[FanOut[K], NodeKey, dict[K, NodeKey]]] = []
+    id_node_key = None if definition.id_node is None else _to_node_name(definition.id_node, "Repeated block id_node")
+    id_nodes: dict[K, NodeKey] = {}
+    if id_node_key is not None:
+        if definition.block.has_node(id_node_key):
+            id_template_node = definition.block.dag.nodes[id_node_key]
+            if (
+                id_template_node.get(NodeAttributes.FUNC) is not None
+                or next(definition.block.dag.predecessors(id_node_key), None) is not None
+            ):
+                msg = f"Repeated block id_node must be an input node: {id_node_key!r}"
+                raise ValueError(msg)
+        id_nodes = {key: path.join(id_node_key) for key, path in blocks.items()}
+        generated_nodes.update(id_nodes.values())
+
+    fan_outs: list[tuple[FanOut[K], dict[K, NodeKey], dict[K, NodeKey]]] = []
     target_nodes: set[NodeKey] = set()
     for fan_out in definition.fan_out:
-        target_node_key = to_nodekey(fan_out.target)
+        target_node_key = _to_node_name(fan_out.target, "Repeated block fan-out target")
         if not definition.block.has_node(target_node_key):
             msg = f"Repeated block fan-out target does not exist: {target_node_key!r}"
+            raise ValueError(msg)
+        if target_node_key == id_node_key:
+            msg = f"Repeated block fan-out target cannot also be the id_node: {target_node_key!r}"
             raise ValueError(msg)
         target_node = definition.block.dag.nodes[target_node_key]
         if (
@@ -340,16 +433,16 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
             msg = f"Repeated block fan-out targets must be unique: {duplicate_target_names!r}"
             raise ValueError(msg)
         target_nodes.update(targets.values())
-        fan_outs.append((fan_out, to_nodekey(fan_out.source), targets))
+        fan_outs.append((fan_out, _resolve_fan_out_sources(fan_out.source, blocks), targets))
 
     fan_ins: list[tuple[FanIn[K], NodeKey, dict[K, NodeKey]]] = []
     result_nodes: set[NodeKey] = set()
     for fan_in in definition.fan_in:
-        source_node_key = to_nodekey(fan_in.source)
+        source_node_key = _to_node_name(fan_in.source, "Repeated block fan-in source")
         if not definition.block.has_node(source_node_key):
             msg = f"Repeated block fan-in source does not exist: {source_node_key!r}"
             raise ValueError(msg)
-        result_node_key = to_nodekey(fan_in.result)
+        result_node_key = _to_node_name(fan_in.result, "Repeated block fan-in result")
         if result_node_key in result_nodes:
             msg = f"Repeated block fan-in result must be unique: {result_node_key!r}"
             raise ValueError(msg)
@@ -365,8 +458,8 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
         for block_path in blocks.values()
         for source_node, target_node in definition.block.dag.edges()
     ]
-    for _fan_out, source_node_key, targets in fan_outs:
-        generated_edges.extend((source_node_key, target) for target in targets.values())
+    for _fan_out, source_node_keys, targets in fan_outs:
+        generated_edges.extend((source_node_keys[key], target) for key, target in targets.items())
     for _fan_in, result_node_key, sources in fan_ins:
         generated_edges.extend((source, result_node_key) for source in sources.values())
     _validate_acyclic_edges(comp, generated_edges)
@@ -374,12 +467,15 @@ def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlock
     for block_path in blocks.values():
         comp.add_block(block_path, definition.block, keep_values=definition.keep_values)
 
+    if id_node_key is not None:
+        add_id_nodes(comp, blocks, id_node_key)
+
     results: dict[Name, NodeKey] = {}
     for fan_in, result_node_key, sources in fan_ins:
         results[fan_in.result] = add_fan_in(comp, result_node_key, sources, combine=fan_in.combine)
-    for fan_out, source_node_key, targets in fan_outs:
-        add_fan_out(comp, source_node_key, targets, transform=fan_out.transform)
-    return BuiltRepeatedBlocks(blocks, results)
+    for fan_out, source_node_keys, targets in fan_outs:
+        add_fan_out(comp, source_node_keys.__getitem__, targets, transform=fan_out.transform)
+    return BuiltRepeatedBlocks(blocks, results, id_nodes)
 
 
 @overload

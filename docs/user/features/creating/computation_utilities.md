@@ -73,6 +73,60 @@ can consume several shared or keyed inputs and produce several aggregates. The
 frozen dataclass can also be reused to add the same graph structure to multiple
 computations.
 
+## Reading a different node per key
+
+The example above slices one shared `positions` node. When each block should
+instead read from a *different node that already exists*, pass a callable as the
+`FanOut` source. It is applied to each key to resolve that block's source node:
+
+```python
+comp.add_node("data/AAPL", value=aapl_frame)
+comp.add_node("data/MSFT", value=msft_frame)
+
+util.RepeatedBlocks(
+    block=price_block,
+    keys=("AAPL", "MSFT"),
+    base_path="instruments",
+    fan_out=(util.FanOut(lambda key: f"data/{key}", "data"),),
+).add_to(comp)
+```
+
+`instruments/AAPL/data` now depends only on `data/AAPL`, so inserting a new value
+for one instrument invalidates only that block. A `transform` can be combined
+with a per-key source, in which case it receives whatever that key resolved to.
+
+Because a callable source is meaningful, a callable passed anywhere a plain node
+name is expected — a fan-out target, a fan-in source or result — raises
+`TypeError` rather than silently creating a node keyed by the function object.
+
+## Giving each block its own key
+
+`id_node` names a node created inside every block that holds that block's key, so
+block functions can depend on their own key by name:
+
+```python
+block = Computation()
+block.add_node("label")
+block.add_node("data")
+block.add_node("summary", lambda label, data: f"{label}: {data.sum()}")
+
+built = util.RepeatedBlocks(
+    block=block,
+    keys=("AAPL", "MSFT"),
+    base_path="instruments",
+    fan_out=(util.FanOut("positions", "data", transform=select_instrument),),
+    id_node="label",
+).add_to(comp)
+```
+
+`instruments/AAPL/label` holds `"AAPL"`. These nodes have no predecessors — each
+simply holds its key as a value — and `built.id_nodes` maps each key to its
+generated identifier node. The template does not have to declare the node; if it
+does, it must be an input node, and it cannot also be a fan-out target.
+
+This is the natural way to let a block look data up by its own key, or branch on
+it, without threading the key in from outside.
+
 ## Sharing a value across every block
 
 Blocks are copied structure-first: `keep_values` defaults to `False`, so the
@@ -149,7 +203,26 @@ comp = Portfolio()
 ```
 
 The block may be a `Computation` or, as above, another computation factory,
-matching `block`. `keep_values` is also accepted, and defaults to `False`.
+matching `block`. `id_node` and `keep_values` are accepted too, so a class can
+declare per-key identifier nodes and per-key sources exactly as the dataclass
+does:
+
+```python
+@ComputationFactory
+class Book:
+    prefix = "data"
+
+    def price_source(self, label):
+        return f"{self.prefix}/{label}"
+
+    commodities = repeated_blocks(
+        Commodity,
+        keys=("CL", "GC"),
+        fan_out=(FanOut(price_source, "price_series"),),
+        fan_in=(FanIn("nav", "all_navs"),),
+        id_node="label",
+    )
+```
 
 `fan_out` sources, `fan_in` results and generated block nodes can be referred to
 from anywhere in the class, regardless of the order in which class members are
@@ -159,16 +232,17 @@ also be a fan-in result — declaring both `portfolio_values = input_node()` and
 `FanIn(..., "portfolio_values")` is an error.
 
 Callbacks follow the same `self` convention as `calc_node`: `select_instrument`
-above is declared with `self` as its first parameter and is bound to the
-definition object, so it is called as `select_instrument(positions, key)` and can
-use other methods of the class. Callbacks that do not take `self` — module-level
-functions, lambdas, or `staticmethod`s — are used unchanged. Pass
+and `price_source` above are declared with `self` as their first parameter and are
+bound to the definition object, so they are called as
+`select_instrument(positions, key)` and `price_source(key)` and can use other
+methods and attributes of the class. Callbacks that do not take `self` —
+module-level functions, lambdas, or `staticmethod`s — are used unchanged. Pass
 `ignore_self=False` to `@ComputationFactory` to disable binding for the whole
 class.
 
 ## Low-level helpers
 
-The dataclass builder composes three independent utilities. They can also be
+The dataclass builder composes four independent utilities. They can also be
 used directly for more dynamic graph construction.
 
 ### Repeated blocks
@@ -201,7 +275,25 @@ util.add_fan_out(
 ```
 
 With no `transform`, the source value is broadcast unchanged. With a transform,
-each target is calculated as `transform(source_value, key)`.
+each target is calculated as `transform(source_value, key)`. Passing a callable
+as `source` resolves a source node per key instead of broadcasting one:
+
+```python
+util.add_fan_out(
+    comp,
+    source=lambda key: f"data/{key}",
+    targets={key: path / "data" for key, path in blocks.items()},
+)
+```
+
+### Identifier nodes
+
+```python
+util.add_id_nodes(comp, blocks, "label")
+```
+
+Adds one node per block holding that block's key, and returns a mapping from each
+key to the generated node.
 
 ### Fan-in
 

@@ -1838,6 +1838,64 @@ def test_computation_factory_repeated_blocks_without_ignore_self():
     assert comp.v.total == 7
 
 
+def test_computation_factory_repeated_blocks_with_per_key_source_and_id_node():
+    """Test repeated blocks reading a different node per key, with identifier nodes."""
+
+    @ComputationFactory
+    class InstrumentBlock:
+        label = input_node()
+        price = input_node()
+
+        @calc_node
+        def tagged(self, label, price):
+            return f"{label}:{price}"
+
+    @ComputationFactory
+    class OuterComputation:
+        prefix = "data"
+
+        def price_source(self, label):
+            return f"{self.prefix}/{label}"
+
+        instruments = repeated_blocks(
+            InstrumentBlock,
+            keys=("AAPL", "MSFT"),
+            fan_out=(FanOut(price_source, "price"),),
+            fan_in=(FanIn("tagged", "tags"),),
+            id_node="label",
+        )
+
+    comp = OuterComputation()
+    comp.add_node("data/AAPL", value=190)
+    comp.add_node("data/MSFT", value=430)
+    comp.compute("tags")
+
+    assert comp.v.tags == {"AAPL": "AAPL:190", "MSFT": "MSFT:430"}
+    assert comp.v["instruments/AAPL/label"] == "AAPL"
+    assert comp.i["instruments/AAPL/price"] == ["data/AAPL"]
+    assert comp.i["instruments/MSFT/price"] == ["data/MSFT"]
+
+
+def test_computation_factory_repeated_blocks_keeps_a_plain_string_source():
+    """Test a non-callable source is left alone by the self-binding step."""
+
+    @ComputationFactory
+    class OuterComputation:
+        shared = input_node(value=5)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a",),
+            fan_out=(FanOut("shared", "data"), FanOut("shared", "scale")),
+            fan_in=(FanIn("value", "total"),),
+        )
+
+    comp = OuterComputation()
+    comp.compute("total")
+
+    assert comp.v.total == {"a": 25}
+
+
 def test_computation_factory_repeated_blocks_from_computation_keeping_values():
     """Test repeated blocks accept a computation template and can copy its values."""
     template = Computation()

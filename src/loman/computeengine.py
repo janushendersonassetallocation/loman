@@ -143,9 +143,13 @@ class InputNode(Node):
 input_node = InputNode
 
 
-def _bind_self(f: Callable[..., Any] | None, obj: object, ignore_self: bool) -> Callable[..., Any] | None:
-    """Bind a callback to the definition object when its first parameter is 'self'."""
-    if f is None or not ignore_self:
+def _bind_self(f: Any, obj: object, ignore_self: bool) -> Any:
+    """Bind a callback to the definition object when its first parameter is 'self'.
+
+    Anything that is not callable, including ``None`` and a plain node name, is
+    returned unchanged.
+    """
+    if not callable(f) or not ignore_self:
         return f
     signature = get_signature(f)
     if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
@@ -242,6 +246,7 @@ class RepeatedBlocksNode(Node):
     keys: tuple[Hashable, ...] = field(default_factory=tuple)
     fan_out: tuple[FanOut[Any], ...] = field(default_factory=tuple)
     fan_in: tuple[FanIn[Any], ...] = field(default_factory=tuple)
+    id_node: Name | None = None
     keep_values: bool = False
 
     def __init__(
@@ -251,6 +256,7 @@ class RepeatedBlocksNode(Node):
         *,
         fan_out: Sequence[FanOut[Any]] = (),
         fan_in: Sequence[FanIn[Any]] = (),
+        id_node: Name | None = None,
         keep_values: bool = False,
     ) -> None:
         """Initialize a repeated blocks node with a block template and its keys."""
@@ -258,6 +264,7 @@ class RepeatedBlocksNode(Node):
         self.keys = tuple(keys)
         self.fan_out = tuple(fan_out)
         self.fan_in = tuple(fan_in)
+        self.id_node = id_node
         self.keep_values = keep_values
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
@@ -267,13 +274,18 @@ class RepeatedBlocksNode(Node):
             keys=self.keys,
             base_path=name,
             fan_out=[
-                FanOut(fan_out.source, fan_out.target, _bind_self(fan_out.transform, obj, ignore_self))
+                FanOut(
+                    _bind_self(fan_out.source, obj, ignore_self),
+                    fan_out.target,
+                    _bind_self(fan_out.transform, obj, ignore_self),
+                )
                 for fan_out in self.fan_out
             ],
             fan_in=[
                 FanIn(fan_in.source, fan_in.result, _bind_self(fan_in.combine, obj, ignore_self))
                 for fan_in in self.fan_in
             ],
+            id_node=self.id_node,
             keep_values=self.keep_values,
         )
         definition.add_to(comp)
