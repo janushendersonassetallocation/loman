@@ -32,7 +32,7 @@ def _(mo):
     - `add_repeated_blocks` creates keyed copies of a calculation block.
     - `add_fan_out` slices shared market data and broadcasts shared settings.
     - `add_fan_in` concatenates instrument reports and calculates totals.
-    - `RepeatedBlocks`, `FanOut`, and `FanIn` define a reusable graph builder.
+    - `RepeatedBlocks` composes features such as `FanOut` and `FanIn` into a reusable graph builder.
 
     The example uses 24 instruments and finishes with more than 220 ordinary
     Loman nodes. The utilities only build the graph: values are still evaluated
@@ -364,8 +364,10 @@ def _(
         block=stress_block,
         keys=instrument_ids,
         base_path="stress/instruments",
-        fan_out=(util.FanOut("stress_market_data", "data", transform=select_instrument),),
-        fan_in=(util.FanIn("scenario", "stress_report", combine=concat_instruments),),
+        features=[
+            util.FanOut("stress_market_data", "data", transform=select_instrument),
+            util.FanIn("scenario", "stress_report", combine=concat_instruments),
+        ],
     )
     built_stress = stress_definition.add_to(comp)
     built_stress

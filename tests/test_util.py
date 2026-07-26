@@ -21,6 +21,9 @@ from loman.util import (
     AttributeView,
     FanIn,
     FanOut,
+    IdNode,
+    InputValue,
+    PlannedNode,
     RepeatedBlocks,
     add_fan_in,
     add_fan_out,
@@ -236,7 +239,7 @@ class TestComputationUtilities:
         comp.add_node("checked", lambda x: x + 1, kwds={"x": "blocks/a/result"})
         assert comp.state("blocks/a/result") == States.PLACEHOLDER
 
-        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", fan_out=(FanOut("source", "data"),))
+        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", features=[FanOut("source", "data")])
         definition.add_to(comp)
         comp.compute_all()
 
@@ -314,7 +317,7 @@ class TestComputationUtilities:
         with pytest.raises(ValueError, match="already exists"):
             add_fan_in(comp, "result", {"a": "source"})
 
-    def test_repeated_blocks_adds_multiple_fan_outs_and_fan_ins(self):
+    def test_repeated_blocks_compose_several_features(self):
         """Build a reusable definition with several inputs and outputs."""
         block = Computation()
         block.add_node("data")
@@ -332,14 +335,12 @@ class TestComputationUtilities:
             block=block,
             keys=["a", "b"],
             base_path="blocks",
-            fan_out=(
+            features=[
                 FanOut("all_values", "data", transform=select_value),
                 FanOut("scale", "scale"),
-            ),
-            fan_in=(
                 FanIn("result", "results"),
                 FanIn("squared", "total_squared", combine=lambda values: sum(values.values())),
-            ),
+            ],
         )
 
         built = definition.add_to(comp)
@@ -347,69 +348,158 @@ class TestComputationUtilities:
 
         assert definition.keys == ("a", "b")
         assert built.blocks == {"a": NodeKey(("blocks", "a")), "b": NodeKey(("blocks", "b"))}
-        assert built.results == {"results": NodeKey(("results",)), "total_squared": NodeKey(("total_squared",))}
+        assert built.named == {"results": NodeKey(("results",)), "total_squared": NodeKey(("total_squared",))}
         assert comp.v.results == {"a": 20, "b": 30}
         assert comp.v.total_squared == 1300
 
+    def test_repeated_blocks_report_every_planned_node(self):
+        """Report all generated nodes in the order the features declared them."""
+        comp = Computation()
+        comp.add_node("source", value=2)
+
+        built = RepeatedBlocks(
+            _double_block(),
+            ("a", "b"),
+            "blocks",
+            features=[IdNode("label"), FanOut("source", "data"), FanIn("result", "results")],
+        ).add_to(comp)
+
+        assert built.nodes == (
+            NodeKey(("blocks", "a", "label")),
+            NodeKey(("blocks", "b", "label")),
+            NodeKey(("blocks", "a", "data")),
+            NodeKey(("blocks", "b", "data")),
+            NodeKey(("results",)),
+        )
+
+    def test_fan_out_transform_becomes_the_node_function(self):
+        """Call the transform directly rather than through a wrapper."""
+        comp = Computation()
+        comp.add_node("source", value={"a": 1})
+
+        def select_value(values, key):
+            return values[key]
+
+        RepeatedBlocks(
+            _double_block(), ("a",), "blocks", features=[FanOut("source", "data", transform=select_value)]
+        ).add_to(comp)
+
+        assert comp.dag.nodes[NodeKey(("blocks", "a", "data"))]["func"] is select_value
+        comp.compute_all()
+        assert comp.v["blocks/a/result"] == 2
+
+    def test_input_value_shares_one_node_across_blocks(self):
+        """Create one outer node for a constant and link it into every block."""
+        comp = Computation()
+
+        built = RepeatedBlocks(_double_block(), ("a", "b"), "blocks", features=[InputValue("data", 7)]).add_to(comp)
+
+        assert built.named == {"data": NodeKey(("blocks", "data"))}
+        comp.compute_all()
+        assert comp.v[["blocks/a/result", "blocks/b/result"]] == [14, 14]
+        comp.insert("blocks/data", 10)
+        comp.compute_all()
+        assert comp.v[["blocks/a/result", "blocks/b/result"]] == [20, 20]
+
+    def test_id_node_holds_each_key(self):
+        """Give every block a predecessor-free node holding its own key."""
+        block = Computation()
+        block.add_node("label")
+        block.add_node("data")
+        block.add_node("result", lambda label, data: f"{label}={data}")
+        comp = Computation()
+        comp.add_node("data/a", value=1)
+        comp.add_node("data/b", value=2)
+
+        RepeatedBlocks(
+            block,
+            ("a", "b"),
+            "blocks",
+            features=[IdNode("label"), FanOut(lambda key: f"data/{key}", "data"), FanIn("result", "results")],
+        ).add_to(comp)
+        comp.compute("results")
+
+        assert comp.v.results == {"a": "a=1", "b": "b=2"}
+        assert comp.i["blocks/a/label"] == []
+        assert comp.i["blocks/a/data"] == ["data/a"]
+        assert comp.i["blocks/b/data"] == ["data/b"]
+
+    def test_id_node_may_be_absent_from_the_template(self):
+        """Create the identifier node even when the template does not declare it."""
+        comp = Computation()
+
+        RepeatedBlocks(_double_block(), ("a",), "blocks", features=[IdNode("label")]).add_to(comp)
+
+        assert comp.v["blocks/a/label"] == "a"
+
+    def test_a_feature_may_build_on_an_earlier_feature(self):
+        """Let a fan-in collect a node another feature planned."""
+        comp = Computation()
+        comp.add_node("source", value=3)
+
+        class Doubled:
+            """Test feature adding a node derived from a block node."""
+
+            def plan(self, ctx):
+                """Plan one derived node per block."""
+                source = ctx.require_block_node("result", "Doubled source")
+                for block_path in ctx.blocks.values():
+                    yield PlannedNode.calc(
+                        block_path.join("doubled"), lambda value: value * 2, (block_path.join(source),)
+                    )
+
+        RepeatedBlocks(
+            _double_block(),
+            ("a",),
+            "blocks",
+            features=[FanOut("source", "data"), Doubled(), FanIn("doubled", "totals")],
+        ).add_to(comp)
+        comp.compute("totals")
+
+        assert comp.v.totals == {"a": 12}
+
+    def test_repeated_blocks_reject_a_fan_in_before_its_source_exists(self):
+        """Reject a feature that reads a node no earlier feature planned."""
+        comp = Computation()
+
+        with pytest.raises(ValueError, match="Fan-in source does not exist in the block"):
+            RepeatedBlocks(_double_block(), ("a",), "blocks", features=[FanIn("doubled", "totals")]).add_to(comp)
+
+        assert comp.nodes() == []
+
     @pytest.mark.parametrize(
-        ("fan_out", "fan_in", "message"),
+        ("features", "error", "message"),
         [
-            ((FanOut("source", "missing"),), (), "fan-out target does not exist"),
-            ((FanOut("source", "result"),), (), "fan-out target must be an input node"),
-            ((), (FanIn("missing", "combined"),), "fan-in source does not exist"),
+            ([FanOut("source", "missing")], ValueError, "Fan-out target does not exist in the block"),
+            ([FanOut("source", "result")], ValueError, "Fan-out target must be an input node"),
+            ([FanIn("missing", "combined")], ValueError, "Fan-in source does not exist in the block"),
+            ([IdNode("result")], ValueError, "Identifier node must be an input node"),
+            ([InputValue("result", 1)], ValueError, "Input value must be an input node"),
+            ([FanOut("source", lambda key: key)], TypeError, "Fan-out target must be a node name"),
+            ([FanIn(lambda key: key, "results")], TypeError, "Fan-in source must be a node name"),
+            ([FanIn("result", lambda key: key)], TypeError, "Fan-in result must be a node name"),
+            ([IdNode(lambda key: key)], TypeError, "Identifier node must be a node name"),
+            ([FanOut("a", "data"), FanOut("b", "data")], ValueError, "would write the same node twice"),
+            ([IdNode("data"), FanOut("source", "data")], ValueError, "would write the same node twice"),
         ],
     )
-    def test_repeated_blocks_validates_ports_before_mutating(self, fan_out, fan_in, message):
-        """Validate all relative ports before adding any nodes."""
+    def test_repeated_blocks_validate_features_before_mutating(self, features, error, message):
+        """Validate every feature's plan before adding any nodes."""
         comp = Computation()
-        definition = RepeatedBlocks(
-            block=_double_block(),
-            keys=("a",),
-            base_path="blocks",
-            fan_out=fan_out,
-            fan_in=fan_in,
-        )
+        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", features=features)
 
-        with pytest.raises(ValueError, match=message):
+        with pytest.raises(error, match=message):
             definition.add_to(comp)
 
-        assert comp.nodes() == []
-
-    def test_repeated_blocks_rejects_duplicate_wiring_before_mutating(self):
-        """Reject duplicate targets and result nodes atomically."""
-        comp = Computation()
-        duplicate_targets = RepeatedBlocks(
-            _double_block(),
-            ("a",),
-            "blocks",
-            fan_out=(FanOut("one", "data"), FanOut("two", "data")),
-        )
-        with pytest.raises(ValueError, match="fan-out targets must be unique"):
-            duplicate_targets.add_to(comp)
-        assert comp.nodes() == []
-
-        duplicate_results = RepeatedBlocks(
-            _double_block(),
-            ("a",),
-            "blocks",
-            fan_in=(FanIn("result", "combined"), FanIn("result", "combined")),
-        )
-        with pytest.raises(ValueError, match="fan-in result must be unique"):
-            duplicate_results.add_to(comp)
         assert comp.nodes() == []
 
     def test_repeated_blocks_rejects_existing_result_before_mutating(self):
         """Preserve an existing fan-in result when validation fails."""
         comp = Computation()
         comp.add_node("combined", value=10)
-        definition = RepeatedBlocks(
-            _double_block(),
-            ("a",),
-            "blocks",
-            fan_in=(FanIn("result", "combined"),),
-        )
+        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", features=[FanIn("result", "combined")])
 
-        with pytest.raises(ValueError, match="result node already exists"):
+        with pytest.raises(ValueError, match="feature node already exists"):
             definition.add_to(comp)
 
         assert comp.nodes() == ["combined"]
@@ -434,98 +524,17 @@ class TestComputationUtilities:
         assert get_type_hints(add_fan_in)["return"] is not None
         assert get_type_hints(RepeatedBlocks.add_to)["return"] is not None
 
-    def test_repeated_blocks_rejects_cycles_before_mutating(self):
-        """Reject using a generated output as the source for its own block."""
-        comp = Computation()
-        definition = RepeatedBlocks(
-            _double_block(),
-            ("a",),
-            "blocks",
-            fan_out=(FanOut("blocks/a/result", "data"),),
-            fan_in=(FanIn("result", "combined"),),
-        )
-
-        with pytest.raises(ValueError, match="would create a cycle"):
-            definition.add_to(comp)
-
-        assert comp.nodes() == []
-
-    def test_repeated_blocks_wire_a_source_per_key_and_an_id_node(self):
-        """Give each block its own source node and a node holding its key."""
-        block = Computation()
-        block.add_node("label")
-        block.add_node("data")
-        block.add_node("result", lambda label, data: f"{label}={data}")
-        comp = Computation()
-        comp.add_node("data/a", value=1)
-        comp.add_node("data/b", value=2)
-
-        built = RepeatedBlocks(
-            block,
-            ("a", "b"),
-            "blocks",
-            fan_out=(FanOut(lambda key: f"data/{key}", "data"),),
-            fan_in=(FanIn("result", "results"),),
-            id_node="label",
-        ).add_to(comp)
-        comp.compute("results")
-
-        assert built.id_nodes == {"a": NodeKey(("blocks", "a", "label")), "b": NodeKey(("blocks", "b", "label"))}
-        assert comp.v.results == {"a": "a=1", "b": "b=2"}
-        assert comp.i["blocks/a/data"] == ["data/a"]
-        assert comp.i["blocks/b/data"] == ["data/b"]
-
-    def test_repeated_blocks_id_node_may_be_absent_from_the_template(self):
-        """Create the identifier node even when the template does not declare it."""
-        comp = Computation()
-
-        built = RepeatedBlocks(_double_block(), ("a",), "blocks", id_node="label").add_to(comp)
-
-        assert built.id_nodes == {"a": NodeKey(("blocks", "a", "label"))}
-        assert comp.v["blocks/a/label"] == "a"
-
-    def test_repeated_blocks_report_no_id_nodes_by_default(self):
-        """Leave blocks without identifier nodes unless one is requested."""
-        comp = Computation()
-
-        built = RepeatedBlocks(_double_block(), ("a",), "blocks").add_to(comp)
-
-        assert built.id_nodes == {}
-
     @pytest.mark.parametrize(
-        ("definition_kwds", "error", "message"),
+        "features",
         [
-            ({"id_node": "result"}, ValueError, "id_node must be an input node"),
-            ({"id_node": lambda key: key}, TypeError, "id_node must be a node name, not a callable"),
-            (
-                {"id_node": "data", "fan_out": (FanOut("source", "data"),)},
-                ValueError,
-                "fan-out target cannot also be the id_node",
-            ),
-            ({"fan_out": (FanOut("source", lambda key: key),)}, TypeError, "fan-out target must be a node name"),
-            ({"fan_in": (FanIn(lambda key: key, "results"),)}, TypeError, "fan-in source must be a node name"),
-            ({"fan_in": (FanIn("result", lambda key: key),)}, TypeError, "fan-in result must be a node name"),
+            [FanOut("blocks/a/result", "data"), FanIn("result", "combined")],
+            [FanOut(lambda key: f"blocks/{key}/result", "data")],
         ],
     )
-    def test_repeated_blocks_validate_wiring_before_mutating(self, definition_kwds, error, message):
-        """Reject bad wiring without adding any nodes."""
+    def test_repeated_blocks_reject_cycles_before_mutating(self, features):
+        """Reject using a generated output as the source for its own block."""
         comp = Computation()
-        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", **definition_kwds)
-
-        with pytest.raises(error, match=message):
-            definition.add_to(comp)
-
-        assert comp.nodes() == []
-
-    def test_repeated_blocks_reject_a_per_key_source_that_would_cycle(self):
-        """Reject a resolved per-key source that depends on its own block."""
-        comp = Computation()
-        definition = RepeatedBlocks(
-            _double_block(),
-            ("a",),
-            "blocks",
-            fan_out=(FanOut(lambda key: f"blocks/{key}/result", "data"),),
-        )
+        definition = RepeatedBlocks(_double_block(), ("a",), "blocks", features=features)
 
         with pytest.raises(ValueError, match="would create a cycle"):
             definition.add_to(comp)

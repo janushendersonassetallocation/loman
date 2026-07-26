@@ -30,13 +30,15 @@ from loman.exception import (
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.planning import ExecutionPlan, ValidationReport
 from loman.serialization import ComputationSerializer
-from loman.util import FanIn, FanOut
+from loman.util import BlockContext, BlockFeature, FanIn, FanOut, IdNode, InputValue, PlannedNode
 from loman.visualization import GraphView
 
 # Backward compatibility alias
 ComputationFactory = computation_factory
 
 __all__ = [
+    "BlockContext",
+    "BlockFeature",
     "C",
     "CannotInsertToPlaceholderNodeError",
     "Computation",
@@ -47,6 +49,8 @@ __all__ = [
     "FanOut",
     "FittingError",
     "GraphView",
+    "IdNode",
+    "InputValue",
     "InvalidBlockTypeError",
     "LoopDetectedError",
     "MapError",
@@ -55,6 +59,7 @@ __all__ = [
     "NodeKey",
     "NodeTransformations",
     "NonExistentNodeError",
+    "PlannedNode",
     "SerializationError",
     "States",
     "ValidationError",

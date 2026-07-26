@@ -6,7 +6,7 @@ import itertools
 import types
 from collections.abc import Callable, Generator, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast, overload
 
 import numpy as np
 import pandas as pd
@@ -24,80 +24,263 @@ R = TypeVar("R")
 K = TypeVar("K", bound=Hashable)
 
 
+_NO_VALUE = object()
+
+
+@dataclass(frozen=True)
+class PlannedNode:
+    """One node a feature intends to create, described rather than created.
+
+    Features return these instead of changing the computation, so the builder can
+    check every node and edge of a definition before any of it is applied. A node
+    with no ``func`` is an input node holding ``value``; otherwise ``func`` is
+    called with ``args``, where each argument is either a :class:`NodeKey` to
+    depend on or a :class:`ConstantValue` to pass through unchanged.
+    """
+
+    node_key: NodeKey
+    func: Callable[..., Any] | None = None
+    args: tuple[Any, ...] = ()
+    value: Any = _NO_VALUE
+    label: Name | None = None
+
+    @classmethod
+    def input_node(cls, node_key: NodeKey, value: Any, label: Name | None = None) -> PlannedNode:
+        """Plan an input node holding a fixed value."""
+        return cls(node_key, value=value, label=label)
+
+    @classmethod
+    def link(cls, node_key: NodeKey, source: NodeKey, label: Name | None = None) -> PlannedNode:
+        """Plan a node that takes its value from another node unchanged."""
+        from loman.computeengine import identity_function
+
+        return cls(node_key, identity_function, (source,), label=label)
+
+    @classmethod
+    def calc(
+        cls, node_key: NodeKey, func: Callable[..., Any], args: Sequence[Any], label: Name | None = None
+    ) -> PlannedNode:
+        """Plan a calculation node."""
+        return cls(node_key, func, tuple(args), label=label)
+
+    @property
+    def predecessors(self) -> tuple[NodeKey, ...]:
+        """Return the nodes this planned node would depend on."""
+        from loman.computeengine import ConstantValue
+
+        return tuple(arg for arg in self.args if not isinstance(arg, ConstantValue))
+
+    def apply_to(self, comp: Computation) -> NodeKey:
+        """Create this node in a computation."""
+        if self.func is None:
+            comp.add_node(self.node_key, value=self.value)
+        else:
+            comp.add_node(self.node_key, self.func, args=list(self.args), inspect=False)
+        return self.node_key
+
+
+@dataclass(frozen=True)
+class BlockContext(Generic[K]):
+    """What a feature is given when it plans its nodes.
+
+    ``blocks`` maps each key to the path of its generated block. ``block`` is the
+    template, so a feature can check that a relative name it was given really is a
+    node, or an input node, of the block being repeated.
+    """
+
+    comp: Computation
+    block: Computation
+    base_path: NodeKey
+    blocks: Mapping[K, NodeKey]
+    definition_object: object = None
+    ignore_self: bool = False
+    planned: set[NodeKey] = field(default_factory=set)
+
+    def require_block_node(self, name: Name, description: str) -> NodeKey:
+        """Resolve a relative name that must be a node inside every block.
+
+        The name may come from the template, or from a node an earlier feature
+        already planned, so one feature can build on another's output. Features
+        are planned in the order they are declared.
+        """
+        node_key = _to_node_name(name, description)
+        if not self.block.has_node(node_key) and not all(
+            block_path.join(node_key) in self.planned for block_path in self.blocks.values()
+        ):
+            msg = f"{description} does not exist in the block: {node_key!r}"
+            raise ValueError(msg)
+        return node_key
+
+    def require_block_input(self, name: Name, description: str) -> NodeKey:
+        """Resolve a relative name that must be an input node of the template."""
+        from loman.consts import NodeAttributes
+
+        node_key = self.require_block_node(name, description)
+        node = self.block.dag.nodes[node_key]
+        if node.get(NodeAttributes.FUNC) is not None or next(self.block.dag.predecessors(node_key), None) is not None:
+            msg = f"{description} must be an input node: {node_key!r}"
+            raise ValueError(msg)
+        return node_key
+
+    def bind(self, func: Any) -> Any:
+        """Bind a callback to the class a computation factory was defined from.
+
+        Returns anything that is not callable unchanged, so a plain node name
+        passes through.
+        """
+        from loman.computeengine import _bind_self
+
+        return _bind_self(func, self.definition_object, self.ignore_self)
+
+
+class BlockFeature(Protocol):
+    """One wiring pattern applied to every copy of a repeated block.
+
+    A feature never changes the computation itself. It describes the nodes it
+    wants, and the builder validates every feature's plan together before
+    applying any of it, so a definition that fails leaves the graph untouched.
+    Implement this protocol to add a wiring pattern of your own.
+    """
+
+    def plan(self, ctx: BlockContext[Any]) -> Iterable[PlannedNode]:
+        """Describe the nodes to create, without changing anything."""
+        ...
+
+
 @dataclass(frozen=True)
 class FanOut(Generic[K]):
     """Wire one source node to a relative input in every repeated block.
 
     ``source`` normally names a single outer node feeding every block. Passing a
     callable instead resolves a source node per key, as ``source(key)``, so each
-    block can read from a different outer node.
+    block can read from a different outer node. With a ``transform``, each target
+    is calculated as ``transform(value, key)``.
     """
 
     source: Name | Callable[[K], Name]
     target: Name
     transform: Callable[[Any, K], Any] | None = None
 
+    def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
+        """Plan one target node per key, linked or transformed from its source."""
+        from loman.computeengine import C
+
+        target = ctx.require_block_input(self.target, "Fan-out target")
+        sources = _resolve_fan_out_sources(ctx.bind(self.source), ctx.blocks)
+        transform = ctx.bind(self.transform)
+        for key, block_path in ctx.blocks.items():
+            node_key = block_path.join(target)
+            if transform is None:
+                yield PlannedNode.link(node_key, sources[key])
+            else:
+                yield PlannedNode.calc(node_key, transform, (sources[key], C(key)))
+
 
 @dataclass(frozen=True)
 class FanIn(Generic[K]):
-    """Collect one relative output from every repeated block."""
+    """Collect one relative output from every repeated block into a result node."""
 
     source: Name
     result: Name
     combine: Callable[[Mapping[K, Any]], Any] | None = None
 
+    def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
+        """Plan one result node gathering the same relative node from every block."""
+        from loman.computeengine import C
+
+        source = ctx.require_block_node(self.source, "Fan-in source")
+        result = _to_node_name(self.result, "Fan-in result")
+        sources = [block_path.join(source) for block_path in ctx.blocks.values()]
+        yield PlannedNode.calc(
+            result,
+            _combine_keyed_values,
+            (C(tuple(ctx.blocks)), C(ctx.bind(self.combine)), *sources),
+            label=self.result,
+        )
+
+
+@dataclass(frozen=True)
+class IdNode:
+    """Give every block a node holding its own key.
+
+    Block functions can then depend on their key by name, to look data up or to
+    branch on it, without the key being wired in from outside.
+    """
+
+    name: Name
+
+    def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
+        """Plan one value node per key, holding that key."""
+        name = _to_node_name(self.name, "Identifier node")
+        if ctx.block.has_node(name):
+            ctx.require_block_input(name, "Identifier node")
+        for key, block_path in ctx.blocks.items():
+            yield PlannedNode.input_node(block_path.join(name), key)
+
+
+@dataclass(frozen=True)
+class InputValue:
+    """Give every block the same constant value for one relative input."""
+
+    name: Name
+    value: Any
+
+    def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
+        """Plan one shared outer node, linked into every block."""
+        name = ctx.require_block_input(self.name, "Input value")
+        shared = ctx.base_path.join(name)
+        yield PlannedNode.input_node(shared, self.value, label=self.name)
+        for block_path in ctx.blocks.values():
+            yield PlannedNode.link(block_path.join(name), shared)
+
 
 @dataclass(frozen=True)
 class BuiltRepeatedBlocks(Generic[K]):
-    """Node paths created by :meth:`RepeatedBlocks.add_to`."""
+    """Node paths created by :meth:`RepeatedBlocks.add_to`.
+
+    ``named`` collects the nodes that features chose to label, so a fan-in result
+    can be looked up by the name it was declared with.
+    """
 
     blocks: dict[K, NodeKey]
-    results: dict[Name, NodeKey]
-    id_nodes: dict[K, NodeKey] = field(default_factory=dict)
+    nodes: tuple[NodeKey, ...]
+    named: dict[Name, NodeKey]
 
 
 @dataclass(frozen=True)
 class RepeatedBlocks(Generic[K]):
     """Reusable definition for keyed copies of a computation block.
 
-    ``fan_out`` entries connect outer computation nodes to relative inputs in
-    every block. ``fan_in`` entries collect relative block outputs into outer
-    result nodes.
-
-    ``id_node``, if given, names a node created inside every block holding that
-    block's own key, so block functions can depend on their key by name.
+    ``features`` describe how data flows in and out of every copy: see
+    :class:`FanOut`, :class:`FanIn`, :class:`IdNode` and :class:`InputValue`, or
+    write your own against :class:`BlockFeature`. Features are applied in the
+    order given, and every feature's plan is validated before any of it is
+    applied.
 
     ``keep_values`` defaults to ``False``, so only the structure of ``block`` is
     copied. This differs from :meth:`Computation.add_block`, which copies values
     by default: that call adds one specific block, which may be a sub-model that
     has already been populated, whereas this one stamps out many copies of a
-    template. To give every copy the same value, broadcast it with a
-    :class:`FanOut` that has no ``transform``, which keeps one outer node as the
-    single place to set it.
+    template. To give every copy the same value, use an :class:`InputValue`, or a
+    :class:`FanOut` with no ``transform`` to broadcast an existing node.
     """
 
     block: Computation
     keys: Sequence[K]
     base_path: Name
-    fan_out: Sequence[FanOut[K]] = ()
-    fan_in: Sequence[FanIn[K]] = ()
-    id_node: Name | None = None
+    features: Sequence[BlockFeature] = ()
     keep_values: bool = False
 
     def __post_init__(self) -> None:
         """Freeze collection inputs as tuples for reusable definitions."""
         object.__setattr__(self, "keys", tuple(self.keys))
-        object.__setattr__(self, "fan_out", tuple(self.fan_out))
-        object.__setattr__(self, "fan_in", tuple(self.fan_in))
+        object.__setattr__(self, "features", tuple(self.features))
 
-    def add_to(self, comp: Computation) -> BuiltRepeatedBlocks[K]:
+    def add_to(
+        self, comp: Computation, definition_object: object = None, ignore_self: bool = False
+    ) -> BuiltRepeatedBlocks[K]:
         """Add this repeated-block definition to a computation."""
-        return _add_repeated_blocks_definition(comp, self)
-
-
-def _apply_keyed_transform(value: Any, key: Hashable, transform: Callable[[Any, Hashable], Any]) -> Any:
-    """Apply a fan-out transform to a value and target key."""
-    return transform(value, key)
+        return _add_repeated_blocks_definition(comp, self, definition_object, ignore_self)
 
 
 def _combine_keyed_values(
@@ -289,12 +472,7 @@ def add_fan_out(
         if transform is None:
             comp.link(target_node_key, source_node_keys[key])
         else:
-            comp.add_node(
-                target_node_key,
-                _apply_keyed_transform,
-                args=[source_node_keys[key], C(key), C(transform)],
-                inspect=False,
-            )
+            comp.add_node(target_node_key, transform, args=[source_node_keys[key], C(key)], inspect=False)
     return target_node_keys
 
 
@@ -384,98 +562,61 @@ def add_id_nodes(comp: Computation, blocks: Mapping[K, NodeKey], name: Name) -> 
     return id_nodes
 
 
-def _add_repeated_blocks_definition(comp: Computation, definition: RepeatedBlocks[K]) -> BuiltRepeatedBlocks[K]:
-    """Validate and add a :class:`RepeatedBlocks` definition atomically."""
-    from loman.consts import NodeAttributes
+def _validate_planned_nodes(comp: Computation, planned: Sequence[PlannedNode], block_nodes: set[NodeKey]) -> None:
+    """Ensure a set of planned nodes can all be created without conflict."""
+    seen: set[NodeKey] = set()
+    for planned_node in planned:
+        node_key = planned_node.node_key
+        if node_key in seen:
+            msg = f"Repeated block features would write the same node twice: {node_key!r}"
+            raise ValueError(msg)
+        seen.add(node_key)
+        if node_key not in block_nodes and _is_defined(comp, node_key):
+            msg = f"Repeated block feature node already exists: {node_key!r}"
+            raise ValueError(msg)
 
+
+def _add_repeated_blocks_definition(
+    comp: Computation,
+    definition: RepeatedBlocks[K],
+    definition_object: object = None,
+    ignore_self: bool = False,
+) -> BuiltRepeatedBlocks[K]:
+    """Validate and add a :class:`RepeatedBlocks` definition atomically."""
     _validate_block_template(comp, definition.block)
-    blocks = _repeated_block_paths(definition.keys, definition.base_path)
+    base_path = _to_node_name(definition.base_path, "Repeated block base_path")
+    blocks = _repeated_block_paths(definition.keys, base_path)
     _validate_repeated_block_nodes(comp, definition.block, blocks)
-    generated_nodes = {
+    block_nodes = {
         block_path.join(node_name) for block_path in blocks.values() for node_name in definition.block.nodes()
     }
 
-    id_node_key = None if definition.id_node is None else _to_node_name(definition.id_node, "Repeated block id_node")
-    id_nodes: dict[K, NodeKey] = {}
-    if id_node_key is not None:
-        if definition.block.has_node(id_node_key):
-            id_template_node = definition.block.dag.nodes[id_node_key]
-            if (
-                id_template_node.get(NodeAttributes.FUNC) is not None
-                or next(definition.block.dag.predecessors(id_node_key), None) is not None
-            ):
-                msg = f"Repeated block id_node must be an input node: {id_node_key!r}"
-                raise ValueError(msg)
-        id_nodes = {key: path.join(id_node_key) for key, path in blocks.items()}
-        generated_nodes.update(id_nodes.values())
-
-    fan_outs: list[tuple[FanOut[K], dict[K, NodeKey], dict[K, NodeKey]]] = []
-    target_nodes: set[NodeKey] = set()
-    for fan_out in definition.fan_out:
-        target_node_key = _to_node_name(fan_out.target, "Repeated block fan-out target")
-        if not definition.block.has_node(target_node_key):
-            msg = f"Repeated block fan-out target does not exist: {target_node_key!r}"
-            raise ValueError(msg)
-        if target_node_key == id_node_key:
-            msg = f"Repeated block fan-out target cannot also be the id_node: {target_node_key!r}"
-            raise ValueError(msg)
-        target_node = definition.block.dag.nodes[target_node_key]
-        if (
-            target_node.get(NodeAttributes.FUNC) is not None
-            or next(definition.block.dag.predecessors(target_node_key), None) is not None
-        ):
-            msg = f"Repeated block fan-out target must be an input node: {target_node_key!r}"
-            raise ValueError(msg)
-        targets = {key: path.join(target_node_key) for key, path in blocks.items()}
-        duplicate_targets = target_nodes.intersection(targets.values())
-        if duplicate_targets:
-            duplicate_target_names = sorted(str(node_key) for node_key in duplicate_targets)
-            msg = f"Repeated block fan-out targets must be unique: {duplicate_target_names!r}"
-            raise ValueError(msg)
-        target_nodes.update(targets.values())
-        fan_outs.append((fan_out, _resolve_fan_out_sources(fan_out.source, blocks), targets))
-
-    fan_ins: list[tuple[FanIn[K], NodeKey, dict[K, NodeKey]]] = []
-    result_nodes: set[NodeKey] = set()
-    for fan_in in definition.fan_in:
-        source_node_key = _to_node_name(fan_in.source, "Repeated block fan-in source")
-        if not definition.block.has_node(source_node_key):
-            msg = f"Repeated block fan-in source does not exist: {source_node_key!r}"
-            raise ValueError(msg)
-        result_node_key = _to_node_name(fan_in.result, "Repeated block fan-in result")
-        if result_node_key in result_nodes:
-            msg = f"Repeated block fan-in result must be unique: {result_node_key!r}"
-            raise ValueError(msg)
-        if _is_defined(comp, result_node_key) or result_node_key in generated_nodes:
-            msg = f"Repeated block fan-in result node already exists: {result_node_key!r}"
-            raise ValueError(msg)
-        result_nodes.add(result_node_key)
-        sources = {key: path.join(source_node_key) for key, path in blocks.items()}
-        fan_ins.append((fan_in, result_node_key, sources))
+    ctx: BlockContext[K] = BlockContext(comp, definition.block, base_path, blocks, definition_object, ignore_self)
+    planned: list[PlannedNode] = []
+    for feature in definition.features:
+        feature_nodes = list(feature.plan(ctx))
+        planned.extend(feature_nodes)
+        ctx.planned.update(planned_node.node_key for planned_node in feature_nodes)
+    _validate_planned_nodes(comp, planned, block_nodes)
 
     generated_edges = [
         (block_path.join(source_node), block_path.join(target_node))
         for block_path in blocks.values()
         for source_node, target_node in definition.block.dag.edges()
     ]
-    for _fan_out, source_node_keys, targets in fan_outs:
-        generated_edges.extend((source_node_keys[key], target) for key, target in targets.items())
-    for _fan_in, result_node_key, sources in fan_ins:
-        generated_edges.extend((source, result_node_key) for source in sources.values())
+    for planned_node in planned:
+        generated_edges.extend((predecessor, planned_node.node_key) for predecessor in planned_node.predecessors)
     _validate_acyclic_edges(comp, generated_edges)
 
     for block_path in blocks.values():
         comp.add_block(block_path, definition.block, keep_values=definition.keep_values)
 
-    if id_node_key is not None:
-        add_id_nodes(comp, blocks, id_node_key)
-
-    results: dict[Name, NodeKey] = {}
-    for fan_in, result_node_key, sources in fan_ins:
-        results[fan_in.result] = add_fan_in(comp, result_node_key, sources, combine=fan_in.combine)
-    for fan_out, source_node_keys, targets in fan_outs:
-        add_fan_out(comp, source_node_keys.__getitem__, targets, transform=fan_out.transform)
-    return BuiltRepeatedBlocks(blocks, results, id_nodes)
+    named: dict[Name, NodeKey] = {}
+    for planned_node in planned:
+        planned_node.apply_to(comp)
+        if planned_node.label is not None:
+            named[planned_node.label] = planned_node.node_key
+    return BuiltRepeatedBlocks(blocks, tuple(planned_node.node_key for planned_node in planned), named)
 
 
 @overload

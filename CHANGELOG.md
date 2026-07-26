@@ -6,8 +6,11 @@
 - BUGFIX: `compute_and_get_value` sets error state on exception
 - Added utilities for repeated blocks and keyed fan-in/fan-out computations
 - Added `repeated_blocks` to declare repeated blocks within a `@ComputationFactory` class
+- Repeated blocks are now described by an ordered list of features (`FanOut`, `FanIn`, `IdNode`, `InputValue`), replacing the separate `fan_out` and `fan_in` arguments
+- Features describe nodes rather than creating them, so custom wiring patterns can be added by implementing `BlockFeature.plan` without giving up validate-before-mutate
 - Fan-out sources may be a function of the key, so each repeated block can read from a different node
-- Added `id_node`/`add_id_nodes` to give each repeated block a node holding its own key
+- `IdNode` gives each repeated block a node holding its own key
+- Fan-out transforms are now the generated node's own function rather than a wrapped constant
 - BUGFIX: a callable passed where a node name is expected raises `TypeError` instead of creating a node keyed by the function
 - Added a Marimo example of a large repeated instrument-block computation
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics

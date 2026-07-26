@@ -36,7 +36,7 @@ from .exception import (
 from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .planning import ExecutionPlan, ValidationReport, create_execution_plan, validate_graph
-from .util import AttributeView, FanIn, FanOut, RepeatedBlocks, apply1, apply_n, as_iterable, value_eq
+from .util import AttributeView, BlockFeature, RepeatedBlocks, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
 
 LOG = logging.getLogger("loman.computeengine")
@@ -238,15 +238,13 @@ class RepeatedBlocksNode(Node):
     The attribute name used in a computation factory class becomes the base path
     for the generated blocks, so ``instruments = repeated_blocks(...)`` with keys
     ``('AAPL', 'MSFT')`` creates the blocks ``instruments/AAPL`` and
-    ``instruments/MSFT``. ``fan_out`` and ``fan_in`` wire outer nodes to relative
-    block inputs and outputs, exactly as for :class:`loman.util.RepeatedBlocks`.
+    ``instruments/MSFT``. ``features`` describe how data flows in and out of every
+    copy, exactly as for :class:`loman.util.RepeatedBlocks`.
     """
 
     block: "Callable[[], Computation] | Computation"
     keys: tuple[Hashable, ...] = field(default_factory=tuple)
-    fan_out: tuple[FanOut[Any], ...] = field(default_factory=tuple)
-    fan_in: tuple[FanIn[Any], ...] = field(default_factory=tuple)
-    id_node: Name | None = None
+    features: tuple[BlockFeature, ...] = field(default_factory=tuple)
     keep_values: bool = False
 
     def __init__(
@@ -254,41 +252,25 @@ class RepeatedBlocksNode(Node):
         block: "Callable[[], Computation] | Computation",
         keys: Iterable[Hashable],
         *,
-        fan_out: Sequence[FanOut[Any]] = (),
-        fan_in: Sequence[FanIn[Any]] = (),
-        id_node: Name | None = None,
+        features: Sequence[BlockFeature] = (),
         keep_values: bool = False,
     ) -> None:
         """Initialize a repeated blocks node with a block template and its keys."""
         self.block = block
         self.keys = tuple(keys)
-        self.fan_out = tuple(fan_out)
-        self.fan_in = tuple(fan_in)
-        self.id_node = id_node
+        self.features = tuple(features)
         self.keep_values = keep_values
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
-        """Add the repeated blocks and their fan-out and fan-in wiring."""
+        """Add the repeated blocks and the nodes their features describe."""
         definition: RepeatedBlocks[Hashable] = RepeatedBlocks(
             block=_resolve_block(self.block),
             keys=self.keys,
             base_path=name,
-            fan_out=[
-                FanOut(
-                    _bind_self(fan_out.source, obj, ignore_self),
-                    fan_out.target,
-                    _bind_self(fan_out.transform, obj, ignore_self),
-                )
-                for fan_out in self.fan_out
-            ],
-            fan_in=[
-                FanIn(fan_in.source, fan_in.result, _bind_self(fan_in.combine, obj, ignore_self))
-                for fan_in in self.fan_in
-            ],
-            id_node=self.id_node,
+            features=self.features,
             keep_values=self.keep_values,
         )
-        definition.add_to(comp)
+        definition.add_to(comp, definition_object=obj, ignore_self=ignore_self)
 
 
 repeated_blocks = RepeatedBlocksNode

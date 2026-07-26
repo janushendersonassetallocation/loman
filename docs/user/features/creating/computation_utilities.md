@@ -36,12 +36,10 @@ repeated = util.RepeatedBlocks(
     block=price_block,
     keys=("AAPL", "MSFT"),
     base_path="instruments",
-    fan_out=(
+    features=[
         util.FanOut("positions", "data", transform=select_instrument),
-    ),
-    fan_in=(
         util.FanIn("value", "portfolio_values", combine=concat_values),
-    ),
+    ],
 )
 built = repeated.add_to(comp)
 ```
@@ -65,17 +63,31 @@ For process executors, `transform` and `combine` must be pickleable, just like
 ordinary node functions. The generated adapter nodes use the computation's
 default executor.
 
-`built.blocks` maps each key to its generated block path, while
-`built.results` maps each declared result name to its generated result node.
+`built.blocks` maps each key to its generated block path, `built.nodes` lists
+every generated node in declaration order, and `built.named` maps the names
+features chose to label — a `FanIn` labels its result — to the nodes created for
+them.
 
-`RepeatedBlocks` accepts multiple `FanOut` and `FanIn` definitions, so a block
-can consume several shared or keyed inputs and produce several aggregates. The
-frozen dataclass can also be reused to add the same graph structure to multiple
-computations.
+## Features
+
+`features` is an ordered list describing how data flows in and out of each copy.
+Four are built in:
+
+| feature | what it creates |
+| --- | --- |
+| `FanOut(source, target, transform=None)` | one node per block, fed from outside |
+| `FanIn(source, result, combine=None)` | one outer node gathering a node from every block |
+| `IdNode(name)` | one node per block holding that block's key |
+| `InputValue(name, value)` | one shared outer node, linked into every block |
+
+Features are planned in the order given, and a later feature may read a node an
+earlier one created. Nothing is applied until all of them have been planned and
+checked together, so a definition that fails validation leaves the computation
+completely untouched — no partially built blocks.
 
 ## Reading a different node per key
 
-The example above slices one shared `positions` node. When each block should
+The first example slices one shared `positions` node. When each block should
 instead read from a *different node that already exists*, pass a callable as the
 `FanOut` source. It is applied to each key to resolve that block's source node:
 
@@ -87,22 +99,21 @@ util.RepeatedBlocks(
     block=price_block,
     keys=("AAPL", "MSFT"),
     base_path="instruments",
-    fan_out=(util.FanOut(lambda key: f"data/{key}", "data"),),
+    features=[util.FanOut(lambda key: f"data/{key}", "data")],
 ).add_to(comp)
 ```
 
 `instruments/AAPL/data` now depends only on `data/AAPL`, so inserting a new value
-for one instrument invalidates only that block. A `transform` can be combined
-with a per-key source, in which case it receives whatever that key resolved to.
+for one instrument invalidates only that block.
 
 Because a callable source is meaningful, a callable passed anywhere a plain node
-name is expected — a fan-out target, a fan-in source or result — raises
-`TypeError` rather than silently creating a node keyed by the function object.
+name is expected raises `TypeError` rather than silently creating a node keyed by
+the function object.
 
 ## Giving each block its own key
 
-`id_node` names a node created inside every block that holds that block's key, so
-block functions can depend on their own key by name:
+`IdNode` creates a node inside every block holding that block's key, so block
+functions can depend on their own key by name:
 
 ```python
 block = Computation()
@@ -110,19 +121,20 @@ block.add_node("label")
 block.add_node("data")
 block.add_node("summary", lambda label, data: f"{label}: {data.sum()}")
 
-built = util.RepeatedBlocks(
+util.RepeatedBlocks(
     block=block,
     keys=("AAPL", "MSFT"),
     base_path="instruments",
-    fan_out=(util.FanOut("positions", "data", transform=select_instrument),),
-    id_node="label",
+    features=[
+        util.IdNode("label"),
+        util.FanOut("positions", "data", transform=select_instrument),
+    ],
 ).add_to(comp)
 ```
 
 `instruments/AAPL/label` holds `"AAPL"`. These nodes have no predecessors — each
-simply holds its key as a value — and `built.id_nodes` maps each key to its
-generated identifier node. The template does not have to declare the node; if it
-does, it must be an input node, and it cannot also be a fan-out target.
+simply holds its key as a value. The template does not have to declare the node;
+if it does, it must be an input node.
 
 This is the natural way to let a block look data up by its own key, or branch on
 it, without threading the key in from outside.
@@ -138,112 +150,66 @@ and would not compute without its values. The repeated-block utilities stamp out
 many copies of one template, where whatever the template happened to hold when it
 was last run is rarely what all of the copies should start from.
 
-When every copy does need the same value, broadcast it with a `FanOut` that has
-no `transform` rather than reaching for `keep_values=True`:
+When every copy does need the same value, use `InputValue`, which creates one
+node beside the blocks and links it into each of them:
 
 ```python
-comp.add_node("scale", value=100)
-
 util.RepeatedBlocks(
     block=price_block,
     keys=("AAPL", "MSFT"),
     base_path="instruments",
-    fan_out=(
-        util.FanOut("positions", "data", transform=select_instrument),
-        util.FanOut("scale", "scale"),
-    ),
+    features=[util.InputValue("scale", 100)],
 ).add_to(comp)
 ```
 
-Every block now reads `scale` from one outer node, so changing it is a single
-`comp.insert("scale", 10)` rather than an insert into each generated copy. Use
-`keep_values=True` when the copies really should start from a snapshot of the
-template.
+Every block now reads `scale` from `instruments/scale`, so changing it is a
+single `comp.insert("instruments/scale", 10)` rather than an insert into each
+generated copy. Use a `FanOut` with no `transform` to broadcast a node that
+already exists elsewhere, and `keep_values=True` only when the copies really
+should start from a snapshot of the template.
 
-## Repeated blocks in a computation factory
+## Writing your own feature
 
-`repeated_blocks` declares the same structure inside a
-[`@ComputationFactory`](creating_computation_factories.md) class, alongside
-`input_node`, `calc_node` and `block`. The attribute name becomes the base path,
-so the class below generates `instruments/AAPL` and `instruments/MSFT`:
-
-```python
-from loman import ComputationFactory, FanIn, FanOut, calc_node, input_node, repeated_blocks
-
-
-@ComputationFactory
-class InstrumentBlock:
-    data = input_node()
-
-    @calc_node
-    def value(self, data):
-        return data.assign(value=data["quantity"] * data["price"])
-
-
-@ComputationFactory
-class Portfolio:
-    positions = input_node()
-
-    def select_instrument(self, positions, instrument_id):
-        return positions.loc[[instrument_id]]
-
-    instruments = repeated_blocks(
-        InstrumentBlock,
-        keys=("AAPL", "MSFT"),
-        fan_out=(FanOut("positions", "data", transform=select_instrument),),
-        fan_in=(FanIn("value", "portfolio_values", combine=concat_values),),
-    )
-
-    @calc_node
-    def total_value(self, portfolio_values):
-        return portfolio_values["value"].sum()
-
-
-comp = Portfolio()
-```
-
-The block may be a `Computation` or, as above, another computation factory,
-matching `block`. `id_node` and `keep_values` are accepted too, so a class can
-declare per-key identifier nodes and per-key sources exactly as the dataclass
-does:
+A feature is any object with a `plan` method. It never changes the computation:
+it describes the nodes it wants as `PlannedNode` values, and the builder
+validates every feature's plan together before applying any of them.
 
 ```python
-@ComputationFactory
-class Book:
-    prefix = "data"
+from loman import PlannedNode
 
-    def price_source(self, label):
-        return f"{self.prefix}/{label}"
 
-    commodities = repeated_blocks(
-        Commodity,
-        keys=("CL", "GC"),
-        fan_out=(FanOut(price_source, "price_series"),),
-        fan_in=(FanIn("nav", "all_navs"),),
-        id_node="label",
-    )
+class Doubled:
+    """Add <block>/doubled = 2 * <block>/<source> to every block."""
+
+    def __init__(self, source, name="doubled"):
+        self.source = source
+        self.name = name
+
+    def plan(self, ctx):
+        source = ctx.require_block_node(self.source, "Doubled source")
+        for block_path in ctx.blocks.values():
+            yield PlannedNode.calc(
+                block_path.join(self.name),
+                lambda value: value * 2,
+                (block_path.join(source),),
+            )
 ```
 
-`fan_out` sources, `fan_in` results and generated block nodes can be referred to
-from anywhere in the class, regardless of the order in which class members are
-declared: a node that is only referred to remains a placeholder until the member
-that defines it is added. A name that another member *defines*, however, cannot
-also be a fan-in result — declaring both `portfolio_values = input_node()` and a
-`FanIn(..., "portfolio_values")` is an error.
+`ctx` is a `BlockContext`. It carries `blocks`, mapping each key to its block
+path, along with the template and the destination computation, and offers
+`require_block_node` and `require_block_input` so port checks raise the same
+errors the built-in features do.
 
-Callbacks follow the same `self` convention as `calc_node`: `select_instrument`
-and `price_source` above are declared with `self` as their first parameter and are
-bound to the definition object, so they are called as
-`select_instrument(positions, key)` and `price_source(key)` and can use other
-methods and attributes of the class. Callbacks that do not take `self` —
-module-level functions, lambdas, or `staticmethod`s — are used unchanged. Pass
-`ignore_self=False` to `@ComputationFactory` to disable binding for the whole
-class.
+`PlannedNode` has three constructors: `input_node(key, value)` for a node holding
+a value, `link(key, source)` for a node that copies another unchanged, and
+`calc(key, func, args)` for a calculation, where each argument is either a node
+key to depend on or a `C(...)` constant. Pass `label=` to have the node appear in
+`built.named`.
 
 ## Low-level helpers
 
-The dataclass builder composes four independent utilities. They can also be
-used directly for more dynamic graph construction.
+The features are built on independent utilities, which can also be used directly
+for more dynamic graph construction.
 
 ### Repeated blocks
 
@@ -276,15 +242,7 @@ util.add_fan_out(
 
 With no `transform`, the source value is broadcast unchanged. With a transform,
 each target is calculated as `transform(source_value, key)`. Passing a callable
-as `source` resolves a source node per key instead of broadcasting one:
-
-```python
-util.add_fan_out(
-    comp,
-    source=lambda key: f"data/{key}",
-    targets={key: path / "data" for key, path in blocks.items()},
-)
-```
+as `source` resolves a source node per key instead of broadcasting one.
 
 ### Identifier nodes
 
@@ -318,7 +276,73 @@ util.add_fan_in(
 )
 ```
 
-If `combine` is omitted, the keyed mapping itself becomes the result value.
+If `combine` is omitted, the keyed mapping itself becomes the result value. Note
+that it receives the mapping, not the values, so `combine=sum` would add up the
+keys — use `lambda values: sum(values.values())`.
+
+## Repeated blocks in a computation factory
+
+`repeated_blocks` declares the same structure inside a
+[`@ComputationFactory`](creating_computation_factories.md) class, alongside
+`input_node`, `calc_node` and `block`. The attribute name becomes the base path,
+so the class below generates `instruments/AAPL` and `instruments/MSFT`:
+
+```python
+from loman import ComputationFactory, FanIn, FanOut, IdNode, calc_node, input_node, repeated_blocks
+
+
+@ComputationFactory
+class InstrumentBlock:
+    label = input_node()
+    data = input_node()
+
+    @calc_node
+    def value(self, label, data):
+        return data.assign(instrument=label, value=data["quantity"] * data["price"])
+
+
+@ComputationFactory
+class Portfolio:
+    positions = input_node()
+
+    def select_instrument(self, positions, instrument_id):
+        return positions.loc[[instrument_id]]
+
+    instruments = repeated_blocks(
+        InstrumentBlock,
+        keys=("AAPL", "MSFT"),
+        features=[
+            IdNode("label"),
+            FanOut("positions", "data", transform=select_instrument),
+            FanIn("value", "portfolio_values", combine=concat_values),
+        ],
+    )
+
+    @calc_node
+    def total_value(self, portfolio_values):
+        return portfolio_values["value"].sum()
+
+
+comp = Portfolio()
+```
+
+The block may be a `Computation` or, as above, another computation factory,
+matching `block`. `keep_values` is accepted too.
+
+Nodes that features refer to can be declared anywhere in the class, regardless of
+order: a node that is only referred to remains a placeholder until the member
+that defines it is added. A name that another member *defines*, however, cannot
+also be a fan-in result — declaring both `portfolio_values = input_node()` and a
+`FanIn(..., "portfolio_values")` is an error.
+
+Callbacks follow the same `self` convention as `calc_node`. `select_instrument`
+above is declared with `self` as its first parameter and is bound to the
+definition object, so it is called as `select_instrument(positions, key)` and can
+use other methods and attributes of the class. This applies to a `FanOut` source
+resolver and a `FanIn` combine function too. Callbacks that do not take `self` —
+module-level functions, lambdas, or `staticmethod`s — are used unchanged. Pass
+`ignore_self=False` to `@ComputationFactory` to disable binding for the whole
+class.
 
 ## Serialization
 

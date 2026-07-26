@@ -20,6 +20,7 @@ from loman import (
     ComputationFactory,
     FanIn,
     FanOut,
+    IdNode,
     LoopDetectedError,
     MapError,
     NonExistentNodeError,
@@ -1759,14 +1760,12 @@ def test_computation_factory_with_repeated_blocks():
         instruments = repeated_blocks(
             _InstrumentBlock,
             keys=("AAPL", "MSFT"),
-            fan_out=(
+            features=[
                 FanOut("positions", "data", transform=_select_instrument),
                 FanOut("scale", "scale"),
-            ),
-            fan_in=(
                 FanIn("value", "values"),
                 FanIn("value", "total", combine=lambda values: sum(values.values())),
-            ),
+            ],
         )
 
         @calc_node
@@ -1803,8 +1802,11 @@ def test_computation_factory_repeated_blocks_binds_self_to_callbacks():
         instruments = repeated_blocks(
             _InstrumentBlock,
             keys=("a", "b"),
-            fan_out=(FanOut("positions", "data", transform=select), FanOut("scale", "scale")),
-            fan_in=(FanIn("value", "total", combine=total_up),),
+            features=[
+                FanOut("positions", "data", transform=select),
+                FanOut("scale", "scale"),
+                FanIn("value", "total", combine=total_up),
+            ],
         )
 
     comp = OuterComputation()
@@ -1826,8 +1828,11 @@ def test_computation_factory_repeated_blocks_without_ignore_self():
         instruments = repeated_blocks(
             _InstrumentBlock,
             keys=("a",),
-            fan_out=(FanOut("positions", "data", transform=_select_instrument), FanOut("scale", "scale")),
-            fan_in=(FanIn("value", "total", combine=lambda values: sum(values.values())),),
+            features=[
+                FanOut("positions", "data", transform=_select_instrument),
+                FanOut("scale", "scale"),
+                FanIn("value", "total", combine=lambda values: sum(values.values())),
+            ],
         )
 
     comp = OuterComputation()
@@ -1860,9 +1865,7 @@ def test_computation_factory_repeated_blocks_with_per_key_source_and_id_node():
         instruments = repeated_blocks(
             InstrumentBlock,
             keys=("AAPL", "MSFT"),
-            fan_out=(FanOut(price_source, "price"),),
-            fan_in=(FanIn("tagged", "tags"),),
-            id_node="label",
+            features=[IdNode("label"), FanOut(price_source, "price"), FanIn("tagged", "tags")],
         )
 
     comp = OuterComputation()
@@ -1886,8 +1889,7 @@ def test_computation_factory_repeated_blocks_keeps_a_plain_string_source():
         instruments = repeated_blocks(
             _InstrumentBlock,
             keys=("a",),
-            fan_out=(FanOut("shared", "data"), FanOut("shared", "scale")),
-            fan_in=(FanIn("value", "total"),),
+            features=[FanOut("shared", "data"), FanOut("shared", "scale"), FanIn("value", "total")],
         )
 
     comp = OuterComputation()
