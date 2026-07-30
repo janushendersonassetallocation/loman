@@ -12,6 +12,7 @@
 - `IdNode` gives each repeated block a node holding its own key
 - Fan-out transforms are now the generated node's own function rather than a wrapped constant
 - BUGFIX: a callable passed where a node name is expected raises `TypeError` instead of creating a node keyed by the function
+- BUGFIX: constant node arguments (`C(...)`) are now serialized. Previously they were silently dropped, so a reloaded graph looked up to date but raised `TypeError` from the missing argument as soon as the node was recalculated. Serialization format version is now 2; version 1 files still load. A constant that cannot be encoded now raises `SerializationError` naming the node instead of being dropped
 - Added a Marimo example of a large repeated instrument-block computation
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
 

@@ -346,8 +346,28 @@ class.
 
 ## Serialization
 
-These utilities build on `Computation.add_block`, whose calculation functions
-are not retained by the default JSON serializer. Constant callback arguments
-used by fan-in and transformed fan-out nodes are also not retained currently.
-Serialize computed values when a snapshot is sufficient; rebuild the utility
-graph from its definition before recalculating it after a JSON roundtrip.
+The generated wiring nodes roundtrip through JSON. A fan-out transform and a
+fan-in combine function are passed as constant arguments, and constants are
+recorded in the serialized node, so a fan-out or fan-in node can be recalculated
+after a reload. As with any node function, the callback must be importable —
+a module-level function, or any callable when
+`ComputationSerializer(use_dill_for_functions=True)` is used. A constant that
+cannot be encoded raises `SerializationError` naming the node, rather than being
+dropped and failing later.
+
+What still does not survive is the block template's *own* calculations.
+`Computation.add_block` deliberately sets `serialize=False` on the nodes it
+copies, so their functions are not retained:
+
+```python
+block.add_node("doubled", double)   # calculated inside every generated block
+```
+
+After a roundtrip, `instruments/AAPL/doubled` keeps its stored value but has no
+function, so it cannot be recalculated and anything downstream of it stays stale.
+If your per-key work happens in the template — the normal case — serialize
+computed values when a snapshot is enough, and rebuild the graph from its Python
+definition when you need to recalculate.
+
+Keys become real path parts, and JSON converts path parts to strings, so use
+string keys when a serialized computation must preserve key types.
