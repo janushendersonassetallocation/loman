@@ -196,31 +196,118 @@ Modified: `visualization.py` to expose the identifier map;
 the method body. `src/loman/__init__.py` must **not** import `loman.ui`; this is
 the load-bearing constraint and deserves both a comment and a test.
 
-The extras convention this branch establishes:
+Verify explicitly that the static assets land in the wheel, since the build
+config copies the package tree but this has not been confirmed for non-Python
+files.
+
+The extras convention itself is specified in full below, because both this extra
+and the airflow one depend on it.
+
+## The extras convention
+
+This branch owns this section. `loman` has no `[project.optional-dependencies]`
+today, so this is the first one, and the airflow extra adds an entry against the
+same convention rather than inventing a second.
+
+### Declaration
 
 ```toml
 [project.optional-dependencies]
 ui = ["anywidget>=0.9", "traitlets>=5.14"]
+airflow = []          # owned by the airflow plan; pin settled by its phase 0 spike
+
+[tool.deptry.package_module_name_map]
+anywidget = "anywidget"
+traitlets = "traitlets"
 ```
 
 `traitlets` is declared explicitly even though anywidget provides it
-transitively, because the widget module imports it directly and deptry would
-otherwise flag a transitive dependency. The airflow extra adds its own entry
-later against the same convention.
+transitively, because the widget module imports it directly and deptry flags a
+transitive dependency (DEP003) otherwise. The deptry map entries are required
+because deptry otherwise guesses the module name from the distribution name.
+
+Deliberately **no** `all = ["loman[ui,airflow]"]` aggregate. It looks tidy but it
+means `pip install loman[all]` drags in Airflow for someone who wanted a widget,
+and it has to be updated every time an extra is added. Add it later if anyone
+asks.
+
+### Ordering constraint, verified
+
+**The declaration cannot land before the code that imports it.** `make deptry`
+runs `deptry src/` in CI, and an extra declared with nothing importing it fails:
+
+```text
+pyproject.toml: DEP002 'anywidget' defined as a dependency but not used in the codebase
+Found 1 dependency issue.
+```
+
+This was confirmed against the real deptry, not assumed. Two consequences:
+
+- The `[project.optional-dependencies]` stanza ships in the **same** pull request
+  as the first module that imports anywidget, not before it.
+- If it ever needs to land earlier, the escape hatch is
+  `[tool.deptry.per_rule_ignores] DEP002 = ["anywidget"]`, which was also
+  verified to silence it. Treat that as temporary and delete it when the
+  importing code arrives — a permanent ignore defeats the check.
+
+The helper module below has no such constraint: it imports nothing outside the
+standard library, so it can land on its own, fully tested, ahead of everything
+else.
+
+### The optional-import helper
+
+`src/loman/_extras.py`, outside `ui/` because the airflow extra uses it too:
+
+```python
+def require(module: str, extra: str) -> ModuleType:
+    """Import a module provided by an optional extra, or explain how to get it."""
+```
+
+On failure it raises `ImportError` chained from the original, with a message
+naming both the missing module and the install command:
+
+```text
+'anywidget' is required for loman's 'ui' extra.
+Install it with:  pip install 'loman[ui]'
+```
+
+Call it at the top of `src/loman/ui/__init__.py`, not inside each function, so a
+missing extra fails once at import with a clear message rather than at some
+arbitrary later call.
+
+### What this must not break
+
+`import loman` must not import anywidget, traitlets, ipywidgets or airflow. The
+`Computation.widget()` method uses a deferred import inside the method body, and
+`src/loman/__init__.py` never imports `loman.ui`. This is the load-bearing
+constraint of the whole design and gets a subprocess test asserting the module is
+absent from `sys.modules` after a bare `import loman`.
 
 Weight warning: anywidget depends on ipywidgets, so `pip install loman[ui]` pulls
 the whole ipywidgets stack. Acceptable for an extra, and exactly why it must not
 be a base dependency.
 
-No CI workflow changes are needed: `make install` already runs
-`uv sync --all-extras --all-groups`, so the extra installs everywhere
-automatically. The consequence is that the missing-extra error path is never
-naturally exercised and must be tested by monkeypatching. `uv.lock` must be
-regenerated.
+### CI and lockfile
 
-Verify explicitly that the static assets land in the wheel, since the build
-config copies the package tree but this has not been confirmed for non-Python
-files.
+No workflow changes are needed. `make install` already runs
+`uv sync --all-extras --all-groups`, so every extra installs automatically across
+the whole matrix, in the docs build and in the release job.
+
+Two consequences follow, and both need handling rather than noticing later:
+
+- The **missing-extra path is never naturally exercised**, because CI always
+  installs everything. It must be covered by monkeypatching `importlib`, which
+  is a real assertion on the error message rather than a coverage pragma.
+- Any extra that **cannot install on every matrix platform** breaks the
+  everything-installs assumption. That does not bite the ui extra, but it does
+  bite airflow, which has no Windows support — so the airflow plan needs a
+  marker such as `; sys_platform != "win32"`, or its dependency moved to a
+  dedicated group that the matrix does not sync. Worth settling when that extra
+  lands, not after a red Windows job.
+
+`uv.lock` must be regenerated in the same commit; the `uv-lock` pre-commit hook
+and `uv lock --check` in `make install` both enforce it. Expect a large lockfile
+diff, and keep it in its own commit so the reviewable change stays readable.
 
 ## Delivery phases
 
@@ -233,13 +320,18 @@ Each phase is a self-contained change that leaves the branch green.
   changes completely. No code beyond throwaway measurement.
 - **Phase 1 — expose `GraphView` internals.** No new dependency, no behaviour
   change. Unblocks everything and is reviewable in minutes.
-- **Phase 2 — packaging convention.** `[project.optional-dependencies]`,
-  `src/loman/_extras.py`, deptry entries, lockfile regen, wheel-contents check,
-  and a test that `import loman` does not import anywidget. Coordinate the shape
-  with the airflow plan, since this lands the convention for both.
-- **Phase 3 — read-only widget.** The bulk of the value: view model, value
-  wire format, widget class, static assets, click to inspect. Docs page and a
-  marimo notebook. Shippable and useful on its own.
+- **Phase 2 — the optional-import helper.** `src/loman/_extras.py` and its tests,
+  standard library only. No dependency declared and none imported, so this lands
+  cleanly on its own and the airflow work can build on it immediately. Deliberately
+  does **not** include the `[project.optional-dependencies]` stanza — see the
+  ordering constraint above.
+- **Phase 3 — read-only widget, with the extra declared.** The bulk of the value:
+  view model, value wire format, widget class, static assets, click to inspect.
+  The `[project.optional-dependencies]` stanza, deptry entries and lockfile regen
+  ship **here**, in the same change as the first code that imports anywidget,
+  because deptry rejects a declared-but-unused dependency. Also the
+  wheel-contents check and the test that `import loman` does not import
+  anywidget. Docs page and a marimo notebook. Shippable and useful on its own.
 - **Phase 4 — collapse and expand.** Wire the expanded trait to node
   transformations; double-click a composite node to toggle. Structure-hash
   gating of the SVG lands here.
