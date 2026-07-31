@@ -1,0 +1,302 @@
+# Design plan: `loman[ui]`
+
+Status: proposed, not implemented. This document is the design for review; no
+code has been written on this branch.
+
+This branch also **owns the shared extras convention** — the first
+`[project.optional-dependencies]` section and the optional-import helper — which
+the sibling `loman[airflow]` plan will build on rather than reinvent.
+
+## Recommendation
+
+Build one widget class, `loman.ui.ComputationWidget`, exposed as
+`Computation.widget()`. It renders the *existing* graphviz picture as an SVG
+string synced over a traitlet, overlays click handling in a small hand-written
+vanilla JavaScript module, and drives a detail panel showing state, value repr,
+timing, source, inputs and outputs, plus two write actions: edit a scalar input,
+and compute.
+
+The most important decision is **server-side layout**: keep graphviz as the
+renderer and ship an SVG string, rather than sending a node and edge view model
+to be laid out in the browser. That choice is what keeps this small enough to
+land in this repo. It adds no JavaScript dependencies, no build step and no CDN
+exposure, it guarantees the widget is identical to `comp.draw()`, and it inherits
+the hierarchical cluster rendering that `to_pydot` in
+`src/loman/visualization.py` already does correctly.
+
+Its one real cost is that marimo's WebAssembly export cannot work, because there
+is no `dot` binary in Pyodide. **That cost is unconfirmed as acceptable, so
+phase 0 below is a spike to settle it before any code is written.**
+
+## What this is not
+
+Worth stating up front, because it is the obvious wrong turn: this is **not** a
+standalone web server you browse to. A separate server process does not satisfy
+"embed into a dashboard or applet", it cannot participate in a marimo or Jupyter
+cell, and it forces a second rendering stack that will drift from
+`visualization.py`. The widget runs in the notebook kernel and renders in the
+cell, and nothing in this plan adds an HTTP server, a WebSocket, or a
+`Computation.serve()` method.
+
+For the same reason, no front-end library is loaded from a CDN. Corporate
+environments block it, offline use breaks, and it pins unaudited JavaScript with
+no supply-chain review.
+
+## Proposed API
+
+```python
+import loman
+
+comp = build_portfolio()
+w = comp.widget()
+```
+
+`Computation.widget()` mirrors `Computation.draw()`'s signature so the two are
+learnable together, adding only `editable: bool = True`.
+
+In marimo:
+
+```python
+import marimo as mo
+
+w = mo.ui.anywidget(comp.widget())
+w
+```
+
+```python
+w.value["selected"]
+comp.v[w.value["selected"]]
+```
+
+That last line is the pattern to teach: **the widget navigates and lightly
+controls; the real object stays in Python.** That is what makes it a dashboard
+component rather than a walled garden.
+
+In Jupyter, `comp.widget()` as the last expression in a cell renders directly,
+with traits read via `w.selected` or `w.observe(...)`.
+
+## Architecture
+
+State is synced as traitlets, not custom messages. Python to browser:
+`graph_svg`, `node_ids`, `composite_ids`, `node_states`, `state_colors`,
+`detail`, `status`, `editable`. Browser to Python: `selected`, `expanded`,
+`edit_request`, `compute_request`.
+
+Keeping everything in traits rather than messages means widget state can be
+recreated without Python running, which is what makes a static HTML export show
+the right picture instead of a blank box. It also means every browser-to-Python
+path is a trait assignment, which is what makes the round-trip testable without
+a browser.
+
+The scaling rule is to **never serialize node values in bulk**. The full-graph
+payload is the SVG plus two small string maps. Python computes a structure hash
+over node paths, edges, root and expanded set, and skips resending `graph_svg`
+when it is unchanged, so a `compute_all()` on a large graph re-sends only
+`node_states` — a few kilobytes. The browser repaints by looking up each node's
+state and setting the fill on the shape inside its group. No relayout, no node
+jumping, no `dot` subprocess.
+
+`detail` is populated lazily when `selected` changes and carries exactly one
+node's data.
+
+The browser needs no change to the graphviz output at all: each node group in
+graphviz SVG carries a title element holding the DOT node name, which
+`create_viz_dag` already assigns. All that is missing is the map from those names
+to node keys, which currently exists as a local variable and is discarded.
+
+## Design decisions
+
+### Rendering location
+
+Shipping graphviz SVG adds no JavaScript dependencies, works offline and behind a
+content security policy, is identical to `comp.draw()`, and gets hierarchical
+clusters correct for free. Against it: a `dot` subprocess per structural
+relayout, no pan or zoom unless hand-rolled, a larger payload than a node list,
+and no WebAssembly.
+
+Client-side layout with elkjs or cytoscape gives smooth interaction and works in
+WebAssembly, but pulls either a CDN or a bundler and npm lockfile into a repo
+with no JavaScript tooling at all, and requires reimplementing cluster rendering
+and the node formatter rules in JavaScript, where they will drift from
+`visualization.py`.
+
+Recommended: server-side SVG, with pan and zoom added later as a vendored single
+file or by hand. **Conditional on the phase 0 spike.**
+
+### Source of the node identifier map
+
+`GraphView.refresh()` discards three things the UI needs: the original node set,
+the composite node set, and `create_viz_dag`'s internal index map. Options are to
+expose them as fields on `GraphView` (purely additive, blast radius of one
+function), to re-derive them in `loman.ui` (duplicates a private invariant that
+will silently break), or to emit graphviz `id` attributes (changes `draw()`
+output, which tests assert on).
+
+Recommended: expose them, landed as a standalone no-behaviour-change change
+before any UI code.
+
+### Scope of interaction
+
+Read-only is too little to justify an extra, since `comp.draw()` already exists.
+Full editing is too much. v1 ships exactly two mutations, each mapping to one
+existing API call: edit a scalar input, offered only for input nodes holding a
+scalar, mapping to `comp.insert`; and compute, mapping to `comp.compute_all()` or
+`comp.compute(selected)` with exceptions left to land as error states, which is
+the honest presentation.
+
+Explicitly not in v1: adding or removing nodes, editing functions, setting stale,
+pinning, or DataFrame grids.
+
+### Value serialization for the wire
+
+`ComputationSerializer` is built for round-tripping a whole computation, with
+dill, function references and a format version. Pointing it at a UI wire format
+would serialize things the browser must never see and would couple the wire
+format to the persistence format's version.
+
+Recommended: a small dedicated module for the wire format, handling scalars
+(`int`, `float`, `str`, `bool`, `None`) in both directions and falling back to a
+read-only `repr` for everything else. It needs a type discriminator so the
+browser knows what it is holding, and explicit handling for NaN and infinity,
+which are not valid JSON. Note the deliberate duplication in a module docstring,
+and reuse the existing DataFrame and ndarray transformers if a grid is added
+later rather than growing a second implementation.
+
+### Long-running computation
+
+Compute happens in the kernel inside an observer, so a slow graph freezes the
+widget. A background thread is not an option: `Computation` is not thread-safe,
+and making the widget mutate one off-thread would be a concurrency change to the
+core library rather than a UI feature. Host-specific async would leave Jupyter
+broken.
+
+Recommended: synchronous, with a documented caveat that long computations should
+be driven from a normal cell with the widget observing the result.
+
+### Front-end asset form
+
+anywidget accepts an inline string or a file path. A few hundred lines of
+JavaScript inside a Python string would be invisible to every tool in this repo
+and unreadable in review. A file path also unlocks anywidget's hot reload during
+development.
+
+Recommended: `.js` and `.css` files under `src/loman/ui/static/`, hand-written
+vanilla ESM, no bundler, with dark mode via a media query since marimo and
+JupyterLab both have dark themes.
+
+## Layout and packaging
+
+New modules under `src/loman/ui/`: the widget class, a view model builder, the
+value wire-format module, and the static assets. A shared `src/loman/_extras.py`
+optional-import helper lives outside `ui/` because the airflow extra will use it
+too.
+
+Modified: `visualization.py` to expose the identifier map;
+`computeengine.py` to add `Computation.widget()` with a deferred import inside
+the method body. `src/loman/__init__.py` must **not** import `loman.ui`; this is
+the load-bearing constraint and deserves both a comment and a test.
+
+The extras convention this branch establishes:
+
+```toml
+[project.optional-dependencies]
+ui = ["anywidget>=0.9", "traitlets>=5.14"]
+```
+
+`traitlets` is declared explicitly even though anywidget provides it
+transitively, because the widget module imports it directly and deptry would
+otherwise flag a transitive dependency. The airflow extra adds its own entry
+later against the same convention.
+
+Weight warning: anywidget depends on ipywidgets, so `pip install loman[ui]` pulls
+the whole ipywidgets stack. Acceptable for an extra, and exactly why it must not
+be a base dependency.
+
+No CI workflow changes are needed: `make install` already runs
+`uv sync --all-extras --all-groups`, so the extra installs everywhere
+automatically. The consequence is that the missing-extra error path is never
+naturally exercised and must be tested by monkeypatching. `uv.lock` must be
+regenerated.
+
+Verify explicitly that the static assets land in the wheel, since the build
+config copies the package tree but this has not been confirmed for non-Python
+files.
+
+## Delivery phases
+
+Each phase is a self-contained change that leaves the branch green.
+
+- **Phase 0 — spike, blocking.** Settle the WebAssembly question: is
+  `marimo export html-wasm` actually reachable for this repo's notebooks, and
+  does it matter? Measure the graphviz SVG payload for the largest example graph.
+  If WebAssembly is required, the rendering decision flips and the cost profile
+  changes completely. No code beyond throwaway measurement.
+- **Phase 1 — expose `GraphView` internals.** No new dependency, no behaviour
+  change. Unblocks everything and is reviewable in minutes.
+- **Phase 2 — packaging convention.** `[project.optional-dependencies]`,
+  `src/loman/_extras.py`, deptry entries, lockfile regen, wheel-contents check,
+  and a test that `import loman` does not import anywidget. Coordinate the shape
+  with the airflow plan, since this lands the convention for both.
+- **Phase 3 — read-only widget.** The bulk of the value: view model, value
+  wire format, widget class, static assets, click to inspect. Docs page and a
+  marimo notebook. Shippable and useful on its own.
+- **Phase 4 — collapse and expand.** Wire the expanded trait to node
+  transformations; double-click a composite node to toggle. Structure-hash
+  gating of the SVG lands here.
+- **Phase 5 — interactivity.** Scalar edit, compute button, status trait, error
+  and traceback display.
+- **Phase 6, optional — validation panel.** Surface `validate()` and `plan()` as
+  a second tab; their `to_df()` output renders as a table and the blocker
+  information maps naturally onto node highlighting.
+
+## Testing approach
+
+Coverage measures Python only, so the JavaScript is invisible to the gate. That
+is what makes the no-JavaScript-tooling recommendation affordable.
+
+The view model and value modules are pure functions over a `Computation` and are
+straightforward to cover with the existing fixtures, one of which already gives
+nested blocks. The widget class needs no browser: setting a trait directly fires
+the same observer the browser would, so the entire Python round-trip — selection,
+edit, compute — is reachable in an ordinary test. The missing-extra branch, the
+one path CI installs away, is covered by patching the import to raise. A
+subprocess test asserts `import loman` does not pull in anywidget.
+
+Recommended: no JavaScript build step and no JavaScript test runner. This repo
+has no npm anywhere, and adding one would mean a new toolchain, lockfile,
+dependency-update surface and CI job for a few hundred lines of vanilla ESM.
+Instead, a Python contract test greps the JavaScript for trait names and asserts
+they are all declared and writable, which catches the realistic failure — a trait
+renamed on one side only — for no tooling. It should also assert that the state
+colour map covers every member of `States`, so a new state can never render
+unstyled.
+
+## Risks and open questions
+
+Needing a decision:
+
+- Whether WebAssembly export is required. Phase 0 exists to answer this.
+- Whether the ipywidgets stack is acceptable in this extra.
+
+Unresolved:
+
+- The graphviz SVG payload size for very large graphs was not measured, and no
+  documented payload limit was found for anywidget or marimo. The structure-hash
+  gating mitigates repeated sends, but a node-count threshold above which the
+  widget refuses to auto-expand is probably needed.
+- Which anywidget front-end module revision the pinned marimo implements was not
+  verified. Mitigation: write the module using only the base render entry point
+  and a returned cleanup callback, which is valid under every revision.
+- Getting a node's source can raise for lambdas defined in a REPL or restored
+  from dill, and loman users define lambdas constantly. The detail builder must
+  degrade gracefully, and this is easy to miss.
+- Inserting a value can raise for missing or placeholder nodes; the edit observer
+  must route those to the status trait rather than raising inside a callback,
+  where the error would surface in the kernel log and the UI would silently do
+  nothing.
+- `Computation._repr_svg_` already renders a static picture for a bare `comp` in
+  a cell. Users will reasonably expect that to become interactive; it should not,
+  and the docs should say so.
+- `GraphView.svg()` shells out to `dot`. A missing binary produces an opaque
+  error, so the widget should catch it and put a readable message in the status
+  trait.
