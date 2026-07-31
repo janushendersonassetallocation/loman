@@ -5,6 +5,7 @@
 :titlesonly:
 
 creating_computation_factories
+computation_utilities
 adding_nodes_using_decorators
 constant_values
 tagging_nodes

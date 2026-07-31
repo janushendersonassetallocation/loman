@@ -18,6 +18,9 @@ from loman import (
     CannotInsertToPlaceholderNodeError,
     Computation,
     ComputationFactory,
+    FanIn,
+    FanOut,
+    IdNode,
     LoopDetectedError,
     MapError,
     NonExistentNodeError,
@@ -27,6 +30,7 @@ from loman import (
     computation_factory,
     input_node,
     node,
+    repeated_blocks,
 )
 from loman.computeengine import (
     Block,
@@ -35,6 +39,7 @@ from loman.computeengine import (
     NodeData,
     NodeKey,
     NullObject,
+    RepeatedBlocksNode,
     TimingData,
     identity_function,
 )
@@ -1725,6 +1730,197 @@ def test_computation_factory_with_blocks():
     assert comp.v.foo.d == 22
     assert comp.v.bar.d == 31
     assert comp.v.output == 22 + 31
+
+
+@ComputationFactory
+class _InstrumentBlock:
+    """Block template used by the repeated block factory tests."""
+
+    data = input_node()
+    scale = input_node()
+
+    @calc_node
+    def value(self, data, scale):
+        return data * scale
+
+
+def _select_instrument(positions, instrument_id):
+    """Select one instrument's position from a keyed mapping."""
+    return positions[instrument_id]
+
+
+def test_computation_factory_with_repeated_blocks():
+    """Test computation factory with repeated blocks, fan-out and fan-in."""
+
+    @ComputationFactory
+    class OuterComputation:
+        positions = input_node()
+        scale = input_node(value=10)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("AAPL", "MSFT"),
+            features=[
+                FanOut("positions", "data", transform=_select_instrument),
+                FanOut("scale", "scale"),
+                FanIn("value", "values"),
+                FanIn("value", "total", combine=lambda values: sum(values.values())),
+            ],
+        )
+
+        @calc_node
+        def doubled_total(self, total):
+            return 2 * total
+
+    comp = OuterComputation()
+
+    comp.insert("positions", {"AAPL": 2, "MSFT": 3})
+    comp.compute_all()
+
+    assert comp.v.instruments.AAPL.value == 20
+    assert comp.v.instruments.MSFT.value == 30
+    assert comp.v.values == {"AAPL": 20, "MSFT": 30}
+    assert comp.v.total == 50
+    assert comp.v.doubled_total == 100
+
+
+def test_computation_factory_repeated_blocks_binds_self_to_callbacks():
+    """Test repeated block transforms and combines defined as methods receive self."""
+
+    @ComputationFactory
+    class OuterComputation:
+        positions = input_node()
+        scale = input_node(value=1)
+        offset = 100
+
+        def select(self, positions, instrument_id):
+            return positions[instrument_id] + self.offset
+
+        def total_up(self, values):
+            return sum(values.values())
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a", "b"),
+            features=[
+                FanOut("positions", "data", transform=select),
+                FanOut("scale", "scale"),
+                FanIn("value", "total", combine=total_up),
+            ],
+        )
+
+    comp = OuterComputation()
+
+    comp.insert("positions", {"a": 1, "b": 2})
+    comp.compute("total")
+
+    assert comp.v.total == 203
+
+
+def test_computation_factory_repeated_blocks_without_ignore_self():
+    """Test repeated block callbacks are left unbound when ignore_self is disabled."""
+
+    @ComputationFactory(ignore_self=False)
+    class OuterComputation:
+        positions = input_node()
+        scale = input_node(value=1)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a",),
+            features=[
+                FanOut("positions", "data", transform=_select_instrument),
+                FanOut("scale", "scale"),
+                FanIn("value", "total", combine=lambda values: sum(values.values())),
+            ],
+        )
+
+    comp = OuterComputation()
+
+    comp.insert("positions", {"a": 7})
+    comp.compute("total")
+
+    assert comp.v.total == 7
+
+
+def test_computation_factory_repeated_blocks_with_per_key_source_and_id_node():
+    """Test repeated blocks reading a different node per key, with identifier nodes."""
+
+    @ComputationFactory
+    class InstrumentBlock:
+        label = input_node()
+        price = input_node()
+
+        @calc_node
+        def tagged(self, label, price):
+            return f"{label}:{price}"
+
+    @ComputationFactory
+    class OuterComputation:
+        prefix = "data"
+
+        def price_source(self, label):
+            return f"{self.prefix}/{label}"
+
+        instruments = repeated_blocks(
+            InstrumentBlock,
+            keys=("AAPL", "MSFT"),
+            features=[IdNode("label"), FanOut(price_source, "price"), FanIn("tagged", "tags")],
+        )
+
+    comp = OuterComputation()
+    comp.add_node("data/AAPL", value=190)
+    comp.add_node("data/MSFT", value=430)
+    comp.compute("tags")
+
+    assert comp.v.tags == {"AAPL": "AAPL:190", "MSFT": "MSFT:430"}
+    assert comp.v["instruments/AAPL/label"] == "AAPL"
+    assert comp.i["instruments/AAPL/price"] == ["data/AAPL"]
+    assert comp.i["instruments/MSFT/price"] == ["data/MSFT"]
+
+
+def test_computation_factory_repeated_blocks_keeps_a_plain_string_source():
+    """Test a non-callable source is left alone by the self-binding step."""
+
+    @ComputationFactory
+    class OuterComputation:
+        shared = input_node(value=5)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a",),
+            features=[FanOut("shared", "data"), FanOut("shared", "scale"), FanIn("value", "total")],
+        )
+
+    comp = OuterComputation()
+    comp.compute("total")
+
+    assert comp.v.total == {"a": 25}
+
+
+def test_computation_factory_repeated_blocks_from_computation_keeping_values():
+    """Test repeated blocks accept a computation template and can copy its values."""
+    template = Computation()
+    template.add_node("data", value=4)
+    template.add_node("result", lambda data: data * 2)
+    template.compute_all()
+
+    @ComputationFactory
+    class OuterComputation:
+        blocks = repeated_blocks(template, keys=("a", "b"), keep_values=True)
+
+    comp = OuterComputation()
+
+    assert comp.v[["blocks/a/result", "blocks/b/result"]] == [8, 8]
+
+
+def test_repeated_blocks_node_with_invalid_type():
+    """Test RepeatedBlocksNode with invalid block type raises TypeError."""
+    repeated = RepeatedBlocksNode("not a callable or computation", keys=("a",))
+
+    outer_comp = Computation()
+    with pytest.raises(TypeError, match="must be callable or Computation"):
+        repeated.add_to_comp(outer_comp, "blocks", None, ignore_self=True)
 
 
 def test_block_add_to_comp():

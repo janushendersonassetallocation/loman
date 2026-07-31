@@ -10,8 +10,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from loman import Computation, ComputationFactory, SerializationError, States, calc_node, input_node
+from loman import (
+    C,
+    Computation,
+    ComputationFactory,
+    FanIn,
+    FanOut,
+    IdNode,
+    SerializationError,
+    States,
+    calc_node,
+    input_node,
+    util,
+)
 from loman.computeengine import NodeData
+from loman.consts import NodeAttributes
 from loman.nodekey import NodeKey, parse_nodekey
 from loman.serialization import (
     ComputationSerializer,
@@ -604,6 +617,161 @@ def test_serialize_nested_loman_with_unserializable_nodes():
 
     assert outer2.v.COMP.v.a == outer.v.COMP.v.a
     assert outer2.v.out == outer.v.out
+
+
+def _apply_it(x, f):
+    """Apply a constant callable to a node value."""
+    return f(x)
+
+
+def _select_and_scale(values, key):
+    """Pick one keyed value and scale it."""
+    return values[key] * 10
+
+
+def _sum_values(values):
+    """Total a keyed mapping of values."""
+    return sum(values.values())
+
+
+def _add(a, b):
+    """Add two values."""
+    return a + b
+
+
+def _times_three(v):
+    """Multiply by three."""
+    return v * 3
+
+
+class TestConstantArguments:
+    """Tests that constant arguments survive a JSON roundtrip.
+
+    Arguments taken from other nodes are recorded on edges, but arguments given as
+    ``C(...)`` live on the node. Both are needed to call the function, so dropping
+    the constants leaves a graph that looks fine until something recalculates.
+    """
+
+    def test_constant_argument_survives_roundtrip(self):
+        """Recompute correctly after a roundtrip, using the restored constant."""
+        comp = Computation()
+        comp.add_node("x", value=10)
+        comp.add_node("y", _add, args=["x", C(5)], inspect=False)
+        comp.compute_all()
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.v.y == 15
+        restored.insert("x", 100)
+        restored.compute_all()
+        assert restored.state("y") == States.UPTODATE
+        assert restored.v.y == 105
+
+    def test_constant_keyword_argument_survives_roundtrip(self):
+        """Restore constants passed by keyword as well as by position."""
+        comp = Computation()
+        comp.add_node("x", value=10)
+        comp.add_node("y", _add, kwds={"a": "x", "b": C(7)})
+        comp.compute_all()
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        restored.insert("x", 1)
+        restored.compute_all()
+        assert restored.v.y == 8
+
+    def test_repeated_blocks_recompute_after_roundtrip(self):
+        """Roundtrip a generated fan-out and fan-in graph and recalculate it."""
+        block = Computation()
+        block.add_node("data")
+        comp = Computation()
+        comp.add_node("prices", value={"a": 1, "b": 2})
+        util.RepeatedBlocks(
+            block,
+            ("a", "b"),
+            "blocks",
+            features=[
+                IdNode("label"),
+                FanOut("prices", "data", transform=_select_and_scale),
+                FanIn("data", "all_data", combine=_sum_values),
+            ],
+        ).add_to(comp)
+        comp.compute_all()
+        assert comp.v.all_data == 30
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.v.all_data == 30
+        assert restored.v["blocks/a/label"] == "a"
+        restored.insert("prices", {"a": 5, "b": 7})
+        restored.compute_all()
+        assert restored.v.all_data == 120
+
+    def test_unserializable_constant_raises(self):
+        """Refuse to save a constant that cannot be restored."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(lambda v: v * 3)], inspect=False)
+
+        with pytest.raises(SerializationError, match="Cannot serialize constant argument 1"):
+            ComputationSerializer().dumps(comp)
+
+    def test_unserializable_constant_type_raises(self):
+        """Name the offending constant when its type has no transformer."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C({1, 2})], inspect=False)
+
+        with pytest.raises(SerializationError, match="Cannot serialize constant argument 1"):
+            ComputationSerializer().dumps(comp)
+
+    def test_dill_serializes_a_callable_constant(self):
+        """Serialize a lambda constant when dill is enabled."""
+        comp = Computation()
+        comp.add_node("x", value=2)
+        comp.add_node("y", _apply_it, args=["x", C(_times_three)], inspect=False)
+        comp.compute_all()
+
+        serializer = ComputationSerializer(use_dill_for_functions=True)
+        restored = serializer.loads(serializer.dumps(comp))
+
+        restored.insert("x", 5)
+        restored.compute_all()
+        assert restored.v.y == 15
+
+    def test_constants_are_skipped_for_unserialized_nodes(self):
+        """Leave constants out for a node whose function is not serialized."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(lambda v: v)], inspect=False, serialize=False)
+
+        payload = json.loads(ComputationSerializer().dumps(comp))
+
+        node = next(n for n in payload["nodes"] if n["key"] == "y")
+        assert node["args"] == {}
+        assert node["func"] is None
+
+    def test_version_one_files_without_constants_still_load(self):
+        """Read a file written before constants were recorded."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _add, args=["x", C(2)], inspect=False)
+        comp.compute_all()
+        serializer = ComputationSerializer()
+
+        payload = json.loads(serializer.dumps(comp))
+        payload["version"] = 1
+        for node in payload["nodes"]:
+            node.pop("args", None)
+            node.pop("kwds", None)
+
+        restored = serializer.loads(json.dumps(payload))
+
+        assert restored.v.y == 3
+        assert restored.dag.nodes[parse_nodekey("y")][NodeAttributes.ARGS] == {}
 
 
 class TestTransformer:
