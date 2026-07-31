@@ -88,6 +88,7 @@ nav:
       - Portfolio: notebooks/portfolio.html
       - Serialization: notebooks/serialization.html
       - Validation and Planning: notebooks/validation_and_planning.html
+      - Live Computation Widget: notebooks/ui_widget.html
   - Reports:
       - Overview: reports.md
       - Test Report: reports/html-report/report.html

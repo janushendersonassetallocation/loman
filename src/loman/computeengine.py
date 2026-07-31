@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, TextIO, TypeVar, overload
 
 if TYPE_CHECKING:
     from .serialization.computation import ComputationSerializer
+    from .ui import ComputationWidget
 
 import decorator
 import dill  # nosec B403
@@ -67,6 +68,51 @@ class TimingData:
     start: datetime
     end: datetime
     duration: float
+
+
+@dataclass(frozen=True)
+class ComputationEvent:
+    """A batched notification describing a mutation to a computation.
+
+    Subscribers receive one event after each outermost public mutation, even
+    when that operation performs many internal state transitions.  Values are
+    deliberately excluded: consumers can fetch a changed value lazily from the
+    computation without copying large objects into every event.
+    """
+
+    computation: "Computation"
+    revision: int
+    changed_nodes: frozenset[NodeKey]
+    states: Mapping[NodeKey, States]
+    graph_changed: bool = False
+
+
+ComputationSubscriber = Callable[[ComputationEvent], None]
+
+
+def _notifies_subscribers(*, graph_changed: bool = False) -> Callable[[F], F]:
+    """Batch changes made by a public mutation and notify on completion."""
+
+    def decorate(method: F) -> F:
+        @functools.wraps(method)
+        def wrapped(self: "Computation", *args: Any, **kwargs: Any) -> Any:
+            before_nodes = set(self.dag.nodes) if graph_changed else set()
+            self._change_depth += 1
+            try:
+                result = method(self, *args, **kwargs)
+                if graph_changed:
+                    self._pending_graph_changed = True
+                    self._pending_changed_nodes.update(before_nodes)
+                    self._pending_changed_nodes.update(self.dag.nodes)
+                return result
+            finally:
+                self._change_depth -= 1
+                if self._change_depth == 0:
+                    self._publish_pending_event()
+
+        return wrapped  # type: ignore[return-value]
+
+    return decorate
 
 
 class _ParameterType(Enum):
@@ -375,6 +421,61 @@ class Computation:
         self.src = self.get_attribute_view_for_path(NodeKey.root(), self.print_source, self.print_source)
         self._tag_map: defaultdict[str, set[NodeKey]] = defaultdict(set)
         self._state_map: dict[States, set[NodeKey]] = {state: set() for state in States}
+        self._subscribers: set[ComputationSubscriber] = set()
+        self._revision = 0
+        self._change_depth = 0
+        self._pending_changed_nodes: set[NodeKey] = set()
+        self._pending_graph_changed = False
+
+    @property
+    def revision(self) -> int:
+        """Return the revision number of the most recently published change."""
+        return self._revision
+
+    def subscribe(self, callback: ComputationSubscriber) -> Callable[[], None]:
+        """Subscribe to batched computation changes.
+
+        Callbacks run synchronously on the thread that completes the public
+        mutation.  Callback failures are logged and do not interrupt the
+        computation.  The returned function removes the subscription.
+
+        :param callback: Function accepting a :class:`ComputationEvent`.
+        :return: A no-argument unsubscribe function.
+        """
+        if not callable(callback):
+            msg = "callback must be callable"
+            raise TypeError(msg)
+        self._subscribers.add(callback)
+
+        def unsubscribe() -> None:
+            self._subscribers.discard(callback)
+
+        return unsubscribe
+
+    def _mark_changed(self, *node_keys: NodeKey) -> None:
+        """Record nodes changed by the current public mutation."""
+        self._pending_changed_nodes.update(node_keys)
+
+    def _publish_pending_event(self) -> None:
+        """Publish and clear the currently batched mutation event."""
+        if not self._pending_changed_nodes and not self._pending_graph_changed:
+            return
+        changed_nodes = frozenset(self._pending_changed_nodes)
+        graph_changed = self._pending_graph_changed
+        self._pending_changed_nodes.clear()
+        self._pending_graph_changed = False
+        self._revision += 1
+        states = {
+            node_key: self.dag.nodes[node_key][NodeAttributes.STATE]
+            for node_key in changed_nodes
+            if node_key in self.dag
+        }
+        event = ComputationEvent(self, self._revision, changed_nodes, states, graph_changed)
+        for callback in tuple(self._subscribers):
+            try:
+                callback(event)
+            except Exception:
+                LOG.exception("Computation subscriber failed at revision %s", self._revision)
 
     def get_attribute_view_for_path(
         self, nodekey: NodeKey, get_one_func: Callable[[Name], Any], get_many_func: Callable[[Name | Names], Any]
@@ -483,6 +584,7 @@ class Computation:
                         self._state_map[States.PLACEHOLDER].add(in_node_key)
                 self.dag.add_edge(in_node_key, node_key, **{EdgeAttributes.PARAM: (_ParameterType.KWD, param_name)})
 
+    @_notifies_subscribers(graph_changed=True)
     def add_node(
         self,
         name: Name,
@@ -598,6 +700,7 @@ class Computation:
         self.dag.nodes[node_key][NodeAttributes.TAG].add(tag)
         self._tag_map[tag].add(node_key)
 
+    @_notifies_subscribers(graph_changed=True)
     def set_tag(self, name: Name | Names, tag: str | Iterable[str]) -> None:
         """Set tags on a node or nodes. Ignored if tags are already set.
 
@@ -612,6 +715,7 @@ class Computation:
         self.dag.nodes[node_key][NodeAttributes.TAG].discard(tag)
         self._tag_map[tag].discard(node_key)
 
+    @_notifies_subscribers(graph_changed=True)
     def clear_tag(self, name: Name | Names, tag: str | Iterable[str]) -> None:
         """Clear tag on a node or nodes. Ignored if tags are not set.
 
@@ -625,6 +729,7 @@ class Computation:
         node_key = to_nodekey(name)
         self.dag.nodes[node_key][NodeAttributes.STYLE] = style
 
+    @_notifies_subscribers(graph_changed=True)
     def set_style(self, name: Name | Names, style: str) -> None:
         """Set styles on a node or nodes.
 
@@ -638,6 +743,7 @@ class Computation:
         node_key = to_nodekey(name)
         self.dag.nodes[node_key][NodeAttributes.STYLE] = None
 
+    @_notifies_subscribers(graph_changed=True)
     def clear_style(self, name: Name | Names) -> None:
         """Clear style on a node or nodes.
 
@@ -657,6 +763,7 @@ class Computation:
             msg = f"Node {node_key} does not exist."
             raise NonExistentNodeException(msg)
 
+    @_notifies_subscribers(graph_changed=True)
     def delete_node(self, name: Name) -> None:
         """Delete a node from a computation.
 
@@ -688,6 +795,7 @@ class Computation:
         else:
             self._set_state(node_key, States.PLACEHOLDER)
 
+    @_notifies_subscribers(graph_changed=True)
     def rename_node(self, old_name: Name | Mapping[Name, Name], new_name: Name | None = None) -> None:
         """Rename a node in a computation.
 
@@ -730,6 +838,7 @@ class Computation:
 
         self._refresh_maps()
 
+    @_notifies_subscribers(graph_changed=True)
     def repoint(self, old_name: Name, new_name: Name) -> None:
         """Changes all nodes that use old_name as an input to use new_name instead.
 
@@ -763,6 +872,7 @@ class Computation:
         for n in changed_names:
             self.set_stale(n)
 
+    @_notifies_subscribers()
     def insert(self, name: Name, value: Any, force: bool = False) -> None:
         """Insert a value into a node of a computation.
 
@@ -797,6 +907,7 @@ class Computation:
         for n in self.dag.successors(node_key):
             self._try_set_computable(n)
 
+    @_notifies_subscribers()
     def insert_many(self, name_value_pairs: Iterable[tuple[Name, object]]) -> None:
         """Insert values into many nodes of a computation simultaneously.
 
@@ -833,6 +944,7 @@ class Computation:
         for name in computable:
             self._try_set_computable(name)
 
+    @_notifies_subscribers()
     def insert_from(self, other: "Computation", nodes: Iterable[Name] | None = None) -> None:
         """Insert values into another Computation object into this Computation object.
 
@@ -856,6 +968,7 @@ class Computation:
         self._state_map[old_state].remove(node_key)
         node[NodeAttributes.STATE] = state
         self._state_map[state].add(node_key)
+        self._mark_changed(node_key)
 
     def _set_state_and_value(
         self, node_key: NodeKey, state: States, value: object, *, throw_conversion_exception: bool = True
@@ -889,16 +1002,20 @@ class Computation:
         node[NodeAttributes.STATE] = state
         node[NodeAttributes.VALUE] = value
         self._state_map[state].add(node_key)
+        self._mark_changed(node_key)
 
     def _set_states(self, node_keys: Iterable[NodeKey], state: States) -> None:
         """Set the state of multiple nodes at once."""
+        node_keys = tuple(node_keys)
         for name in node_keys:
             node = self.dag.nodes[name]
             old_state = node[NodeAttributes.STATE]
             self._state_map[old_state].remove(name)
             node[NodeAttributes.STATE] = state
         self._state_map[state].update(node_keys)
+        self._mark_changed(*node_keys)
 
+    @_notifies_subscribers()
     def set_stale(self, name: Name) -> None:
         """Set the state of a node and all its dependencies to STALE.
 
@@ -910,6 +1027,7 @@ class Computation:
         self._set_states(node_keys, States.STALE)
         self._try_set_computable(node_key)
 
+    @_notifies_subscribers()
     def pin(self, name: Name, value: Any = None) -> None:
         """Set the state of a node to PINNED.
 
@@ -922,6 +1040,7 @@ class Computation:
             self.insert(node_key, value)
         self._set_states([node_key], States.PINNED)
 
+    @_notifies_subscribers()
     def unpin(self, name: Name) -> None:
         """Unpin a node (state of node and all descendents will be set to STALE).
 
@@ -1161,6 +1280,7 @@ class Computation:
         node_key = to_nodekey(name)
         return node_keys_to_names(self._get_calc_node_keys(node_key))
 
+    @_notifies_subscribers()
     def compute(self, name: Name | Iterable[Name], raise_exceptions: bool = False) -> None:
         """Compute a node or block and all necessary predecessors.
 
@@ -1195,6 +1315,7 @@ class Computation:
                 calc_nodes.update(self._get_calc_node_keys(target))
         self._compute_nodes(calc_nodes, raise_exceptions=raise_exceptions)
 
+    @_notifies_subscribers()
     def compute_all(self, raise_exceptions: bool = False) -> None:
         """Compute all nodes of a computation that can be computed.
 
@@ -1644,6 +1765,7 @@ class Computation:
         """Print the source code for a computation node."""
         print(self.get_source(name))
 
+    @_notifies_subscribers(graph_changed=True)
     def restrict(self, output_names: Name | Names, input_names: Name | Names | None = None) -> None:
         """Restrict a computation to the ancestors of a set of output nodes.
 
@@ -1819,6 +1941,7 @@ class Computation:
         obj._state_map = {state: nodes.copy() for state, nodes in self._state_map.items()}
         return obj
 
+    @_notifies_subscribers(graph_changed=True)
     def add_named_tuple_expansion(self, name: Name, namedtuple_type: type, group: str | None = None) -> None:
         """Automatically add nodes to extract each element of a named tuple type.
 
@@ -1865,6 +1988,7 @@ class Computation:
             self.add_node(node_name, make_f(field_name), kwds={"tuple_val": name}, group=group)
             self.set_tag(node_name, SystemTags.EXPANSION)
 
+    @_notifies_subscribers(graph_changed=True)
     def add_map_node(
         self,
         result_node: Name,
@@ -1913,6 +2037,7 @@ class Computation:
         nk = to_nodekey(path)
         return prefix_path.join(nk)
 
+    @_notifies_subscribers(graph_changed=True)
     def add_block(
         self,
         base_path: Name,
@@ -1972,6 +2097,7 @@ class Computation:
             if base_path_nk in self._metadata:
                 del self._metadata[base_path_nk]
 
+    @_notifies_subscribers(graph_changed=True)
     def link(self, target: Name, source: Name) -> None:
         """Create a link between two nodes in the computation graph."""
         target_nk = to_nodekey(target)
@@ -2034,6 +2160,46 @@ class Computation:
         )
         return v
 
+    def widget(
+        self,
+        root: NodeKey | None = None,
+        *,
+        node_transformations: dict[Name, str] | None = None,
+        cmap: Any = None,
+        colors: str = "state",
+        shapes: str | None = None,
+        graph_attr: dict[str, Any] | None = None,
+        node_attr: dict[str, Any] | None = None,
+        edge_attr: dict[str, Any] | None = None,
+        show_expansion: bool = False,
+        collapse_all: bool = True,
+        editable: bool = True,
+    ) -> "ComputationWidget":
+        """Create an interactive notebook widget for this computation.
+
+        The ``ui`` extra is imported lazily, so ordinary use of Loman does not
+        load AnyWidget or its notebook dependencies.
+
+        :param editable: Allow scalar input editing and computation controls.
+        :return: A live widget subscribed to this computation.
+        """
+        from .ui import ComputationWidget
+
+        return ComputationWidget(
+            self,
+            root=root,
+            node_transformations=node_transformations,
+            cmap=cmap,
+            colors=colors,
+            shapes=shapes,
+            graph_attr=graph_attr,
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+            show_expansion=show_expansion,
+            collapse_all=collapse_all,
+            editable=editable,
+        )
+
     def view(self, cmap: Any = None, colors: str = "state", shapes: str | None = None) -> None:
         """Create and display a visualization of the computation graph."""
         node_formatter = NodeFormatter.create(cmap, colors, shapes)
@@ -2058,6 +2224,7 @@ class Computation:
         populate_computation_from_class(comp, definition_class, obj, ignore_self=ignore_self)
         return comp
 
+    @_notifies_subscribers()
     def inject_dependencies(self, dependencies: dict[Name, Any], *, force: bool = False) -> None:
         """Injects dependencies into the nodes of the current computation where nodes are in a placeholder state.
 

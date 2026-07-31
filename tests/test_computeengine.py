@@ -17,6 +17,7 @@ from loman import (
     C,
     CannotInsertToPlaceholderNodeError,
     Computation,
+    ComputationEvent,
     ComputationFactory,
     LoopDetectedError,
     MapError,
@@ -42,6 +43,70 @@ from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
 from loman.nodekey import to_nodekey
 from loman.visualization import GraphView
 from tests.conftest import BasicFourNodeComputation
+
+
+def test_computation_subscription_batches_public_mutations():
+    """Subscribers receive one useful event per outermost mutation."""
+    comp = Computation()
+    events: list[ComputationEvent] = []
+    unsubscribe = comp.subscribe(events.append)
+
+    comp.add_node("a", value=1)
+    assert len(events) == 1
+    assert events[0].revision == 1
+    assert events[0].graph_changed
+    assert events[0].states[to_nodekey("a")] == States.UPTODATE
+
+    comp.add_node("b", lambda a: a + 1)
+    events.clear()
+    comp.insert("a", 2)
+    assert len(events) == 1
+    assert not events[0].graph_changed
+    assert events[0].changed_nodes == {to_nodekey("a"), to_nodekey("b")}
+    assert events[0].states[to_nodekey("b")] == States.COMPUTABLE
+
+    events.clear()
+    comp.compute_all()
+    assert len(events) == 1
+    assert events[0].states[to_nodekey("b")] == States.UPTODATE
+
+    unsubscribe()
+    comp.insert("a", 3)
+    assert len(events) == 1
+
+
+def test_computation_subscription_nested_mutation_emits_once():
+    """Nested public mutations, such as pin calling insert, stay batched."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+
+    comp.pin("a", 2)
+
+    assert len(events) == 1
+    assert events[0].states[to_nodekey("a")] == States.PINNED
+
+
+def test_computation_subscriber_failure_does_not_break_mutation(caplog):
+    """A broken observer cannot break the computation it observes."""
+    comp = Computation()
+
+    def broken(_event):
+        raise RuntimeError
+
+    comp.subscribe(broken)
+    comp.add_node("a", value=1)
+
+    assert comp.value("a") == 1
+    assert "RuntimeError" in caplog.text
+
+
+def test_computation_subscribe_rejects_non_callable():
+    """Subscription failures are reported at registration time."""
+    comp = Computation()
+    with pytest.raises(TypeError, match="callback must be callable"):
+        comp.subscribe(None)  # type: ignore[arg-type]
 
 
 def test_basic():

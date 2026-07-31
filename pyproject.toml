@@ -31,6 +31,12 @@ dependencies = [
     "attrs >= 25.0"
 ]
 
+[project.optional-dependencies]
+ui = [
+    "anywidget>=0.9",
+    "traitlets>=5.14",
+]
+
 [dependency-groups]
 dev = [
     "ruff>=0.12.0",
@@ -54,6 +60,8 @@ marimo = "marimo"
 pandas = "pandas"
 scipy = "scipy"
 attrs = "attrs"
+anywidget = "anywidget"
+traitlets = "traitlets"
 numpy = "numpy"
 mypy = "mypy"
 ruff = "ruff"

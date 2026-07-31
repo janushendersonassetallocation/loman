@@ -326,6 +326,9 @@ class GraphView:
     struct_dag: nx.DiGraph | None = None
     viz_dag: nx.DiGraph | None = None
     viz_dot: pydotplus.Dot | None = None
+    original_nodes: defaultdict[NodeKey, list[NodeKey]] = field(default_factory=lambda: defaultdict(list), init=False)
+    composite_nodes: set[NodeKey] = field(default_factory=set, init=False)
+    node_index_map: dict[NodeKey, str] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         """Initialize the graph view after dataclass construction."""
@@ -426,14 +429,24 @@ class GraphView:
         return node_transformations
 
     def _create_visualization_dag(
-        self, original_nodes: defaultdict[NodeKey, list[NodeKey]], composite_nodes: set[NodeKey]
+        self,
+        original_nodes: defaultdict[NodeKey, list[NodeKey]],
+        composite_nodes: set[NodeKey],
+        node_index_map: dict[NodeKey, str],
     ) -> nx.DiGraph:
         """Create the visualization DAG from structure and node data."""
         node_formatter = self.node_formatter
         if node_formatter is None:
             node_formatter = NodeFormatter.create()
         assert self.struct_dag is not None  # noqa: S101
-        return create_viz_dag(self.struct_dag, self.computation.dag, node_formatter, original_nodes, composite_nodes)
+        return create_viz_dag(
+            self.struct_dag,
+            self.computation.dag,
+            node_formatter,
+            original_nodes,
+            composite_nodes,
+            node_index_map=node_index_map,
+        )
 
     def _create_dot_graph(self) -> pydotplus.Dot:
         """Create a PyDot graph from the visualization DAG."""
@@ -442,10 +455,11 @@ class GraphView:
     def refresh(self) -> None:
         """Refresh the visualization by rebuilding the graph structure."""
         node_transformations = self._initialize_transforms()
-        self.struct_dag, original_nodes, composite_nodes = self.get_sub_block(
+        self.struct_dag, self.original_nodes, self.composite_nodes = self.get_sub_block(
             self.computation.dag, self.root, node_transformations
         )
-        self.viz_dag = self._create_visualization_dag(original_nodes, composite_nodes)
+        self.node_index_map = {}
+        self.viz_dag = self._create_visualization_dag(self.original_nodes, self.composite_nodes, self.node_index_map)
         self.viz_dot = self._create_dot_graph()
 
     def svg(self) -> str | None:
@@ -476,6 +490,7 @@ def create_viz_dag(
     node_formatter: NodeFormatter,
     original_nodes: defaultdict[NodeKey, list[NodeKey]],
     composite_nodes: set[NodeKey],
+    node_index_map: dict[NodeKey, str] | None = None,
 ) -> nx.DiGraph:
     """Create a visualization DAG from the computation structure."""
     if node_formatter is not None:
@@ -488,7 +503,8 @@ def create_viz_dag(
         node_formatter.calibrate(nodes)
 
     viz_dag: nx.DiGraph = nx.DiGraph()
-    node_index_map: dict[NodeKey, str] = {}
+    if node_index_map is None:
+        node_index_map = {}
     for i, nodekey in enumerate(struct_dag.nodes):
         short_name = f"n{i}"
         attr_dict: dict[str, Any] | None = None

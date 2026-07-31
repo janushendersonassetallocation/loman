@@ -176,6 +176,34 @@ def test_simple():
     assert node["d"]["attributes"]["style"] == "filled"
 
 
+def test_graph_view_exposes_lossless_widget_identity_maps():
+    """Rendered IDs remain distinct for node names with identical labels."""
+    comp = Computation()
+    comp.add_node(1, value="integer")
+    comp.add_node("1", value="string")
+
+    view = comp.draw(collapse_all=False)
+
+    integer_key = to_nodekey(1)
+    string_key = to_nodekey("1")
+    assert view.node_index_map[integer_key] != view.node_index_map[string_key]
+    assert view.original_nodes[integer_key] == [integer_key]
+    assert view.original_nodes[string_key] == [string_key]
+    assert view.composite_nodes == set()
+
+
+def test_graph_view_exposes_collapsed_composite_members():
+    """A composite rendered node maps back to every original member."""
+    comp = create_example_block_computation()
+
+    view = comp.draw()
+
+    foo = to_nodekey("foo")
+    assert foo in view.composite_nodes
+    assert {str(node) for node in view.original_nodes[foo]} == {"foo/a", "foo/b", "foo/c", "foo/d"}
+    assert view.node_index_map[foo].startswith("n")
+
+
 def test_with_groups():
     """Test with groups."""
     comp = Computation()
