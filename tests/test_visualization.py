@@ -34,6 +34,7 @@ from loman.visualization import (
     StandardStylingOverrides,
     create_root_graph,
     create_subgraph,
+    create_viz_dag,
 )
 from tests.conftest import (
     BasicFourNodeComputation,
@@ -1320,3 +1321,20 @@ class TestVisualizationVizDagFormatterNone:
         # Should still produce valid SVG
         svg = v.svg()
         assert svg is not None
+
+    def test_create_viz_dag_without_an_index_map(self):
+        """Callers that do not need node identity may omit the out-parameter."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        view = comp.draw(collapse_all=False)
+
+        viz_dag = create_viz_dag(
+            view.struct_dag,
+            comp.dag,
+            NodeFormatter.create(),
+            view.original_nodes,
+            view.composite_nodes,
+        )
+
+        assert set(viz_dag.nodes) == {"n0", "n1"}

@@ -30,7 +30,10 @@
   height: clamp(320px, 45vh, 480px);
   min-height: 0;
 }
-.loman-graph { overflow: auto; padding: 0.75rem; min-width: 0; min-height: 0; }
+/* Graphviz paints its own white background into the SVG, and the node labels
+   are black, so the canvas stays light in both themes. Matching the pane to it
+   keeps that deliberate rather than leaving a white island in a dark widget. */
+.loman-graph { overflow: auto; padding: 0.75rem; min-width: 0; min-height: 0; background: #ffffff; }
 .loman-graph svg { display: block; width: 100%; height: 100%; max-width: none; }
 .loman-graph g.node { cursor: pointer; outline: none; }
 .loman-graph g.node.loman-composite { cursor: zoom-in; }
@@ -55,4 +58,6 @@
 
 @media (prefers-color-scheme: dark) {
   .loman-widget { --loman-border: #475569; --loman-panel: #1e293b; --loman-text: #e2e8f0; }
+  .loman-graph { border-right: 1px solid var(--loman-border); }
+  .loman-error { color: #fca5a5; }
 }

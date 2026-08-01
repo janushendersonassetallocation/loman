@@ -1,7 +1,10 @@
 """Tests for the core computation engine."""
 
+import gc
 import io
+import itertools
 import random
+import time
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -107,6 +110,196 @@ def test_computation_subscribe_rejects_non_callable():
     comp = Computation()
     with pytest.raises(TypeError, match="callback must be callable"):
         comp.subscribe(None)  # type: ignore[arg-type]
+
+
+def test_computation_without_subscribers_does_not_track_changes():
+    """The notification machinery costs nothing when nobody is listening.
+
+    Building a graph node by node is the hot path here: snapshotting the node
+    set on every structural call once made construction quadratic.
+    """
+    comp = Computation()
+    comp.add_node("a", value=1)
+    comp.compute_all()
+
+    assert comp._pending_changed_nodes == set()
+    assert comp._pending_graph_changed is False
+    assert comp.revision == 0
+
+
+def test_computation_graph_construction_stays_linear():
+    """Adding N nodes must not cost O(N^2), with or without a subscriber."""
+    small, large = 200, 800
+
+    def build(n: int) -> float:
+        comp = Computation()
+        comp.subscribe(lambda _event: None)
+        comp.add_node("x", value=1)
+        start = time.perf_counter()
+        for i in range(n):
+            comp.add_node(f"n{i}", lambda x: x, kwds={"x": "x"})
+        return time.perf_counter() - start
+
+    ratio = build(large) / max(build(small), 1e-6)
+
+    # Linear work would give a ratio near 4 for a 4x larger graph; the old
+    # quadratic implementation gave roughly 16. Allow generous headroom for a
+    # loaded CI machine while still failing if the quadratic term returns.
+    assert ratio < 10, f"graph construction scaled {ratio:.1f}x for a 4x larger graph"
+
+
+def test_computation_subscribers_are_notified_in_registration_order():
+    """Ordering is part of the contract, so the store cannot be a set."""
+    comp = Computation()
+    order: list[int] = []
+    for index in range(5):
+        comp.subscribe(lambda _event, index=index: order.append(index))
+
+    comp.add_node("a", value=1)
+
+    assert order == [0, 1, 2, 3, 4]
+
+
+def test_computation_unsubscribe_is_idempotent():
+    """Calling the returned function twice removes one subscription, not two."""
+    comp = Computation()
+    seen: list[int] = []
+    unsubscribe_first = comp.subscribe(lambda _event: seen.append(1))
+    comp.subscribe(lambda _event: seen.append(2))
+
+    unsubscribe_first()
+    unsubscribe_first()
+    comp.add_node("a", value=1)
+
+    assert seen == [2]
+
+
+def test_computation_holds_bound_methods_weakly():
+    """Subscribing obj.handler must not keep obj alive for ever."""
+
+    class Watcher:
+        """Records the events it is sent."""
+
+        def __init__(self):
+            """Start with nothing seen."""
+            self.seen = 0
+
+        def on_event(self, _event):
+            """Count one event."""
+            self.seen += 1
+
+    comp = Computation()
+    watcher = Watcher()
+    comp.subscribe(watcher.on_event)
+    comp.add_node("a", value=1)
+    assert watcher.seen == 1
+
+    del watcher
+    gc.collect()
+    comp.add_node("b", value=2)
+
+    assert comp._subscriptions == []
+
+
+def test_computation_holds_plain_functions_strongly():
+    """A caller who keeps no reference to their lambda still gets events."""
+    comp = Computation()
+    seen: list[int] = []
+    comp.subscribe(lambda event: seen.append(event.revision))
+
+    gc.collect()
+    comp.add_node("a", value=1)
+
+    assert seen == [1]
+
+
+def test_computation_event_is_immutable():
+    """Consumers cannot corrupt an event and affect anyone else's copy."""
+    comp = Computation()
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+    comp.add_node("a", value=1)
+
+    event = events[0]
+    with pytest.raises(TypeError):
+        event.states[to_nodekey("a")] = States.ERROR  # type: ignore[index]
+    with pytest.raises(AttributeError):
+        event.revision = 99  # type: ignore[misc]
+    assert isinstance(event.changed_nodes, frozenset)
+
+
+def test_computation_subscriber_mutation_publishes_a_further_event():
+    """A subscriber that reacts by mutating still produces an observable event."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    comp.add_node("b", lambda a: a + 1)
+    revisions: list[int] = []
+    computed_once = []
+
+    def compute_on_change(event):
+        """Compute the graph the first time an input changes."""
+        revisions.append(event.revision)
+        if not computed_once:
+            computed_once.append(True)
+            comp.compute_all()
+
+    comp.subscribe(compute_on_change)
+    comp.insert("a", 2)
+
+    assert len(revisions) == 2
+    assert revisions == [comp.revision - 1, comp.revision]
+    assert comp.value("b") == 3
+
+
+def test_computation_runaway_subscriber_is_stopped(caplog):
+    """A subscriber that always mutates must not recurse or spin for ever."""
+    comp = Computation()
+    comp.add_node("a", value=0)
+    counter = itertools.count(1)
+
+    def always_mutates(_event):
+        """Insert a genuinely new value on every notification."""
+        comp.insert("a", next(counter) + 100)
+
+    comp.subscribe(always_mutates)
+    comp.insert("a", 1)
+
+    assert "discarding further notifications" in caplog.text
+    assert comp._pending_changed_nodes == set()
+
+
+def test_computation_structural_events_report_the_nodes_they_touch():
+    """Deleting and renaming name the nodes involved, not the whole graph."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    comp.add_node("b", value=2)
+    comp.add_node("c", value=3)
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+
+    comp.delete_node("c")
+    assert events[-1].graph_changed
+    assert events[-1].changed_nodes == {to_nodekey("c")}
+    assert to_nodekey("c") not in events[-1].states
+
+    comp.rename_node("a", "z")
+    assert events[-1].changed_nodes == {to_nodekey("a"), to_nodekey("z")}
+    assert events[-1].states[to_nodekey("z")] == States.UPTODATE
+
+
+def test_computation_copy_does_not_carry_subscriptions():
+    """A copy is a new object; observers of the original must not follow it."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+    events.clear()
+
+    duplicate = comp.copy()
+    duplicate.insert("a", 2)
+
+    assert events == []
+    assert duplicate._subscriptions == []
 
 
 def test_basic():

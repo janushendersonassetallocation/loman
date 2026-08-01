@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from collections import deque
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -16,13 +19,30 @@ from .value import from_wire
 from .viewmodel import build_detail, node_states, state_colors
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from loman.computeengine import Computation
     from loman.visualization import GraphView
 
+LOG = logging.getLogger("loman.ui.widget")
 
 _STATIC = Path(__file__).parent / "static"
+
+#: How many recent browser request IDs to remember. Requests carry a nonce so
+#: that repeating an identical action still registers as a trait change; keeping
+#: the recent ones lets a widget ignore a request a reconnecting or replayed
+#: front-end model pushes back at it. Small on purpose: this guards against
+#: accidental replay, not against a determined caller.
+_REQUEST_HISTORY = 64
+
+#: Default ceiling on how many nodes one expand request may put on screen.
+#: Graphviz output measures at roughly 0.6 KiB and 0.6 ms of ``dot`` time per
+#: rendered node, both linear, so 500 nodes is about 300 KiB and a third of a
+#: second per relayout --- slow but usable. Beyond that a single click can hang
+#: the kernel for seconds and push a megabyte at the browser, so opening a block
+#: that large is refused rather than merely sluggish. Raise it with
+#: ``max_rendered_nodes=`` if you know what you are asking for.
+DEFAULT_MAX_RENDERED_NODES = 500
 
 
 class _DrawOptions(TypedDict):
@@ -39,7 +59,28 @@ class _DrawOptions(TypedDict):
 
 
 class ComputationWidget(anywidget.AnyWidget):
-    """Interactive graph view that automatically follows a computation."""
+    """Interactive graph view that automatically follows a computation.
+
+    The widget subscribes to its computation and repaints as that computation
+    changes. It navigates and lightly controls; the real object stays in Python,
+    so ``comp.v[widget.selected_name]`` remains the way to get at a value.
+
+    Two costs are worth knowing about:
+
+    * Computation happens synchronously in the kernel, inside the observer that
+      handles the request. A slow graph freezes the widget, so drive long
+      computations from an ordinary cell and let the widget observe the result.
+    * With the default ``colors="state"`` a state change repaints existing SVG
+      shapes in place. Any other colouring, such as ``colors="timing"``, depends
+      on values rather than states, so every mutation re-runs Graphviz --- one
+      ``dot`` subprocess per change.
+
+    On lifetime: the computation subscribes to a bound method and so holds only
+    a weak reference, meaning it never keeps a widget alive by itself. ipywidgets
+    is the one that does --- it registers every open widget in a process-wide
+    table until the widget is closed. Call :meth:`close` when you are finished
+    with a widget; that both unsubscribes it and releases it.
+    """
 
     _esm = _STATIC / "widget.js"
     _css = _STATIC / "widget.css"
@@ -74,8 +115,20 @@ class ComputationWidget(anywidget.AnyWidget):
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        max_rendered_nodes: int = DEFAULT_MAX_RENDERED_NODES,
     ) -> None:
-        """Create a widget and subscribe it to ``computation``."""
+        """Create a widget and subscribe it to ``computation``.
+
+        Arguments other than ``editable`` and ``max_rendered_nodes`` mirror
+        :meth:`Computation.draw`.
+
+        :param editable: Permit scalar input edits and computation controls.
+            Expanding and collapsing blocks stays available either way, because
+            navigating a graph does not mutate it.
+        :param max_rendered_nodes: Refuse an expand request that would put more
+            than this many nodes on screen. It does not cap the initial view:
+            what you asked to draw is drawn.
+        """
         self.computation = computation
         self._root = root
         self._base_transformations = {} if node_transformations is None else node_transformations.copy()
@@ -93,6 +146,10 @@ class ComputationWidget(anywidget.AnyWidget):
         self._view: GraphView | None = None
         self._id_to_visible: dict[str, NodeKey] = {}
         self._canonical_graph_svg = ""
+        self._canonical_status = ""
+        self._seen_requests: deque[str] = deque(maxlen=_REQUEST_HISTORY)
+        self._max_rendered_nodes = max_rendered_nodes
+        self._writing = 0
         self._unsubscribe: Callable[[], None] | None = None
         super().__init__(editable=editable, repaint_states=colors == "state")
         custom_colors = cmap if colors == "state" and isinstance(cmap, dict) else None
@@ -102,7 +159,11 @@ class ComputationWidget(anywidget.AnyWidget):
 
     @property
     def selected_names(self) -> list[Name]:
-        """Return the real Loman names represented by the selected shape."""
+        """Return the real Loman names represented by the selected shape.
+
+        A collapsed block reports every member; an ordinary node reports one
+        name; nothing selected reports an empty list.
+        """
         if self._view is None:
             return []
         visible = self._id_to_visible.get(self.selected_id)
@@ -138,8 +199,38 @@ class ComputationWidget(anywidget.AnyWidget):
             **self._draw_options,
         )
 
-    def refresh(self) -> None:
-        """Force a full graph refresh, including SVG layout and node identity."""
+    @contextmanager
+    def _own_write(self) -> Iterator[None]:
+        """Mark trait writes as Python's own, so echo checking can skip them."""
+        self._writing += 1
+        try:
+            yield
+        finally:
+            self._writing -= 1
+
+    def _set_status(self, text: str) -> None:
+        """Set the status line and record it as Python's canonical value.
+
+        Status must go through here rather than being assigned directly. When
+        the browser sends a request, ipywidgets applies the whole incoming state
+        inside one ``hold_trait_notifications`` block: our observer runs and sets
+        a status, and the browser's own stale copy of ``status`` is then applied
+        on top, silently reverting it. Recording the value here lets
+        :meth:`_canonical_output_changed` put it back.
+        """
+        self._canonical_status = text
+        with self._own_write():
+            self.status = text
+
+    def refresh(self) -> bool:
+        """Force a full graph refresh, including SVG layout and node identity.
+
+        This is the explicit escape hatch for changes the subscription cannot
+        see, such as mutating ``computation.dag`` directly.
+
+        :return: True on success. On failure the previous picture is left alone
+            and :attr:`status` explains what went wrong.
+        """
         selected_members: frozenset[NodeKey] | None = None
         if self._view is not None and self.selected_id:
             selected_visible = self._id_to_visible.get(self.selected_id)
@@ -149,39 +240,70 @@ class ComputationWidget(anywidget.AnyWidget):
             view = self._make_view()
             svg = view.svg() or ""
         except Exception as exc:
-            self.status = f"Unable to render Graphviz SVG: {exc}"
-            return
-        self._view = view
-        self._id_to_visible = {node_id: visible for visible, node_id in view.node_index_map.items()}
-        self._canonical_graph_svg = svg
-        self.node_states = node_states(view)
-        self.composite_ids = [view.node_index_map[node] for node in view.composite_nodes]
-        self.revision = self.computation.revision
-        if self.selected_id:
-            selected_visible = self._id_to_visible.get(self.selected_id)
-            refreshed_members = None if selected_visible is None else frozenset(view.original_nodes[selected_visible])
-            if refreshed_members != selected_members:
-                self.selected_id = ""
-        self.graph_svg = svg
-        self._refresh_detail()
+            # Rendering shells out to ``dot``; a missing binary, an unwriteable
+            # temp dir or a malformed attribute all surface here, and none of
+            # them should propagate out of a traitlets observer.
+            LOG.exception("Loman widget could not render the computation graph")
+            self._set_status(f"Unable to render graph: {type(exc).__name__}: {exc}")
+            return False
+        with self._own_write():
+            self._view = view
+            self._id_to_visible = {node_id: visible for visible, node_id in view.node_index_map.items()}
+            self._canonical_graph_svg = svg
+            self.node_states = node_states(view)
+            self.composite_ids = [view.node_index_map[node] for node in view.composite_nodes]
+            self.revision = self.computation.revision
+            if self.selected_id:
+                selected_visible = self._id_to_visible.get(self.selected_id)
+                refreshed = None if selected_visible is None else frozenset(view.original_nodes[selected_visible])
+                if refreshed != selected_members:
+                    # A relayout reuses rendered IDs, so the shape this ID now
+                    # names may be a different node. Drop the selection rather
+                    # than silently move it.
+                    self.selected_id = ""
+            self.graph_svg = svg
+            self._refresh_detail()
+        return True
+
+    def _detail_for(self, node_id: str) -> dict[str, Any]:
+        """Build the detail payload for one rendered node ID."""
+        if self._view is None:
+            return {}
+        return build_detail(self._view, node_id, editable=self.editable, id_to_visible=self._id_to_visible)
 
     def _refresh_detail(self) -> None:
         """Refresh the selected node's lazy detail payload."""
-        self.detail = {} if self._view is None else build_detail(self._view, self.selected_id, editable=self.editable)
+        with self._own_write():
+            self.detail = self._detail_for(self.selected_id)
 
     def _on_computation_event(self, event: ComputationEvent) -> None:
         """Apply an automatic incremental or structural computation update."""
-        if event.graph_changed or not self.repaint_states:
+        if event.graph_changed or not self.repaint_states or self._view is None:
             self.refresh()
             return
-        if self._view is None:
-            self.refresh()
-            return
-        self.node_states = node_states(self._view)
-        self.revision = event.revision
+        with self._own_write():
+            self.node_states = node_states(self._view)
+            self.revision = event.revision
         visible = self._id_to_visible.get(self.selected_id)
-        if visible is not None and set(self._view.original_nodes[visible]).intersection(event.changed_nodes):
+        if visible is not None and not set(self._view.original_nodes[visible]).isdisjoint(event.changed_nodes):
             self._refresh_detail()
+
+    def _claim_request(self, request: dict[str, Any]) -> bool:
+        """Report whether a browser request is new rather than a replay.
+
+        Every request carries a ``request_id`` nonce so that repeating the same
+        action still reads as a trait change. Remembering the recent ones stops
+        a reconnecting or recreated front-end model from re-applying an edit or
+        a compute it already had in hand.
+        """
+        request_id = request.get("request_id")
+        if request_id is None:
+            return True
+        if request_id in self._seen_requests:
+            LOG.debug("Ignoring replayed Loman widget request %s", request_id)
+            return False
+        self._seen_requests.append(request_id)
+        return True
 
     @traitlets.observe("selected_id")
     def _selected_changed(self, _change: dict[str, Any]) -> None:
@@ -189,16 +311,35 @@ class ComputationWidget(anywidget.AnyWidget):
         if hasattr(self, "_view"):
             self._refresh_detail()
 
-    @traitlets.observe("composite_ids", "detail", "graph_svg", "node_states", "revision")
+    @traitlets.observe("composite_ids", "detail", "graph_svg", "node_states", "revision", "status")
     def _canonical_output_changed(self, change: dict[str, Any]) -> None:
-        """Reject stale derived traits echoed by a reconnecting browser model."""
-        if not hasattr(self, "_view") or self._view is None:
+        """Reject stale derived traits echoed by the browser model.
+
+        These traits are Python's to own. The browser never writes them
+        deliberately, but every message it sends carries its cached copy of the
+        model, and ipywidgets applies that inside one
+        ``hold_trait_notifications`` block --- so a value the browser captured
+        before our observer ran lands *after* it, reverting the update. The same
+        thing happens on reconnect. Anything that does not match is put back.
+        """
+        if self._writing or not hasattr(self, "_canonical_status"):
             return
         name = change["name"]
+        expected: Any
+        if name == "status":
+            # Status is the one trait that still matters when rendering failed,
+            # so it is checked before the view is required to exist.
+            expected = self._canonical_status
+            if change["new"] != expected:
+                with self._own_write():
+                    self.status = expected
+            return
+        if self._view is None:
+            return
         if name == "composite_ids":
             expected = [self._view.node_index_map[node] for node in self._view.composite_nodes]
         elif name == "detail":
-            expected = build_detail(self._view, self.selected_id, editable=self.editable)
+            expected = self._detail_for(self.selected_id)
         elif name == "graph_svg":
             expected = self._canonical_graph_svg
         elif name == "node_states":
@@ -206,80 +347,101 @@ class ComputationWidget(anywidget.AnyWidget):
         else:
             expected = self.computation.revision
         if change["new"] != expected:
-            setattr(self, name, expected)
+            with self._own_write():
+                setattr(self, name, expected)
 
     @traitlets.observe("edit_request")
     def _edit_requested(self, change: dict[str, Any]) -> None:
         """Validate and apply one scalar edit requested by the browser."""
         request = change["new"]
-        if not request or not hasattr(self, "_id_to_visible"):
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
         if not self.editable:
-            self.status = "Edit failed: this widget is read-only"
+            self._set_status("Edit failed: this widget is read-only")
+            return
+        if self._view is None:
+            self._set_status("Edit failed: the graph is not rendered")
             return
         try:
             visible = self._id_to_visible[request["id"]]
-            assert self._view is not None  # noqa: S101
             members = self._view.original_nodes[visible]
             if len(members) != 1:
-                self.status = "Edit failed: collapsed blocks cannot be edited"
+                self._set_status("Edit failed: collapsed blocks cannot be edited")
                 return
-            current_detail = build_detail(self._view, request["id"], editable=self.editable)
+            current_detail = self._detail_for(request["id"])
             if not current_detail.get("editable"):
-                self.status = "Edit failed: this node is not an editable scalar input"
+                self._set_status("Edit failed: this node is not an editable scalar input")
                 return
             self.computation.insert(members[0], from_wire(request["value"]))
-            self.status = f"Updated {members[0]}"
+            self._set_status(f"Updated {members[0]}")
         except Exception as exc:
-            self.status = f"Edit failed: {exc}"
+            # insert() rejects placeholder and missing nodes, and from_wire()
+            # rejects malformed payloads. Raising here would surface only in the
+            # kernel log and leave the UI looking like nothing happened.
+            LOG.debug("Loman widget edit request failed", exc_info=True)
+            self._set_status(f"Edit failed: {type(exc).__name__}: {exc}")
 
     @traitlets.observe("compute_request")
     def _compute_requested(self, change: dict[str, Any]) -> None:
         """Compute a selected target or the whole graph."""
         request = change["new"]
-        if not request or not hasattr(self, "_id_to_visible"):
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
         if not self.editable:
-            self.status = "Compute failed: this widget is read-only"
+            self._set_status("Compute failed: this widget is read-only")
             return
         try:
             if request.get("all"):
                 self.computation.compute_all()
-                self.status = "Computed all available nodes"
+                self._set_status("Computed all available nodes")
+                return
+            if self._view is None:
+                self._set_status("Compute failed: the graph is not rendered")
                 return
             visible = self._id_to_visible[request["id"]]
-            assert self._view is not None  # noqa: S101
             names = [member.name for member in self._view.original_nodes[visible]]
             self.computation.compute(names)
-            self.status = f"Computed {self._full_visible_key(visible)}"
+            self._set_status(f"Computed {self._full_visible_key(visible)}")
         except Exception as exc:
-            self.status = f"Compute failed: {exc}"
+            # compute() validates before running and raises for uninitialized
+            # or placeholder ancestors; node failures land as ERROR states.
+            LOG.debug("Loman widget compute request failed", exc_info=True)
+            self._set_status(f"Compute failed: {type(exc).__name__}: {exc}")
 
     @traitlets.observe("toggle_request")
     def _toggle_requested(self, change: dict[str, Any]) -> None:
         """Expand a composite node or collapse all interactive expansions."""
         request = change["new"]
-        if not request or not hasattr(self, "_id_to_visible"):
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
         try:
             if request.get("collapse_all"):
-                self.status = "Collapsing all blocks..."
                 self._expanded.clear()
                 success = "Collapsed all blocks"
+            elif self._view is None:
+                self._set_status("Expand/collapse failed: the graph is not rendered")
+                return
             else:
                 visible = self._id_to_visible[request["id"]]
-                if self._view is None or visible not in self._view.composite_nodes:
-                    self.status = "Expand/collapse failed: only collapsed blocks can be expanded"
+                if visible not in self._view.composite_nodes:
+                    self._set_status("Expand/collapse failed: only collapsed blocks can be expanded")
+                    return
+                projected = len(self._view.node_index_map) - 1 + len(self._view.original_nodes[visible])
+                if projected > self._max_rendered_nodes:
+                    self._set_status(
+                        f"Expand/collapse failed: opening this block would render about {projected} nodes, "
+                        f"over the limit of {self._max_rendered_nodes}. "
+                        f"Pass max_rendered_nodes= to comp.widget() to raise it."
+                    )
                     return
                 block = self._full_visible_key(visible)
-                self.status = f"Opening {block}..."
                 self._expanded.add(block)
                 success = f"Opened {block}"
-            self.refresh()
-            if not self.status.startswith("Unable to render Graphviz SVG:"):
-                self.status = success
+            if self.refresh():
+                self._set_status(success)
         except Exception as exc:
-            self.status = f"Expand/collapse failed: {exc}"
+            LOG.debug("Loman widget expand/collapse request failed", exc_info=True)
+            self._set_status(f"Expand/collapse failed: {type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         """Unsubscribe from the computation and close the widget comm."""

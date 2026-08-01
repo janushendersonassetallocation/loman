@@ -16,6 +16,12 @@ _FLOAT_SENTINELS = {
     "-Infinity": float("-inf"),
 }
 
+#: Longest ``repr`` the detail panel will carry. Anything larger is truncated:
+#: the panel is for orientation, and the real object stays in Python.
+MAX_REPR_LENGTH = 2_000
+
+_ELLIPSIS = "..."
+
 
 def _float_to_wire(value: float) -> float | str:
     """Convert non-finite floats to JSON-safe sentinel strings."""
@@ -40,10 +46,10 @@ def to_wire(value: Any) -> dict[str, Any]:
         return {"kind": "scalar", "type": "str", "value": value}
     try:
         value_repr = repr(value)
-    except Exception:
+    except Exception:  # a broken __repr__ must not break the detail panel
         value_repr = f"<{type(value).__name__}: repr unavailable>"
-    if len(value_repr) > 2_000:
-        value_repr = value_repr[:1_997] + "..."
+    if len(value_repr) > MAX_REPR_LENGTH:
+        value_repr = value_repr[: MAX_REPR_LENGTH - len(_ELLIPSIS)] + _ELLIPSIS
     return {"kind": "repr", "type": type(value).__name__, "repr": value_repr}
 
 

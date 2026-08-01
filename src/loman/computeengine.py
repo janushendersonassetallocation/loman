@@ -1,18 +1,21 @@
 """Core computation engine for dependency-aware calculation graphs."""
 
+import contextlib
 import functools
 import inspect
 import logging
 import traceback
 import types
 import warnings
+import weakref
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import FIRST_COMPLETED, Executor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, BinaryIO, TextIO, TypeVar, overload
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, BinaryIO, TextIO, TypeVar, cast, overload
 
 if TYPE_CHECKING:
     from .serialization.computation import ComputationSerializer
@@ -75,9 +78,23 @@ class ComputationEvent:
     """A batched notification describing a mutation to a computation.
 
     Subscribers receive one event after each outermost public mutation, even
-    when that operation performs many internal state transitions.  Values are
-    deliberately excluded: consumers can fetch a changed value lazily from the
-    computation without copying large objects into every event.
+    when that operation performs many internal state transitions. Values are
+    deliberately excluded: consumers can fetch a changed value lazily from
+    :attr:`computation` without copying large objects into every event.
+
+    :ivar computation: The live computation that produced the event. It is not a
+        snapshot, and continues to change after the event is delivered.
+    :ivar revision: Monotonic counter, matching :attr:`Computation.revision` at
+        the moment the event was published.
+    :ivar changed_nodes: Nodes whose state changed during the operation. When
+        :attr:`graph_changed` is true this is *not* a complete description of the
+        change, because adding, deleting or renaming nodes and altering tags or
+        styles need not change any node's state. Consumers reacting to a
+        structural event should re-read the graph rather than trusting this set.
+    :ivar states: The state of each entry in :attr:`changed_nodes` that still
+        exists, as of publication. Deleted nodes are absent.
+    :ivar graph_changed: True when the structure or presentation of the graph
+        changed, so any cached rendering of it is stale.
     """
 
     computation: "Computation"
@@ -89,28 +106,62 @@ class ComputationEvent:
 
 ComputationSubscriber = Callable[[ComputationEvent], None]
 
+#: Cap on how many times subscriber-initiated mutations may cascade within one
+#: dispatch before Loman gives up. A well-behaved subscriber settles in one or
+#: two rounds; anything beyond this is a feedback loop rather than useful work.
+_MAX_NOTIFICATION_CASCADES = 16
+
+
+class _Subscription:
+    """One registered subscriber, held weakly when that is safe to do.
+
+    Bound methods are held via :class:`weakref.WeakMethod`, so subscribing a
+    widget's handler does not keep the widget alive for the lifetime of the
+    computation. Plain functions, lambdas and callable objects are held
+    strongly, because callers routinely pass a closure they retain no other
+    reference to, and holding those weakly would collect them immediately.
+    """
+
+    __slots__ = ("_strong", "_weak")
+
+    def __init__(self, callback: ComputationSubscriber) -> None:
+        """Wrap ``callback``, choosing weak or strong ownership."""
+        self._weak: weakref.WeakMethod | None = None
+        self._strong: ComputationSubscriber | None = None
+        if inspect.ismethod(callback):
+            self._weak = weakref.WeakMethod(callback)
+        else:
+            self._strong = callback
+
+    def resolve(self) -> ComputationSubscriber | None:
+        """Return the callback, or ``None`` once a weakly held owner is gone."""
+        return self._strong if self._weak is None else self._weak()
+
 
 def _notifies_subscribers(*, graph_changed: bool = False) -> Callable[[F], F]:
-    """Batch changes made by a public mutation and notify on completion."""
+    """Batch changes made by a public mutation and notify on completion.
+
+    With no subscribers attached the wrapper is a straight pass-through, so
+    ordinary use of Loman pays nothing for the notification machinery.
+    """
 
     def decorate(method: F) -> F:
         @functools.wraps(method)
         def wrapped(self: "Computation", *args: Any, **kwargs: Any) -> Any:
-            before_nodes = set(self.dag.nodes) if graph_changed else set()
+            if self._change_depth == 0 and not self._subscriptions:
+                return method(self, *args, **kwargs)
             self._change_depth += 1
             try:
                 result = method(self, *args, **kwargs)
                 if graph_changed:
                     self._pending_graph_changed = True
-                    self._pending_changed_nodes.update(before_nodes)
-                    self._pending_changed_nodes.update(self.dag.nodes)
                 return result
             finally:
                 self._change_depth -= 1
                 if self._change_depth == 0:
-                    self._publish_pending_event()
+                    self._publish_pending_events()
 
-        return wrapped  # type: ignore[return-value]
+        return cast("F", wrapped)
 
     return decorate
 
@@ -421,9 +472,10 @@ class Computation:
         self.src = self.get_attribute_view_for_path(NodeKey.root(), self.print_source, self.print_source)
         self._tag_map: defaultdict[str, set[NodeKey]] = defaultdict(set)
         self._state_map: dict[States, set[NodeKey]] = {state: set() for state in States}
-        self._subscribers: set[ComputationSubscriber] = set()
+        self._subscriptions: list[_Subscription] = []
         self._revision = 0
         self._change_depth = 0
+        self._publishing = False
         self._pending_changed_nodes: set[NodeKey] = set()
         self._pending_graph_changed = False
 
@@ -435,31 +487,43 @@ class Computation:
     def subscribe(self, callback: ComputationSubscriber) -> Callable[[], None]:
         """Subscribe to batched computation changes.
 
-        Callbacks run synchronously on the thread that completes the public
-        mutation.  Callback failures are logged and do not interrupt the
-        computation.  The returned function removes the subscription.
+        Subscribers are notified in registration order, synchronously, on the
+        thread that completes the outermost public mutation. A subscriber that
+        raises is logged and skipped; it never interrupts the mutation or the
+        other subscribers. A subscriber that itself mutates the computation
+        causes a further event to be published once the current round finishes,
+        up to a bounded number of cascades.
+
+        Bound methods are held weakly, so subscribing ``obj.handler`` does not
+        keep ``obj`` alive; callers must retain the object themselves. Plain
+        functions, lambdas and callable objects are held strongly until
+        unsubscribed, because callers commonly pass a throwaway closure.
+
+        Subscriptions are not copied by :meth:`copy` and are not serialized.
 
         :param callback: Function accepting a :class:`ComputationEvent`.
-        :return: A no-argument unsubscribe function.
+        :return: An idempotent, no-argument unsubscribe function.
         """
         if not callable(callback):
             msg = "callback must be callable"
             raise TypeError(msg)
-        self._subscribers.add(callback)
+        subscription = _Subscription(callback)
+        self._subscriptions.append(subscription)
 
         def unsubscribe() -> None:
-            self._subscribers.discard(callback)
+            """Remove this subscription, ignoring repeat calls."""
+            with contextlib.suppress(ValueError):
+                self._subscriptions.remove(subscription)
 
         return unsubscribe
 
     def _mark_changed(self, *node_keys: NodeKey) -> None:
         """Record nodes changed by the current public mutation."""
-        self._pending_changed_nodes.update(node_keys)
+        if self._subscriptions:
+            self._pending_changed_nodes.update(node_keys)
 
-    def _publish_pending_event(self) -> None:
-        """Publish and clear the currently batched mutation event."""
-        if not self._pending_changed_nodes and not self._pending_graph_changed:
-            return
+    def _take_pending_event(self) -> ComputationEvent:
+        """Consume the batched changes and turn them into one event."""
         changed_nodes = frozenset(self._pending_changed_nodes)
         graph_changed = self._pending_graph_changed
         self._pending_changed_nodes.clear()
@@ -470,12 +534,48 @@ class Computation:
             for node_key in changed_nodes
             if node_key in self.dag
         }
-        event = ComputationEvent(self, self._revision, changed_nodes, states, graph_changed)
-        for callback in tuple(self._subscribers):
+        return ComputationEvent(self, self._revision, changed_nodes, MappingProxyType(states), graph_changed)
+
+    def _publish_pending_events(self) -> None:
+        """Publish batched events, including any a subscriber triggers in turn.
+
+        Re-entrant calls return immediately: the dispatch loop already running
+        picks up whatever the subscriber changed, so a subscriber that mutates
+        the computation cannot recurse into the stack.
+        """
+        if self._publishing:
+            return
+        self._publishing = True
+        try:
+            for _ in range(_MAX_NOTIFICATION_CASCADES):
+                if not self._pending_changed_nodes and not self._pending_graph_changed:
+                    return
+                self._dispatch(self._take_pending_event())
+            if self._pending_changed_nodes or self._pending_graph_changed:
+                LOG.error(
+                    "Computation subscribers kept mutating the computation after %s rounds; "
+                    "discarding further notifications to break the loop",
+                    _MAX_NOTIFICATION_CASCADES,
+                )
+                self._pending_changed_nodes.clear()
+                self._pending_graph_changed = False
+        finally:
+            self._publishing = False
+
+    def _dispatch(self, event: ComputationEvent) -> None:
+        """Deliver one event to every live subscriber, isolating failures."""
+        dead = False
+        for subscription in tuple(self._subscriptions):
+            callback = subscription.resolve()
+            if callback is None:
+                dead = True
+                continue
             try:
                 callback(event)
             except Exception:
-                LOG.exception("Computation subscriber failed at revision %s", self._revision)
+                LOG.exception("Computation subscriber failed at revision %s", event.revision)
+        if dead:
+            self._subscriptions = [s for s in self._subscriptions if s.resolve() is not None]
 
     def get_attribute_view_for_path(
         self, nodekey: NodeKey, get_one_func: Callable[[Name], Any], get_many_func: Callable[[Name | Names], Any]
@@ -789,6 +889,7 @@ class Computation:
             state = self.dag.nodes[node_key][NodeAttributes.STATE]
             self.dag.remove_node(node_key)
             self._state_map[state].remove(node_key)
+            self._mark_changed(node_key)
             for n in preds:
                 if self.dag.nodes[n][NodeAttributes.STATE] == States.PLACEHOLDER:
                     self.delete_node(n)
@@ -836,6 +937,7 @@ class Computation:
                 if new_nk in self._metadata:  # pragma: no cover
                     del self._metadata[new_nk]
 
+        self._mark_changed(*node_key_mapping.keys(), *node_key_mapping.values())
         self._refresh_maps()
 
     @_notifies_subscribers(graph_changed=True)
@@ -1786,7 +1888,9 @@ class Computation:
                 self._set_state_and_literal_value(to_nodekey(n), nodedata.state, nodedata.value)
         output_node_keys = names_to_node_keys(output_names)
         ancestor_node_keys = self._get_ancestors_node_keys(output_node_keys)
-        self.dag.remove_nodes_from([n for n in self.dag if n not in ancestor_node_keys])
+        removed = [n for n in self.dag if n not in ancestor_node_keys]
+        self.dag.remove_nodes_from(removed)
+        self._mark_changed(*removed)
 
     def __getstate__(self) -> dict[str, Any]:
         """Prepare computation for serialization by removing non-serializable nodes."""
@@ -2174,13 +2278,26 @@ class Computation:
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        max_rendered_nodes: int = 500,
     ) -> "ComputationWidget":
         """Create an interactive notebook widget for this computation.
 
-        The ``ui`` extra is imported lazily, so ordinary use of Loman does not
-        load AnyWidget or its notebook dependencies.
+        Requires the ``ui`` extra: ``pip install 'loman[ui]'``. It is imported
+        lazily, so ordinary use of Loman does not load AnyWidget or its notebook
+        dependencies.
+
+        Arguments other than ``editable`` mirror :meth:`draw`, so the two are
+        learnable together. The widget subscribes to this computation and
+        follows it; ``comp.draw()`` and ``_repr_svg_`` stay static pictures.
+
+        Note that ``colors="state"`` repaints in place, while any other
+        colouring re-runs Graphviz on every change. See
+        :class:`~loman.ui.ComputationWidget` for the details.
 
         :param editable: Allow scalar input editing and computation controls.
+            Expanding and collapsing blocks stays available either way.
+        :param max_rendered_nodes: Refuse to open a block that would put more
+            than this many nodes on screen. Does not cap the initial view.
         :return: A live widget subscribed to this computation.
         """
         from .ui import ComputationWidget
@@ -2198,6 +2315,7 @@ class Computation:
             show_expansion=show_expansion,
             collapse_all=collapse_all,
             editable=editable,
+            max_rendered_nodes=max_rendered_nodes,
         )
 
     def view(self, cmap: Any = None, colors: str = "state", shapes: str | None = None) -> None:

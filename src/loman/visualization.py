@@ -6,6 +6,7 @@ import sys
 import tempfile
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
@@ -103,6 +104,31 @@ class NodeFormatter(ABC):
         return CompositeNodeFormatter(node_formatters)
 
 
+def aggregate_states(states: Sequence[States | None]) -> States | None:
+    """Reduce the states of one rendered node's members to a single state.
+
+    A rendered node stands for either one computation node or, when a block is
+    collapsed, all of its members. A single member reports its own state.
+    Otherwise ERROR wins, then STALE, then the common state if every member
+    agrees, and a genuine mixture reduces to ``None``.
+
+    ``None`` is Loman's mixed marker throughout: :class:`ColorByState` paints it
+    white and the notebook widget labels it ``MIXED``. Both read it from here so
+    that the rendered colour and the reported state cannot drift apart.
+
+    :param states: States of the members behind one rendered node.
+    :return: The state to display, or ``None`` when the members disagree.
+    """
+    if len(states) == 1:
+        return states[0]
+    if any(s == States.ERROR for s in states):
+        return States.ERROR
+    if any(s == States.STALE for s in states):
+        return States.STALE
+    first = states[0] if states else None
+    return first if all(s == first for s in states) else None
+
+
 class ColorByState(NodeFormatter):
     """Node formatter that colors nodes based on their computation state."""
 
@@ -129,18 +155,7 @@ class ColorByState(NodeFormatter):
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node color based on computation state."""
-        states = [node.data.get(NodeAttributes.STATE, None) for node in nodes]
-        state: States | None
-        if len(nodes) == 1:
-            state = states[0]
-        else:
-            if any(s == States.ERROR for s in states):
-                state = States.ERROR
-            elif any(s == States.STALE for s in states):
-                state = States.STALE
-            else:
-                state0 = states[0]
-                state = state0 if all(s == state0 for s in states) else None
+        state = aggregate_states([node.data.get(NodeAttributes.STATE, None) for node in nodes])
         return {"style": "filled", "fillcolor": self.state_colors[state]}
 
 
@@ -492,7 +507,20 @@ def create_viz_dag(
     composite_nodes: set[NodeKey],
     node_index_map: dict[NodeKey, str] | None = None,
 ) -> nx.DiGraph:
-    """Create a visualization DAG from the computation structure."""
+    """Create a visualization DAG from the computation structure.
+
+    :param struct_dag: Structural graph of the nodes actually being rendered.
+    :param comp_dag: The full computation graph, for node data.
+    :param node_formatter: Formatter supplying each node's Graphviz attributes.
+    :param original_nodes: Members standing behind each rendered node.
+    :param composite_nodes: Rendered nodes that stand for a collapsed block.
+    :param node_index_map: Optional dict to fill in with the node-key to
+        rendered-name mapping. The mapping is assigned by enumeration order and
+        cannot be reconstructed afterwards, so callers that need node identity
+        --- the notebook widget, via :attr:`GraphView.node_index_map` --- pass a
+        dict in rather than duplicating the numbering rule.
+    :return: The visualization DAG, ready to convert to Graphviz.
+    """
     if node_formatter is not None:
         nodes: list[Node] = []
         for nodekey in struct_dag.nodes:

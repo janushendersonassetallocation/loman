@@ -68,6 +68,10 @@ function render({ model, el }) {
   };
 
   const renderGraph = () => {
+    // graph_svg comes from Graphviz in the user's own kernel, which XML-escapes
+    // node labels, and Python puts back anything the browser tries to write
+    // here. The only way to reach this markup is to pass raw graph_attr or
+    // node_attr to comp.widget(), which is the caller's own code.
     graph.innerHTML = model.get("graph_svg");
     graph.querySelectorAll("g.node").forEach((node) => {
       const id = node.querySelector("title")?.textContent;

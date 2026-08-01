@@ -75,6 +75,7 @@ nav:
               - Show as DataFrame: user/features/querying/show_as_dataframe.md
               - View Inputs and Outputs: user/features/querying/view_inputs_outputs.md
               - Visualizing Graphs: user/features/querying/visualizing_computation_graph.md
+              - Interactive Widget: user/features/querying/interactive_widget.md
           - Manipulating:
               - Repointing Nodes: user/features/manipulating/repointing_nodes.md
           - Other:
@@ -99,5 +100,7 @@ nav:
       - DevContainer: development/DEVCONTAINER.md
       - Marimo: development/MARIMO.md
       - Testing: development/TESTS.md
+      - UI Extra Design: development/UI_EXTRA_PLAN.md
+      - UI Extra As Built: development/UI_EXTRA_AS_BUILT.md
       - Contributing: CONTRIBUTING.md
       - Code of Conduct: CODE_OF_CONDUCT.md

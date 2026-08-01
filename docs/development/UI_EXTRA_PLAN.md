@@ -1,8 +1,9 @@
-# Design and implementation: `loman[ui]`
+# Design plan: `loman[ui]`
 
-Status: implemented on this branch. The public subscription API is the core
-boundary between `Computation` and the optional UI; the widget is its first
-consumer.
+Status: **implemented**. This document is preserved as the design that was
+reviewed and agreed. It is deliberately *not* rewritten to match the code — see
+[UI_EXTRA_AS_BUILT.md](UI_EXTRA_AS_BUILT.md) for what actually shipped, what
+phase 0 measured, and where the implementation departed from this plan.
 
 This branch also **owns the shared extras convention** — the first
 `[project.optional-dependencies]` section and the optional-import helper — which
@@ -39,11 +40,6 @@ cell, and it forces a second rendering stack that will drift from
 cell, and nothing in this plan adds an HTTP server, a WebSocket, or a
 `Computation.serve()` method.
 
-There is a public in-process event subscription API, but no standalone network
-WebSocket endpoint. A future server integration can translate the same
-`ComputationEvent` stream to WebSocket messages without coupling the core
-library to a web framework.
-
 For the same reason, no front-end library is loaded from a CDN. Corporate
 environments block it, offline use breaks, and it pins unaudited JavaScript with
 no supply-chain review.
@@ -55,10 +51,6 @@ import loman
 
 comp = build_portfolio()
 w = comp.widget()
-
-unsubscribe = comp.subscribe(lambda event: print(event.changed_nodes))
-comp.compute_all()
-unsubscribe()
 ```
 
 `Computation.widget()` mirrors `Computation.draw()`'s signature so the two are
@@ -85,36 +77,18 @@ component rather than a walled garden.
 In Jupyter, `comp.widget()` as the last expression in a cell renders directly,
 with traits read via `w.selected` or `w.observe(...)`.
 
-## Subscription architecture
-
-`Computation.subscribe(callback)` returns an idempotent unsubscribe function.
-The callback receives an immutable `ComputationEvent` containing the
-computation, a monotonic revision, changed node keys, their final states, and a
-`graph_changed` flag. Nested implementation calls are batched at the outermost
-public mutation boundary, so operations such as `insert_many()` and
-`compute_all()` publish one coherent event rather than exposing intermediate
-states. Subscriber failures are logged and isolated from both the mutation and
-other subscribers.
-
-The widget subscribes automatically and unsubscribes when closed. State-only
-events repaint existing SVG shapes and update selected-node detail without
-running Graphviz again. Structural events perform a full layout refresh. Direct
-mutation of the public `dag` remains outside this contract; `widget.refresh()`
-is the explicit escape hatch for that legacy path.
-
-## Widget architecture
+## Architecture
 
 State is synced as traitlets, not custom messages. Python to browser:
 `graph_svg`, `node_ids`, `composite_ids`, `node_states`, `state_colors`,
 `detail`, `status`, `editable`. Browser to Python: `selected`, `expanded`,
 `edit_request`, `compute_request`.
 
-Keeping everything in traits rather than messages lets compatible hosts recreate
-widget state without Python running. Marimo's static exporter deliberately
-rejects inlined `data:` JavaScript, so the demonstration notebook detects that
-form and emits `graph_svg` directly as its safe read-only fallback. Every
-browser-to-Python path remains a trait assignment, which makes the round-trip
-testable without a browser.
+Keeping everything in traits rather than messages means widget state can be
+recreated without Python running, which is what makes a static HTML export show
+the right picture instead of a blank box. It also means every browser-to-Python
+path is a trait assignment, which is what makes the round-trip testable without
+a browser.
 
 The scaling rule is to **never serialize node values in bulk**. The full-graph
 payload is the SVG plus two small string maps. Python computes a structure hash
@@ -339,8 +313,7 @@ diff, and keep it in its own commit so the reviewable change stays readable.
 
 ## Delivery phases
 
-Phases 0–5 are represented by the implementation on this branch. Phase 6
-remains a possible follow-up.
+Each phase is a self-contained change that leaves the branch green.
 
 - **Phase 0 — spike, blocking.** Settle the WebAssembly question: is
   `marimo export html-wasm` actually reachable for this repo's notebooks, and
@@ -361,8 +334,8 @@ remains a possible follow-up.
   because deptry rejects a declared-but-unused dependency. Also the
   wheel-contents check and the test that `import loman` does not import
   anywidget. Docs page and a marimo notebook. Shippable and useful on its own.
-- **Phase 4 — collapse and expand.** Wire expansion requests to node
-  transformations; click a composite node to drill into it. Structure-hash
+- **Phase 4 — collapse and expand.** Wire the expanded trait to node
+  transformations; double-click a composite node to toggle. Structure-hash
   gating of the SVG lands here.
 - **Phase 5 — interactivity.** Scalar edit, compute button, status trait, error
   and traceback display.
@@ -392,32 +365,29 @@ renamed on one side only — for no tooling. It should also assert that the stat
 colour map covers every member of `States`, so a new state can never render
 unstyled.
 
-## Resolved constraints and follow-ups
+## Risks and open questions
 
-Resolved for this implementation:
+Needing a decision:
 
-- The notebook targets a live Python kernel and ordinary static HTML export.
-  WebAssembly export is intentionally unsupported because Graphviz requires the
-  `dot` binary; the exported HTML remains a useful read-only snapshot.
-- The ipywidgets stack is isolated behind `loman[ui]` and is never imported by
-  bare `import loman`.
-- The AnyWidget module uses `render({model, el})` and returns a cleanup callback,
-  remaining compatible with both Marimo 0.23's lifecycle arguments and newer
-  AFM hosts that provide an abort signal. The built wheel contains both static
-  assets.
+- Whether WebAssembly export is required. Phase 0 exists to answer this.
+- Whether the ipywidgets stack is acceptable in this extra.
 
-Possible follow-ups:
+Unresolved:
 
 - The graphviz SVG payload size for very large graphs was not measured, and no
   documented payload limit was found for anywidget or marimo. The structure-hash
   gating mitigates repeated sends, but a node-count threshold above which the
   widget refuses to auto-expand is probably needed.
+- Which anywidget front-end module revision the pinned marimo implements was not
+  verified. Mitigation: write the module using only the base render entry point
+  and a returned cleanup callback, which is valid under every revision.
 - Getting a node's source can raise for lambdas defined in a REPL or restored
-  from dill. The detail builder already degrades gracefully, but richer source
-  metadata could be added later.
+  from dill, and loman users define lambdas constantly. The detail builder must
+  degrade gracefully, and this is easy to miss.
 - Inserting a value can raise for missing or placeholder nodes; the edit observer
-  routes these failures to the status trait. More specific, actionable error
-  messages are a possible refinement.
+  must route those to the status trait rather than raising inside a callback,
+  where the error would surface in the kernel log and the UI would silently do
+  nothing.
 - `Computation._repr_svg_` already renders a static picture for a bare `comp` in
   a cell. Users will reasonably expect that to become interactive; it should not,
   and the docs should say so.
