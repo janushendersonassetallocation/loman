@@ -1,5 +1,9 @@
 """Tests for the pure view-model builders behind the notebook widget."""
 
+import pytest
+from hypothesis import given
+from hypothesis import strategies as st
+
 from loman import Computation, States
 from loman.nodekey import to_nodekey
 from loman.ui.viewmodel import MIXED_STATE_LABEL, build_detail, node_states, state_colors, state_label
@@ -240,3 +244,29 @@ class TestBuildDetail:
 def _double(a):
     """Return twice its argument."""
     return a * 2
+
+
+class TestStateLabelProperties:
+    """Properties of the browser-facing label, over every combination of states."""
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1))
+    def test_every_label_has_a_colour_the_browser_can_look_up(self, states):
+        """The colour map is keyed by label, so a gap would render a node unstyled."""
+        assert state_label(states) in state_colors()
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1))
+    def test_label_agrees_with_the_colour_the_graph_is_painted(self, states):
+        """The widget and the Graphviz picture must never disagree about a node."""
+        painted = ColorByState().format(to_nodekey("x"), [_FakeNode(s) for s in states], is_composite=True)
+
+        assert state_colors()[state_label(states)] == painted["fillcolor"]
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1))
+    def test_label_is_a_state_name_or_the_mixed_marker(self, states):
+        """Labels are a closed set, which is what lets the frontend switch on them."""
+        label = state_label(states)
+
+        assert label == MIXED_STATE_LABEL or label in {state.name for state in States}

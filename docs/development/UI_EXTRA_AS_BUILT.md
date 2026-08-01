@@ -100,6 +100,67 @@ or a compute it still holds.
 
 It returns `bool` rather than leaving callers to inspect the status string.
 
+## Testing beyond the unit suite
+
+The plan said no JavaScript tooling, and there is none. On the Python side this
+work is the first in the repo to use the three Rhiza test facilities that were
+wired up but unused, so `make book` no longer reports three skipped stages.
+
+### Property tests — `make hypothesis-test`
+
+Marked `@pytest.mark.property` and kept **in the test file for their module**
+rather than a separate `tests/property/` tree, so the one-to-one module mapping
+in `.github/agents/tests.md` still holds. The make target selects by marker, not
+by directory, so both conventions are satisfied, and the properties also run
+under `make test` where they count towards coverage.
+
+Two things earned property tests because they make *total* claims:
+
+- **The value wire format** sits between untrusted browser input and
+  `comp.insert`, and its output is synced as JSON. The properties are that
+  scalars round-trip with their type intact, that `to_wire` output always
+  survives `json.dumps(..., allow_nan=False)` — which is the property the float
+  sentinels exist for — that non-scalars always degrade to a bounded repr, and
+  that decoding arbitrary JSON either succeeds or raises `ValueWireError` and
+  nothing else.
+- **`aggregate_states`** decides both the painted colour and the reported label,
+  so its ladder is a contract: order-independent, ERROR dominates, unanimity is
+  preserved, the result is always a member state or `None`, and every possible
+  outcome has a colour. That last one is the check the plan asked for, stated
+  over all inputs rather than the members of `States` alone.
+
+### Benchmarks — `make benchmark`
+
+`tests/benchmarks/` measures the notification path. Indicative figures from a
+400-node fan-out graph:
+
+| Benchmark | Mean |
+|---|---:|
+| `node_states` repaint payload | 0.23 ms |
+| Build graph, no subscribers | 16.1 ms |
+| Build graph, one subscriber | 18.3 ms |
+| `compute_all` with a subscriber | 23.2 ms |
+| Full relayout including `dot` (100 nodes) | 182 ms |
+
+The first three are the point. Subscriber overhead is about 14% and flat; the
+version this branch replaced was roughly 30× at this size and getting worse.
+The last two lines are why state changes repaint in place: a relayout costs
+about 800× the repaint payload.
+
+These measure rather than gate — `make benchmark` is not part of the CI test
+job. The actual guard against the quadratic regression is
+`test_computation_graph_construction_stays_linear`, an ordinary test that fails
+the normal run.
+
+### Stress tests — `make stress`
+
+`tests/stress/` covers what only misbehaves at volume: 200 state changes on a
+300-node graph must not re-run Graphviz once; 5,000 subscribe/unsubscribe cycles
+must leave nothing behind; collected weak subscribers must be pruned rather than
+accumulate; 25 expand/collapse cycles must return byte-identical SVG; the replay
+guard must stay bounded at `_REQUEST_HISTORY`; and ten widgets on one
+computation must stay in step and all detach on close.
+
 ## Still open
 
 - Long computations remain synchronous, as the plan recommended. `Computation`
