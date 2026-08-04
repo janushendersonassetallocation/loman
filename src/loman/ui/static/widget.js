@@ -115,74 +115,99 @@ function render({ model, el }) {
     return wrapper;
   };
 
+  const inputTypeFor = (type) => {
+    if (type === "bool") return "checkbox";
+    return (type === "int" || type === "float") ? "number" : "text";
+  };
+
+  const readEditedValue = (input, type) => {
+    if (type === "bool") return input.checked;
+    if (type === "int") return Number.parseInt(input.value, 10);
+    if (type === "float") return Number.parseFloat(input.value);
+    if (type === "none") return input.value === "" ? null : input.value;
+    return input.value;
+  };
+
+  const buildEditForm = (data) => {
+    const type = data.value.type;
+    const form = document.createElement("form");
+    form.className = "loman-edit";
+    const input = document.createElement("input");
+    input.type = inputTypeFor(type);
+    if (type === "float") input.step = "any";
+    if (type === "bool") input.checked = data.value.value;
+    else if (data.value.value !== null) input.value = data.value.value;
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.textContent = "Update input";
+    form.append(input, button);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const value = readEditedValue(input, type);
+      send("edit_request", { id: data.id, value: { kind: "scalar", type, value } });
+    }, { signal });
+    return form;
+  };
+
+  const buildComputeButton = (data) => {
+    const compute = document.createElement("button");
+    compute.textContent = data.composite ? "Compute block" : "Compute node";
+    compute.disabled = !model.get("editable");
+    compute.addEventListener("click", () => send("compute_request", { id: data.id }), { signal });
+    return compute;
+  };
+
+  const buildSource = (source) => {
+    const wrapper = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "Source";
+    const pre = document.createElement("pre");
+    pre.textContent = source;
+    wrapper.append(summary, pre);
+    return wrapper;
+  };
+
+  const buildError = (error) => {
+    const pre = document.createElement("pre");
+    pre.className = "loman-error";
+    pre.textContent = error;
+    return pre;
+  };
+
+  const buildSummaryRows = (data) => {
+    const rows = [row("State", data.state)];
+    if (data.composite) rows.push(row("Members", data.members.join(", ")));
+    if (data.value) {
+      const shown = data.value.kind === "repr" ? data.value.repr : String(data.value.value);
+      rows.push(row("Value", shown));
+    }
+    if (data.timing) rows.push(row("Duration", `${data.timing.duration.toFixed(6)} s`));
+    if (data.inputs?.length) rows.push(row("Inputs", data.inputs.join(", ")));
+    if (data.outputs?.length) rows.push(row("Outputs", data.outputs.join(", ")));
+    return rows;
+  };
+
+  const renderEmptyDetail = () => {
+    const empty = document.createElement("p");
+    empty.textContent = "Select a node to inspect it.";
+    detail.append(empty);
+  };
+
   const renderDetail = () => {
     const data = model.get("detail");
     detail.replaceChildren();
     if (!data?.id) {
-      const empty = document.createElement("p");
-      empty.textContent = "Select a node to inspect it.";
-      detail.append(empty);
+      renderEmptyDetail();
       repaint();
       return;
     }
     const title = document.createElement("h3");
     title.textContent = data.name;
-    detail.append(title, row("State", data.state));
-    if (data.composite) detail.append(row("Members", data.members.join(", ")));
-    if (data.value) {
-      const shown = data.value.kind === "repr" ? data.value.repr : String(data.value.value);
-      detail.append(row("Value", shown));
-    }
-    if (data.timing) detail.append(row("Duration", `${data.timing.duration.toFixed(6)} s`));
-    if (data.inputs?.length) detail.append(row("Inputs", data.inputs.join(", ")));
-    if (data.outputs?.length) detail.append(row("Outputs", data.outputs.join(", ")));
-
-    if (data.editable) {
-      const form = document.createElement("form");
-      form.className = "loman-edit";
-      const input = document.createElement("input");
-      const type = data.value.type;
-      input.type = type === "bool" ? "checkbox" : (type === "int" || type === "float" ? "number" : "text");
-      if (type === "float") input.step = "any";
-      if (type === "bool") input.checked = data.value.value;
-      else if (data.value.value !== null) input.value = data.value.value;
-      const button = document.createElement("button");
-      button.type = "submit";
-      button.textContent = "Update input";
-      form.append(input, button);
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        let value = input.value;
-        if (type === "bool") value = input.checked;
-        else if (type === "int") value = Number.parseInt(input.value, 10);
-        else if (type === "float") value = Number.parseFloat(input.value);
-        else if (type === "none") value = input.value === "" ? null : input.value;
-        send("edit_request", { id: data.id, value: { kind: "scalar", type, value } });
-      }, { signal });
-      detail.append(form);
-    }
-
-    const compute = document.createElement("button");
-    compute.textContent = data.composite ? "Compute block" : "Compute node";
-    compute.disabled = !model.get("editable");
-    compute.addEventListener("click", () => send("compute_request", { id: data.id }), { signal });
-    detail.append(compute);
-
-    if (data.source) {
-      const source = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = "Source";
-      const pre = document.createElement("pre");
-      pre.textContent = data.source;
-      source.append(summary, pre);
-      detail.append(source);
-    }
-    if (data.error) {
-      const pre = document.createElement("pre");
-      pre.className = "loman-error";
-      pre.textContent = data.error;
-      detail.append(pre);
-    }
+    detail.append(title, ...buildSummaryRows(data));
+    if (data.editable) detail.append(buildEditForm(data));
+    detail.append(buildComputeButton(data));
+    if (data.source) detail.append(buildSource(data.source));
+    if (data.error) detail.append(buildError(data.error));
     repaint();
   };
 

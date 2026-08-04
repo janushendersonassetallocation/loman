@@ -29,6 +29,12 @@ def test_require_explains_missing_extra():
 
 
 def test_bare_import_does_not_load_ui_dependencies():
-    """The base package remains independent from the optional widget stack."""
+    """The base package remains independent from the optional widget stack.
+
+    A subprocess is the only honest way to check this: within the test session
+    the UI modules are already imported, so ``sys.modules`` would always show
+    them.
+    """
     code = "import sys, loman; assert 'anywidget' not in sys.modules; assert 'traitlets' not in sys.modules"
-    subprocess.run([sys.executable, "-c", code], check=True)
+    # Fixed argument list, this interpreter, a literal snippet: no external input.
+    subprocess.run([sys.executable, "-c", code], check=True)  # nosec B603
