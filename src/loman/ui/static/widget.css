@@ -26,6 +26,10 @@
   --loman-line: rgba(11, 11, 11, 0.10);
   --loman-line-strong: #c3c2b7;
 
+  /* form fields; distinct from --loman-canvas, which is the Graphviz paper
+     surface and stays white in both themes */
+  --loman-field: #ffffff;
+
   /* accent, used only for selection and focus */
   --loman-accent: #2a78d6;
 
@@ -64,6 +68,7 @@
     --loman-ink-3: #898781;
     --loman-line: rgba(255, 255, 255, 0.10);
     --loman-line-strong: #383835;
+    --loman-field: #1a1a19;
     --loman-accent: #3987e5;
   }
 }
@@ -284,7 +289,7 @@
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: 12px;
   color: var(--loman-ink);
-  background: var(--loman-canvas);
+  background: var(--loman-field);
   border: 1px solid var(--loman-line-strong);
   border-radius: var(--loman-radius-sm);
   padding: 4px 7px;
@@ -367,6 +372,7 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
   --loman-ink-3: #898781;
   --loman-line: rgba(255, 255, 255, 0.10);
   --loman-line-strong: #383835;
+  --loman-field: #1a1a19;
   --loman-accent: #3987e5;
 }
 
@@ -428,7 +434,7 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
   box-sizing: border-box;
   font: inherit;
   color: var(--loman-ink);
-  background: var(--loman-canvas);
+  background: var(--loman-field);
   border: 1px solid var(--loman-accent);
   border-radius: 3px;
   padding: 1px 4px;

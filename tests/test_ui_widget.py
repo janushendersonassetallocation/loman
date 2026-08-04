@@ -10,6 +10,7 @@ This module tests:
 """
 
 import gc
+import re
 import weakref
 from pathlib import Path
 
@@ -859,6 +860,23 @@ class TestAssetContract:
         """Marimo and JupyterLab both have dark themes."""
         css = (STATIC / "widget.css").read_text()
         assert "@media (prefers-color-scheme: dark)" in css
+
+    def test_the_graph_paper_surface_is_never_used_behind_text(self):
+        """``--loman-canvas`` is white in both themes, so ink vanishes on it.
+
+        It stays white because Graphviz paints a white background and black
+        labels into the SVG itself. Any other element that borrows it as a
+        background and then sets ``--loman-ink`` renders white on white in dark
+        mode, which is exactly what happened to the edit fields.
+        """
+        css = (STATIC / "widget.css").read_text()
+        blocks = re.findall(r"([^{}]*)\{([^{}]*)\}", css)
+        offenders = [
+            selector.strip()
+            for selector, body in blocks
+            if "background: var(--loman-canvas)" in body and "color:" in body
+        ]
+        assert offenders == [], f"these set ink on the graph paper surface: {offenders}"
 
     def test_graph_is_not_scaled_to_fit_the_pane(self):
         """Sizing the SVG in percentages is what made labels shrink.
