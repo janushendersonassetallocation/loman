@@ -673,6 +673,10 @@ function render({ model, el }) {
   model.on("change:detail", renderDetail);
   model.on("change:status", renderStatus);
   model.on("change:status_severity", renderStatus);
+  // A request that changes nothing else still acknowledges, which is what
+  // releases the optimistic busy state. renderStatus re-reads the model, so
+  // the status shown falls back to whatever Python last set.
+  model.on("change:ack", renderStatus);
   model.on("change:revision", renderRevision);
   model.on("change:editable", renderEditable);
 
@@ -685,6 +689,7 @@ function render({ model, el }) {
     model.off("change:detail", renderDetail);
     model.off("change:status", renderStatus);
     model.off("change:status_severity", renderStatus);
+    model.off("change:ack", renderStatus);
     model.off("change:revision", renderRevision);
     model.off("change:editable", renderEditable);
   };

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections import deque
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -19,7 +21,7 @@ from .value import apply_cell_edit, from_wire
 from .viewmodel import build_detail, node_states, state_colors
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Iterator
 
     from loman.computeengine import Computation
     from loman.visualization import GraphView
@@ -43,6 +45,20 @@ _REQUEST_HISTORY = 64
 #: that large is refused rather than merely sluggish. Raise it with
 #: ``max_rendered_nodes=`` if you know what you are asking for.
 DEFAULT_MAX_RENDERED_NODES = 500
+
+
+def _acknowledges(method: Callable[[Any, dict[str, Any]], None]) -> Callable[[Any, dict[str, Any]], None]:
+    """Acknowledge a browser request once the observer has finished with it."""
+
+    @functools.wraps(method)
+    def wrapped(self: ComputationWidget, change: dict[str, Any]) -> None:
+        """Run the observer, then bump the acknowledgement counter."""
+        try:
+            method(self, change)
+        finally:
+            self._acknowledge()
+
+    return wrapped
 
 
 class _DrawOptions(TypedDict):
@@ -93,6 +109,12 @@ class ComputationWidget(anywidget.AnyWidget):
     detail = traitlets.Dict(default_value={}).tag(sync=True)
     status = traitlets.Unicode("").tag(sync=True)
     status_severity = traitlets.Unicode("idle").tag(sync=True)
+    #: Bumped after every browser request, whatever the outcome. The front end
+    #: shows an optimistic busy state while it waits, and a request can
+    #: legitimately change nothing else --- collapsing an already-collapsed
+    #: graph re-renders identical SVG and re-reports an identical status, so
+    #: neither trait fires and the browser would wait for ever.
+    ack = traitlets.Int(0).tag(sync=True)
     expanded_paths = traitlets.List(traitlets.Unicode(), default_value=[]).tag(sync=True)
     editable = traitlets.Bool(True).tag(sync=True)
     repaint_states = traitlets.Bool(True).tag(sync=True)
@@ -150,6 +172,7 @@ class ComputationWidget(anywidget.AnyWidget):
         self._canonical_graph_svg = ""
         self._canonical_status = ""
         self._canonical_severity = "idle"
+        self._canonical_ack = 0
         self._seen_requests: deque[str] = deque(maxlen=_REQUEST_HISTORY)
         self._max_rendered_nodes = max_rendered_nodes
         self._writing = 0
@@ -235,6 +258,16 @@ class ComputationWidget(anywidget.AnyWidget):
     def _fail(self, text: str) -> None:
         """Report a failed request on the status line."""
         self._set_status(text, "error")
+
+    def _acknowledge(self) -> None:
+        """Tell the browser a request has been dealt with.
+
+        Sent unconditionally, because "nothing changed" is a real outcome and
+        the front end cannot distinguish it from "still working" otherwise.
+        """
+        self._canonical_ack += 1
+        with self._own_write():
+            self.ack = self._canonical_ack
 
     def refresh(self) -> bool:
         """Force a full graph refresh, including SVG layout and node identity.
@@ -330,7 +363,15 @@ class ComputationWidget(anywidget.AnyWidget):
             self._refresh_detail()
 
     @traitlets.observe(
-        "composite_ids", "detail", "expanded_paths", "graph_svg", "node_states", "revision", "status", "status_severity"
+        "ack",
+        "composite_ids",
+        "detail",
+        "expanded_paths",
+        "graph_svg",
+        "node_states",
+        "revision",
+        "status",
+        "status_severity",
     )
     def _canonical_output_changed(self, change: dict[str, Any]) -> None:
         """Reject stale derived traits echoed by the browser model.
@@ -348,6 +389,11 @@ class ComputationWidget(anywidget.AnyWidget):
         expected: Any
         # Status still matters when rendering failed, so these two are checked
         # before the view is required to exist.
+        if name == "ack":
+            if change["new"] != self._canonical_ack:
+                with self._own_write():
+                    self.ack = self._canonical_ack
+            return
         if name in {"status", "status_severity"}:
             expected = self._canonical_status if name == "status" else self._canonical_severity
             if change["new"] != expected:
@@ -373,6 +419,7 @@ class ComputationWidget(anywidget.AnyWidget):
                 setattr(self, name, expected)
 
     @traitlets.observe("edit_request")
+    @_acknowledges
     def _edit_requested(self, change: dict[str, Any]) -> None:
         """Validate and apply one edit requested by the browser.
 
@@ -423,6 +470,7 @@ class ComputationWidget(anywidget.AnyWidget):
             self._fail(f"Edit failed: {type(exc).__name__}: {exc}")
 
     @traitlets.observe("compute_request")
+    @_acknowledges
     def _compute_requested(self, change: dict[str, Any]) -> None:
         """Compute a selected target or the whole graph."""
         request = change["new"]
@@ -469,6 +517,7 @@ class ComputationWidget(anywidget.AnyWidget):
         return f"Closed {block}"
 
     @traitlets.observe("toggle_request")
+    @_acknowledges
     def _toggle_requested(self, change: dict[str, Any]) -> None:
         """Open a collapsed block, close an open one, or collapse everything."""
         request = change["new"]

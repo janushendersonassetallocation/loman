@@ -1042,3 +1042,94 @@ class TestCellEditing:
         assert "applyEnabledState();" in javascript.split("const setBusy")[1]
         # Nothing may flip the toolbar's disabled state outside that one helper.
         assert javascript.count('buttons("compute-all").disabled') == 1
+
+
+class TestAcknowledgement:
+    """Every browser request is answered, including the ones that change nothing.
+
+    The front end shows an optimistic busy state and waits for Python. A request
+    whose outcome is "nothing changed" fires no other trait, so without an
+    explicit acknowledgement the widget spins for ever -- which is what happened
+    when Collapse all was pressed on an already-collapsed graph.
+    """
+
+    def test_a_request_that_changes_nothing_still_acknowledges(self):
+        """The reported bug: collapse all, twice, on an already-collapsed graph."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"collapse_all": True, "request_id": "t1"}
+            settled = (widget.graph_svg, widget.status, widget.ack)
+
+            widget.toggle_request = {"collapse_all": True, "request_id": "t2"}
+
+            assert widget.graph_svg == settled[0], "nothing about the picture changed"
+            assert widget.status == settled[1], "nor the message"
+            assert widget.ack > settled[2], "but the request was still acknowledged"
+        finally:
+            widget.close()
+
+    def test_recomputing_an_up_to_date_graph_acknowledges(self):
+        """compute_all on a settled graph publishes no event either."""
+        _comp, widget = make_widget()
+        try:
+            widget.compute_request = {"all": True, "request_id": "c1"}
+            settled = widget.ack
+
+            widget.compute_request = {"all": True, "request_id": "c2"}
+
+            assert widget.ack > settled
+        finally:
+            widget.close()
+
+    def test_failed_requests_acknowledge_too(self):
+        """A refusal is an outcome; the browser must stop waiting for it."""
+        _comp, widget = make_widget()
+        try:
+            before = widget.ack
+
+            widget.edit_request = {"id": "n999", "value": {"kind": "scalar", "type": "int", "value": 1}}
+
+            assert widget.status.startswith("Edit failed")
+            assert widget.ack > before
+        finally:
+            widget.close()
+
+    def test_replayed_requests_acknowledge_too(self):
+        """A replay is dropped, but the browser still has to stop waiting.
+
+        A replay carries a nonce already seen with a different payload, so the
+        observer runs and declines. An identical payload does not reach the
+        observer at all, because traitlets does not fire when nothing changed --
+        and in that case nothing was waiting either.
+        """
+        _comp, widget = make_widget()
+        try:
+            widget.compute_request = {"all": True, "request_id": "same"}
+            after_first = widget.ack
+
+            widget.compute_request = {"id": node_id(widget, "value"), "request_id": "same"}
+
+            assert widget.ack > after_first
+            assert widget.status == "Computed all available nodes", "the replay was declined"
+        finally:
+            widget.close()
+
+    def test_acknowledgement_survives_a_browser_echo(self):
+        """A stale ack from the browser must not un-answer a request."""
+        _comp, widget = make_widget()
+        try:
+            widget.compute_request = {"all": True, "request_id": "c1"}
+            expected = widget.ack
+
+            widget.ack = 0
+
+            assert widget.ack == expected
+        finally:
+            widget.close()
+
+    def test_frontend_releases_the_busy_state_on_acknowledgement(self):
+        """The Python counter is only useful if the browser listens for it."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert 'model.on("change:ack", renderStatus)' in javascript
+        assert "setBusy(false)" in javascript.split("const renderStatus")[1]
