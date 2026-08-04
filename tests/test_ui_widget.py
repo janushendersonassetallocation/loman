@@ -395,6 +395,73 @@ class TestExpandAndCollapse:
         finally:
             widget.close()
 
+    def test_one_block_can_be_closed_without_collapsing_the_rest(self):
+        """Opening is one click, so closing must not cost a full collapse.
+
+        An open block is drawn as a Graphviz cluster rather than a node, so it
+        is identified by path rather than by a rendered node ID.
+        """
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"id": node_id(widget, "foo"), "request_id": "open-foo"}
+            widget.toggle_request = {"id": node_id(widget, "bar"), "request_id": "open-bar"}
+            assert widget.expanded_paths == ["bar", "foo"]
+
+            widget.toggle_request = {"path": "foo", "collapse": True, "request_id": "close-foo"}
+
+            assert widget.status == "Closed foo"
+            assert widget.expanded_paths == ["bar"]
+            assert to_nodekey("foo") in widget._view.composite_nodes
+            assert to_nodekey("bar") not in widget._view.composite_nodes
+        finally:
+            widget.close()
+
+    def test_closing_a_block_that_is_not_open_is_refused(self):
+        """A stale close request from the browser cannot corrupt the view."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"path": "foo", "collapse": True, "request_id": "t1"}
+
+            assert widget.status == "Expand/collapse failed: that block is not open"
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_closing_a_block_also_closes_blocks_open_inside_it(self):
+        """Expansions nested inside a closed block must not linger unseen."""
+        comp = Computation()
+        inner = Computation()
+        inner.add_node("x", value=1)
+        outer = Computation()
+        outer.add_block("mid", inner, keep_values=True)
+        comp.add_block("top", outer, keep_values=True)
+        widget = comp.widget()
+        try:
+            widget._expanded = {to_nodekey("top"), to_nodekey("top/mid")}
+            widget.refresh()
+            assert widget.expanded_paths == ["top", "top/mid"]
+
+            widget.toggle_request = {"path": "top", "collapse": True, "request_id": "t1"}
+
+            assert widget.expanded_paths == []
+        finally:
+            widget.close()
+
+    def test_expanded_paths_survive_a_browser_echo(self):
+        """The open-block list is Python's, like the other derived traits."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"id": node_id(widget, "foo"), "request_id": "t1"}
+
+            widget.expanded_paths = ["not-a-block"]
+
+            assert widget.expanded_paths == ["foo"]
+        finally:
+            widget.close()
+
     def test_read_only_widget_still_allows_navigation(self):
         """Opening a block inspects the graph; it does not mutate it."""
         comp = create_example_block_computation()
@@ -791,6 +858,38 @@ class TestAssetContract:
         """Marimo and JupyterLab both have dark themes."""
         css = (STATIC / "widget.css").read_text()
         assert "@media (prefers-color-scheme: dark)" in css
+
+    def test_graph_is_not_scaled_to_fit_the_pane(self):
+        """Sizing the SVG in percentages is what made labels shrink.
+
+        Graphviz emits a fixed viewBox, so a percentage width makes the browser
+        scale the whole graph down as soon as a block is opened. Measured at
+        5.2 px labels on a 32-node graph before this was changed.
+        """
+        css = (STATIC / "widget.css").read_text()
+        javascript = (STATIC / "widget.js").read_text()
+        assert "width: 100%" not in css
+        assert "naturalSize.w * zoom" in javascript
+
+    def test_hover_and_selection_are_styled_differently(self):
+        """Identical styling made it impossible to see what was selected."""
+        css = (STATIC / "widget.css").read_text()
+        hover = css.split("g.node:hover > :not(title, text) {")[1].split("}")[0]
+        selected = css.split("g.node.loman-selected > :not(title, text) {")[1].split("}")[0]
+        assert hover.strip() != selected.strip()
+
+    def test_frontend_declares_a_busy_state(self):
+        """A synchronous compute must not look like nothing happened."""
+        javascript = (STATIC / "widget.js").read_text()
+        css = (STATIC / "widget.css").read_text()
+        assert "setBusy(true" in javascript
+        assert 'data-severity="busy"' in css or '[data-severity="busy"]' in css
+
+    def test_legend_names_every_state_on_screen(self):
+        """State is colour-only in the graph, and the colours are not CVD-safe."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "renderLegend" in javascript
+        assert "label.textContent = state" in javascript
 
 
 @pytest.mark.parametrize("colors", ["state", "timing"])

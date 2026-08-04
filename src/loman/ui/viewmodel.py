@@ -110,7 +110,17 @@ def build_detail(
     node_key = members[0]
     node = computation.dag.nodes[node_key]
     value = node.get(NodeAttributes.VALUE)
-    value_wire = to_wire(value)
+    if isinstance(value, Error):
+        # The repr of an Error carries the whole traceback as an escaped
+        # one-line string. The traceback is reported separately and properly
+        # formatted, so this keeps the value to the headline.
+        value_wire = {
+            "kind": "repr",
+            "type": type(value.exception).__name__,
+            "repr": f"{type(value.exception).__name__}: {value.exception}",
+        }
+    else:
+        value_wire = to_wire(value)
     timing = node.get(NodeAttributes.TIMING)
     detail.update(
         {

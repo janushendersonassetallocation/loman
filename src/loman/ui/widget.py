@@ -92,6 +92,8 @@ class ComputationWidget(anywidget.AnyWidget):
     selected_id = traitlets.Unicode("").tag(sync=True)
     detail = traitlets.Dict(default_value={}).tag(sync=True)
     status = traitlets.Unicode("").tag(sync=True)
+    status_severity = traitlets.Unicode("idle").tag(sync=True)
+    expanded_paths = traitlets.List(traitlets.Unicode(), default_value=[]).tag(sync=True)
     editable = traitlets.Bool(True).tag(sync=True)
     repaint_states = traitlets.Bool(True).tag(sync=True)
     revision = traitlets.Int(0).tag(sync=True)
@@ -147,6 +149,7 @@ class ComputationWidget(anywidget.AnyWidget):
         self._id_to_visible: dict[str, NodeKey] = {}
         self._canonical_graph_svg = ""
         self._canonical_status = ""
+        self._canonical_severity = "idle"
         self._seen_requests: deque[str] = deque(maxlen=_REQUEST_HISTORY)
         self._max_rendered_nodes = max_rendered_nodes
         self._writing = 0
@@ -208,7 +211,7 @@ class ComputationWidget(anywidget.AnyWidget):
         finally:
             self._writing -= 1
 
-    def _set_status(self, text: str) -> None:
+    def _set_status(self, text: str, severity: str = "success") -> None:
         """Set the status line and record it as Python's canonical value.
 
         Status must go through here rather than being assigned directly. When
@@ -217,10 +220,21 @@ class ComputationWidget(anywidget.AnyWidget):
         a status, and the browser's own stale copy of ``status`` is then applied
         on top, silently reverting it. Recording the value here lets
         :meth:`_canonical_output_changed` put it back.
+
+        :param text: Message to show.
+        :param severity: ``success``, ``error`` or ``idle``. Sent explicitly so
+            the front end styles the message rather than guessing from its
+            wording.
         """
         self._canonical_status = text
+        self._canonical_severity = "idle" if not text else severity
         with self._own_write():
             self.status = text
+            self.status_severity = self._canonical_severity
+
+    def _fail(self, text: str) -> None:
+        """Report a failed request on the status line."""
+        self._set_status(text, "error")
 
     def refresh(self) -> bool:
         """Force a full graph refresh, including SVG layout and node identity.
@@ -244,7 +258,7 @@ class ComputationWidget(anywidget.AnyWidget):
             # temp dir or a malformed attribute all surface here, and none of
             # them should propagate out of a traitlets observer.
             LOG.exception("Loman widget could not render the computation graph")
-            self._set_status(f"Unable to render graph: {type(exc).__name__}: {exc}")
+            self._fail(f"Unable to render graph: {type(exc).__name__}: {exc}")
             return False
         with self._own_write():
             self._view = view
@@ -252,6 +266,10 @@ class ComputationWidget(anywidget.AnyWidget):
             self._canonical_graph_svg = svg
             self.node_states = node_states(view)
             self.composite_ids = [view.node_index_map[node] for node in view.composite_nodes]
+            # An expanded block is drawn as a Graphviz cluster, not a node, so
+            # there is no shape left to click to close it again. Naming the open
+            # blocks lets the front end make their cluster labels the handle.
+            self.expanded_paths = sorted(str(block) for block in self._expanded)
             self.revision = self.computation.revision
             if self.selected_id:
                 selected_visible = self._id_to_visible.get(self.selected_id)
@@ -311,7 +329,9 @@ class ComputationWidget(anywidget.AnyWidget):
         if hasattr(self, "_view"):
             self._refresh_detail()
 
-    @traitlets.observe("composite_ids", "detail", "graph_svg", "node_states", "revision", "status")
+    @traitlets.observe(
+        "composite_ids", "detail", "expanded_paths", "graph_svg", "node_states", "revision", "status", "status_severity"
+    )
     def _canonical_output_changed(self, change: dict[str, Any]) -> None:
         """Reject stale derived traits echoed by the browser model.
 
@@ -326,13 +346,13 @@ class ComputationWidget(anywidget.AnyWidget):
             return
         name = change["name"]
         expected: Any
-        if name == "status":
-            # Status is the one trait that still matters when rendering failed,
-            # so it is checked before the view is required to exist.
-            expected = self._canonical_status
+        # Status still matters when rendering failed, so these two are checked
+        # before the view is required to exist.
+        if name in {"status", "status_severity"}:
+            expected = self._canonical_status if name == "status" else self._canonical_severity
             if change["new"] != expected:
                 with self._own_write():
-                    self.status = expected
+                    setattr(self, name, expected)
             return
         if self._view is None:
             return
@@ -340,6 +360,8 @@ class ComputationWidget(anywidget.AnyWidget):
             expected = [self._view.node_index_map[node] for node in self._view.composite_nodes]
         elif name == "detail":
             expected = self._detail_for(self.selected_id)
+        elif name == "expanded_paths":
+            expected = sorted(str(block) for block in self._expanded)
         elif name == "graph_svg":
             expected = self._canonical_graph_svg
         elif name == "node_states":
@@ -357,20 +379,20 @@ class ComputationWidget(anywidget.AnyWidget):
         if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
         if not self.editable:
-            self._set_status("Edit failed: this widget is read-only")
+            self._fail("Edit failed: this widget is read-only")
             return
         if self._view is None:
-            self._set_status("Edit failed: the graph is not rendered")
+            self._fail("Edit failed: the graph is not rendered")
             return
         try:
             visible = self._id_to_visible[request["id"]]
             members = self._view.original_nodes[visible]
             if len(members) != 1:
-                self._set_status("Edit failed: collapsed blocks cannot be edited")
+                self._fail("Edit failed: collapsed blocks cannot be edited")
                 return
             current_detail = self._detail_for(request["id"])
             if not current_detail.get("editable"):
-                self._set_status("Edit failed: this node is not an editable scalar input")
+                self._fail("Edit failed: this node is not an editable scalar input")
                 return
             self.computation.insert(members[0], from_wire(request["value"]))
             self._set_status(f"Updated {members[0]}")
@@ -379,7 +401,7 @@ class ComputationWidget(anywidget.AnyWidget):
             # rejects malformed payloads. Raising here would surface only in the
             # kernel log and leave the UI looking like nothing happened.
             LOG.debug("Loman widget edit request failed", exc_info=True)
-            self._set_status(f"Edit failed: {type(exc).__name__}: {exc}")
+            self._fail(f"Edit failed: {type(exc).__name__}: {exc}")
 
     @traitlets.observe("compute_request")
     def _compute_requested(self, change: dict[str, Any]) -> None:
@@ -388,7 +410,7 @@ class ComputationWidget(anywidget.AnyWidget):
         if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
         if not self.editable:
-            self._set_status("Compute failed: this widget is read-only")
+            self._fail("Compute failed: this widget is read-only")
             return
         try:
             if request.get("all"):
@@ -396,7 +418,7 @@ class ComputationWidget(anywidget.AnyWidget):
                 self._set_status("Computed all available nodes")
                 return
             if self._view is None:
-                self._set_status("Compute failed: the graph is not rendered")
+                self._fail("Compute failed: the graph is not rendered")
                 return
             visible = self._id_to_visible[request["id"]]
             names = [member.name for member in self._view.original_nodes[visible]]
@@ -406,11 +428,30 @@ class ComputationWidget(anywidget.AnyWidget):
             # compute() validates before running and raises for uninitialized
             # or placeholder ancestors; node failures land as ERROR states.
             LOG.debug("Loman widget compute request failed", exc_info=True)
-            self._set_status(f"Compute failed: {type(exc).__name__}: {exc}")
+            self._fail(f"Compute failed: {type(exc).__name__}: {exc}")
+
+    def _collapse_block(self, path: str) -> str | None:
+        """Close one open block, named by its path.
+
+        An expanded block is drawn as a cluster rather than a node, so the front
+        end identifies it by path rather than by a rendered node ID.
+
+        :param path: Path of the block to close.
+        :return: A success message, or ``None`` if that block was not open.
+        """
+        block = to_nodekey(path)
+        if block not in self._expanded:
+            return None
+        self._expanded.discard(block)
+        # Closing an outer block leaves anything expanded inside it unreachable,
+        # so those go too rather than lingering as invisible state.
+        for other in [nk for nk in self._expanded if nk.is_descendent_of(block)]:
+            self._expanded.discard(other)
+        return f"Closed {block}"
 
     @traitlets.observe("toggle_request")
     def _toggle_requested(self, change: dict[str, Any]) -> None:
-        """Expand a composite node or collapse all interactive expansions."""
+        """Open a collapsed block, close an open one, or collapse everything."""
         request = change["new"]
         if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
@@ -418,17 +459,23 @@ class ComputationWidget(anywidget.AnyWidget):
             if request.get("collapse_all"):
                 self._expanded.clear()
                 success = "Collapsed all blocks"
+            elif request.get("collapse"):
+                closed = self._collapse_block(request["path"])
+                if closed is None:
+                    self._fail("Expand/collapse failed: that block is not open")
+                    return
+                success = closed
             elif self._view is None:
-                self._set_status("Expand/collapse failed: the graph is not rendered")
+                self._fail("Expand/collapse failed: the graph is not rendered")
                 return
             else:
                 visible = self._id_to_visible[request["id"]]
                 if visible not in self._view.composite_nodes:
-                    self._set_status("Expand/collapse failed: only collapsed blocks can be expanded")
+                    self._fail("Expand/collapse failed: only collapsed blocks can be expanded")
                     return
                 projected = len(self._view.node_index_map) - 1 + len(self._view.original_nodes[visible])
                 if projected > self._max_rendered_nodes:
-                    self._set_status(
+                    self._fail(
                         f"Expand/collapse failed: opening this block would render about {projected} nodes, "
                         f"over the limit of {self._max_rendered_nodes}. "
                         f"Pass max_rendered_nodes= to comp.widget() to raise it."
@@ -441,7 +488,7 @@ class ComputationWidget(anywidget.AnyWidget):
                 self._set_status(success)
         except Exception as exc:
             LOG.debug("Loman widget expand/collapse request failed", exc_info=True)
-            self._set_status(f"Expand/collapse failed: {type(exc).__name__}: {exc}")
+            self._fail(f"Expand/collapse failed: {type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         """Unsubscribe from the computation and close the widget comm."""

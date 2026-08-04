@@ -1,63 +1,379 @@
+/* Loman computation widget.
+ *
+ * Design tokens first, then components. Everything below is written against
+ * roles rather than raw colour, so light and dark swap in one place.
+ *
+ * Dark mode is a selected variant, not an inverted flip. The media query is the
+ * reliable signal inside a widget shadow root; :host-context covers hosts that
+ * stamp an explicit theme, where the browser supports it.
+ */
+
 .loman-widget {
-  --loman-border: #d1d5db;
-  --loman-panel: #f8fafc;
-  --loman-text: #172033;
-  color: var(--loman-text);
-  border: 1px solid var(--loman-border);
-  border-radius: 10px;
-  overflow: hidden;
-  font-family: system-ui, sans-serif;
-}
+  color-scheme: light;
 
-.loman-toolbar {
+  /* surfaces */
+  --loman-canvas: #ffffff;
+  --loman-chrome: #f9f9f7;
+  --loman-panel: #ffffff;
+  --loman-raised: #ffffff;
+
+  /* ink */
+  --loman-ink: #0b0b0b;
+  --loman-ink-2: #52514e;
+  --loman-ink-3: #898781;
+
+  /* lines */
+  --loman-line: rgba(11, 11, 11, 0.10);
+  --loman-line-strong: #c3c2b7;
+
+  /* accent, used only for selection and focus */
+  --loman-accent: #2a78d6;
+
+  /* status, fixed and never themed; always paired with a label */
+  --loman-good: #0ca30c;
+  --loman-warning: #fab219;
+  --loman-critical: #d03b3b;
+
+  /* geometry */
+  --loman-radius: 8px;
+  --loman-radius-sm: 5px;
+  --loman-gap: 8px;
+
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid var(--loman-border);
-  background: var(--loman-panel);
-}
-
-.loman-toolbar .loman-revision { margin-left: auto; color: #64748b; font-size: 0.8rem; }
-.loman-toolbar-divider { height: 1.4rem; border-left: 1px solid var(--loman-border); }
-.loman-zoom { min-width: 2.8rem; color: #64748b; font-size: 0.8rem; text-align: center; }
-.loman-hint { color: #64748b; font-size: 0.8rem; }
-.loman-widget button { cursor: pointer; padding: 0.35rem 0.65rem; }
-.loman-main {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
-  height: clamp(320px, 45vh, 480px);
-  min-height: 0;
-}
-/* Graphviz paints its own white background into the SVG, and the node labels
-   are black, so the canvas stays light in both themes. Matching the pane to it
-   keeps that deliberate rather than leaving a white island in a dark widget. */
-.loman-graph { overflow: auto; padding: 0.75rem; min-width: 0; min-height: 0; background: #ffffff; }
-.loman-graph svg { display: block; width: 100%; height: 100%; max-width: none; }
-.loman-graph g.node { cursor: pointer; outline: none; }
-.loman-graph g.node.loman-composite { cursor: zoom-in; }
-.loman-graph g.node:hover > :not(title, text),
-.loman-graph g.node.loman-selected > :not(title, text) { stroke: #2563eb; stroke-width: 3px; }
-.loman-detail { border-left: 1px solid var(--loman-border); padding: 1rem; overflow: auto; background: var(--loman-panel); }
-.loman-detail h3 { margin-top: 0; overflow-wrap: anywhere; }
-.loman-detail-row { display: grid; grid-template-columns: 5rem 1fr; gap: 0.5rem; margin: 0.4rem 0; }
-.loman-detail-row span { overflow-wrap: anywhere; }
-.loman-detail pre { white-space: pre-wrap; font-size: 0.75rem; max-height: 14rem; overflow: auto; }
-.loman-edit { display: flex; gap: 0.4rem; margin: 0.8rem 0; }
-.loman-edit input { min-width: 0; flex: 1; }
-.loman-error { color: #b91c1c; }
-.loman-status { min-height: 1.2rem; padding: 0.45rem 0.75rem; border-top: 1px solid var(--loman-border); font-size: 0.85rem; }
-
-@media (max-width: 700px) {
-  .loman-main { grid-template-columns: 1fr; height: auto; }
-  .loman-graph { height: 340px; }
-  .loman-detail { max-height: 260px; border-left: 0; border-top: 1px solid var(--loman-border); }
-  .loman-hint { display: none; }
+  flex-direction: column;
+  min-width: 0;
+  color: var(--loman-ink);
+  background: var(--loman-chrome);
+  border: 1px solid var(--loman-line-strong);
+  border-radius: var(--loman-radius);
+  overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 @media (prefers-color-scheme: dark) {
-  .loman-widget { --loman-border: #475569; --loman-panel: #1e293b; --loman-text: #e2e8f0; }
-  .loman-graph { border-right: 1px solid var(--loman-border); }
-  .loman-error { color: #fca5a5; }
+  .loman-widget {
+    color-scheme: dark;
+    --loman-canvas: #ffffff;
+    --loman-chrome: #0d0d0d;
+    --loman-panel: #141413;
+    --loman-raised: #202020;
+    --loman-ink: #ffffff;
+    --loman-ink-2: #c3c2b7;
+    --loman-ink-3: #898781;
+    --loman-line: rgba(255, 255, 255, 0.10);
+    --loman-line-strong: #383835;
+    --loman-accent: #3987e5;
+  }
 }
+
+/* ---------------------------------------------------------------- toolbar */
+
+.loman-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--loman-gap);
+  padding: 6px 8px;
+  background: var(--loman-chrome);
+  border-bottom: 1px solid var(--loman-line);
+  flex-wrap: wrap;
+}
+
+.loman-group { display: flex; align-items: center; gap: 2px; }
+.loman-spacer { flex: 1 1 auto; }
+
+.loman-widget button {
+  font: inherit;
+  color: var(--loman-ink-2);
+  background: var(--loman-raised);
+  border: 1px solid var(--loman-line-strong);
+  border-radius: var(--loman-radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.loman-widget button:hover:not(:disabled) { color: var(--loman-ink); border-color: var(--loman-ink-3); }
+.loman-widget button:active:not(:disabled) { background: var(--loman-chrome); }
+.loman-widget button:disabled { opacity: 0.45; cursor: default; }
+.loman-widget button.loman-primary { color: var(--loman-ink); font-weight: 550; }
+
+.loman-widget :focus-visible {
+  outline: 2px solid var(--loman-accent);
+  outline-offset: 1px;
+  border-radius: var(--loman-radius-sm);
+}
+
+/* Icon-only zoom controls sit in a segmented group. */
+.loman-group button.loman-icon { padding: 4px 8px; min-width: 28px; font-variant-numeric: tabular-nums; }
+.loman-zoom {
+  min-width: 46px;
+  padding: 0 4px;
+  text-align: center;
+  color: var(--loman-ink-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.loman-revision { color: var(--loman-ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------- body */
+
+.loman-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  height: clamp(360px, 52vh, 560px);
+  min-height: 0;
+}
+
+/* The canvas holds the Graphviz SVG at its natural size and scrolls. Scaling
+   it to fit the pane is what made every label shrink as blocks were opened. */
+.loman-canvas {
+  position: relative;
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--loman-canvas);
+  cursor: grab;
+  display: flex;
+  /* `safe` keeps the top-left reachable once the graph outgrows the pane;
+     plain centring would clip the overflow beyond the scroll origin. */
+  place-content: safe center;
+}
+.loman-canvas.loman-panning { cursor: grabbing; }
+.loman-canvas.loman-panning * { pointer-events: none; }
+
+.loman-stage { padding: 12px; width: max-content; margin: auto; }
+.loman-stage svg { display: block; max-width: none; }
+
+/* Hover is a hint; selection is a statement. They must not look alike. */
+.loman-canvas g.node { cursor: pointer; outline: none; }
+.loman-canvas g.node.loman-composite { cursor: zoom-in; }
+.loman-canvas g.node.loman-composite.loman-open { cursor: zoom-out; }
+
+.loman-canvas g.node:hover > :not(title, text) {
+  stroke: var(--loman-ink-3);
+  stroke-width: 2px;
+}
+.loman-canvas g.node.loman-selected > :not(title, text) {
+  stroke: var(--loman-accent);
+  stroke-width: 3.5px;
+  paint-order: stroke;
+}
+.loman-canvas g.node.loman-selected > text { font-weight: 700; }
+.loman-canvas g.node:focus-visible > :not(title, text) {
+  stroke: var(--loman-accent);
+  stroke-width: 2.5px;
+  stroke-dasharray: 4 2;
+}
+
+/* ----------------------------------------------------------------- legend */
+
+/* State is encoded in the graph as colour alone, and Loman's default state
+   colours are not colourblind-safe (STALE and COMPUTABLE sit ~2 dE apart under
+   protanopia). The legend is what stops colour carrying the meaning by itself,
+   so it names every state currently on screen. It lives in the footer rather
+   than over the canvas, where it would cover the graph it describes. */
+.loman-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.loman-legend li { display: flex; align-items: center; gap: 5px; color: var(--loman-ink-3); font-size: 11px; }
+.loman-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--loman-line-strong);
+  flex: none;
+}
+
+/* -------------------------------------------------------------- inspector */
+
+.loman-inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  background: var(--loman-panel);
+  border-left: 1px solid var(--loman-line);
+}
+
+.loman-empty {
+  margin: auto;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--loman-ink-3);
+  font-size: 12px;
+}
+
+.loman-node-head { padding: 12px 12px 8px; border-bottom: 1px solid var(--loman-line); }
+.loman-node-name {
+  margin: 0 0 6px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.loman-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--loman-line-strong);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  color: var(--loman-ink-2);
+}
+.loman-badge .loman-swatch { width: 8px; height: 8px; border-radius: 999px; }
+
+.loman-section { padding: 10px 12px; border-bottom: 1px solid var(--loman-line); }
+.loman-section:last-child { border-bottom: 0; }
+.loman-section h4 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--loman-ink-3);
+}
+
+.loman-value {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  max-height: 9rem;
+  overflow: auto;
+}
+
+.loman-meta { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; margin: 0; }
+.loman-meta dt { color: var(--loman-ink-3); }
+.loman-meta dd {
+  margin: 0;
+  color: var(--loman-ink-2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.loman-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+.loman-ref {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--loman-radius-sm);
+  background: var(--loman-chrome);
+  border: 1px solid var(--loman-line);
+  color: var(--loman-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.loman-edit { display: flex; gap: 6px; }
+.loman-edit input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--loman-ink);
+  background: var(--loman-canvas);
+  border: 1px solid var(--loman-line-strong);
+  border-radius: var(--loman-radius-sm);
+  padding: 4px 7px;
+}
+.loman-edit input[type="checkbox"] { flex: none; width: 16px; height: 16px; }
+.loman-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.loman-trace {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow: auto;
+  max-height: 12rem;
+  padding: 8px;
+  border-radius: var(--loman-radius-sm);
+  background: var(--loman-chrome);
+  border: 1px solid var(--loman-line);
+  color: var(--loman-ink-2);
+}
+.loman-section.loman-is-error h4 { color: var(--loman-critical); }
+
+details.loman-source { font-size: 12px; }
+details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
+
+/* --------------------------------------------------------------- statusbar */
+
+.loman-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--loman-line);
+  background: var(--loman-chrome);
+  color: var(--loman-ink-2);
+  font-size: 12px;
+}
+.loman-status-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--loman-ink-3); flex: none; }
+.loman-status-text { overflow-wrap: anywhere; }
+
+.loman-status[data-severity="idle"] .loman-status-dot { display: none; }
+.loman-status[data-severity="success"] .loman-status-dot { background: var(--loman-good); }
+.loman-status[data-severity="error"] .loman-status-dot { background: var(--loman-critical); }
+.loman-status[data-severity="error"] .loman-status-text { color: var(--loman-critical); }
+.loman-status[data-severity="busy"] .loman-status-dot {
+  background: var(--loman-warning);
+  animation: loman-pulse 1s ease-in-out infinite;
+}
+
+@keyframes loman-pulse { 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .loman-status[data-severity="busy"] .loman-status-dot { animation: none; }
+}
+
+/* Work happens synchronously in the kernel, so the whole surface goes inert
+   rather than pretending individual controls are still live. */
+.loman-widget[data-busy="true"] .loman-main { opacity: 0.6; }
+.loman-widget[data-busy="true"] .loman-canvas { cursor: progress; }
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 720px) {
+  .loman-main { grid-template-columns: 1fr; height: auto; }
+  .loman-canvas { height: 320px; }
+  .loman-inspector { max-height: 300px; border-left: 0; border-top: 1px solid var(--loman-line); }
+  .loman-legend { display: none; }
+}
+
+:host-context([data-theme="dark"]) .loman-widget {
+  color-scheme: dark;
+  --loman-canvas: #ffffff;
+  --loman-chrome: #0d0d0d;
+  --loman-panel: #141413;
+  --loman-raised: #202020;
+  --loman-ink: #ffffff;
+  --loman-ink-2: #c3c2b7;
+  --loman-ink-3: #898781;
+  --loman-line: rgba(255, 255, 255, 0.10);
+  --loman-line-strong: #383835;
+  --loman-accent: #3987e5;
+}
+
+/* The label of an open block is the handle that closes it again. */
+.loman-canvas text.loman-block-handle {
+  cursor: zoom-out;
+  font-weight: 700;
+  text-decoration: underline dotted;
+}
+.loman-canvas text.loman-block-handle:hover { fill: var(--loman-accent); }
