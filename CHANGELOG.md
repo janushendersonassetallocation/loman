@@ -5,6 +5,12 @@
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
+- Added `Computation.subscribe` and `ComputationEvent` for observing batched changes to a computation
+- Added the `loman[ui]` extra, providing `Computation.widget()`: an interactive notebook graph
+  that follows its computation, with node inspection, drill-down into blocks, scalar input
+  editing and compute controls
+- `GraphView` now exposes `original_nodes`, `composite_nodes` and `node_index_map`, so callers
+  can map rendered nodes back to computation nodes
 
 ## [0.5.3] (2025-06-20)
 
