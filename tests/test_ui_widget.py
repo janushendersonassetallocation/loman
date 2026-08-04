@@ -1028,3 +1028,17 @@ class TestCellEditing:
         javascript = (STATIC / "widget.js").read_text()
         assert "cell: { row, column }" in javascript
         assert "openCellEditor" in javascript
+
+    def test_read_only_state_is_not_undone_by_clearing_busy(self):
+        """Busy and editable both disable controls, so they must be applied together.
+
+        Clearing the busy state used to blanket-enable the toolbar, which
+        re-enabled Compute all on a read-only widget. Python still refused the
+        request, but the button looked live.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const applyEnabledState = () => {")[1].split("};")[0]
+        assert 'model.get("editable")' in body
+        assert "applyEnabledState();" in javascript.split("const setBusy")[1]
+        # Nothing may flip the toolbar's disabled state outside that one helper.
+        assert javascript.count('buttons("compute-all").disabled') == 1

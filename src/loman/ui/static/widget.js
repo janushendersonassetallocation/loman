@@ -73,11 +73,21 @@ function render({ model, el }) {
   // The browser sets its own optimistic busy state on send and clears it when
   // Python answers, which does not depend on the kernel flushing anything
   // before it blocks.
+  // Both `busy` and `editable` disable controls, so they are applied together.
+  // Clearing busy must not re-enable what a read-only widget never offered.
+  const applyEnabledState = () => {
+    const canMutate = model.get("editable") && !busy;
+    buttons("compute-all").disabled = !canMutate;
+    // Navigation is not mutation, so it stays available when read-only.
+    buttons("collapse-all").disabled = busy;
+    inspector.querySelectorAll("button").forEach((node) => { node.disabled = !canMutate; });
+    inspector.querySelectorAll("input").forEach((node) => { node.disabled = busy; });
+  };
+
   const setBusy = (isBusy, message) => {
     busy = isBusy;
     el.dataset.busy = String(isBusy);
-    for (const action of ["compute-all", "collapse-all"]) buttons(action).disabled = isBusy;
-    inspector.querySelectorAll("button, input").forEach((node) => { node.disabled = isBusy; });
+    applyEnabledState();
     if (isBusy) {
       statusBar.dataset.severity = "busy";
       statusText.textContent = message;
@@ -504,7 +514,6 @@ function render({ model, el }) {
     wrapper.className = "loman-actions";
     const compute = document.createElement("button");
     compute.textContent = data.composite ? "Compute block" : "Compute node";
-    compute.disabled = !model.get("editable");
     compute.addEventListener(
       "click", () => send("compute_request", { id: data.id }, "Computing…"), { signal },
     );
@@ -619,7 +628,7 @@ function render({ model, el }) {
     if (data.editable) inspector.append(section("Edit value", buildEditForm(data)));
     inspector.append(section(null, buildActions(data)));
     if (data.source) inspector.append(buildSource(data.source));
-    if (busy) inspector.querySelectorAll("button, input").forEach((node) => { node.disabled = true; });
+    applyEnabledState();
     repaint();
   };
 
@@ -637,8 +646,8 @@ function render({ model, el }) {
   };
 
   const renderEditable = () => {
-    buttons("compute-all").disabled = !model.get("editable") || busy;
     renderDetail();
+    applyEnabledState();
   };
 
   const onGraphChanged = () => {
