@@ -123,6 +123,40 @@
 
 .loman-revision { color: var(--loman-ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
 
+/* --------------------------------------------------------------- breadcrumb */
+
+/* Only shown once a block is in focus; it names the path back to the root. */
+.loman-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 5px 10px;
+  background: var(--loman-chrome);
+  border-bottom: 1px solid var(--loman-line);
+  font-size: 12px;
+}
+.loman-breadcrumb[hidden] { display: none; }
+
+.loman-crumb-sep { color: var(--loman-ink-3); }
+
+.loman-crumb.loman-crumb-current {
+  color: var(--loman-ink);
+  font-weight: 550;
+  padding: 2px 4px;
+}
+
+button.loman-crumb {
+  color: var(--loman-ink-2);
+  background: none;
+  border: none;
+  border-radius: var(--loman-radius-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+button.loman-crumb:hover:not(:disabled) { color: var(--loman-ink); background: var(--loman-raised); }
+button.loman-crumb:disabled { opacity: 0.45; cursor: default; }
+
 /* ------------------------------------------------------------------- body */
 
 .loman-main {

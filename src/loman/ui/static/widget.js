@@ -29,9 +29,13 @@ function render({ model, el }) {
         <button data-action="fit" title="Scale the graph to fit the pane">Fit</button>
         <button data-action="actual" title="Show the graph at its natural size">1:1</button>
       </div>
+      <div class="loman-group">
+        <button data-action="layout" title="Toggle graph direction (left-to-right or top-to-bottom)">LR</button>
+      </div>
       <span class="loman-spacer"></span>
       <span class="loman-revision" title="Computation revision"></span>
     </div>
+    <nav class="loman-breadcrumb" aria-label="Focus path" hidden></nav>
     <div class="loman-main">
       <div class="loman-canvas" tabindex="0">
         <div class="loman-stage"></div>
@@ -54,6 +58,7 @@ function render({ model, el }) {
   const legendList = el.querySelector(".loman-legend");
   const revision = el.querySelector(".loman-revision");
   const zoomLabel = el.querySelector(".loman-zoom");
+  const breadcrumb = el.querySelector(".loman-breadcrumb");
   const buttons = (action) => el.querySelector(`[data-action="${action}"]`);
 
   let sequence = 0;
@@ -80,7 +85,12 @@ function render({ model, el }) {
     buttons("compute-all").disabled = !canMutate;
     // Navigation is not mutation, so it stays available when read-only.
     buttons("collapse-all").disabled = busy;
-    inspector.querySelectorAll("button").forEach((node) => { node.disabled = !canMutate; });
+    buttons("layout").disabled = busy;
+    breadcrumb.querySelectorAll("button").forEach((node) => { node.disabled = busy; });
+    // Focusing a block navigates rather than mutates, so it stays live when
+    // read-only; only the mutating controls follow `canMutate`.
+    inspector.querySelectorAll("button:not(.loman-nav)").forEach((node) => { node.disabled = !canMutate; });
+    inspector.querySelectorAll("button.loman-nav").forEach((node) => { node.disabled = busy; });
     inspector.querySelectorAll("input").forEach((node) => { node.disabled = busy; });
   };
 
@@ -518,6 +528,18 @@ function render({ model, el }) {
       "click", () => send("compute_request", { id: data.id }, "Computing…"), { signal },
     );
     wrapper.append(compute);
+    if (data.composite) {
+      // Focusing re-roots the graph on this block, so its own nested blocks
+      // become the whole view. Navigation, not mutation, hence loman-nav.
+      const focus = document.createElement("button");
+      focus.className = "loman-nav";
+      focus.textContent = "Focus";
+      focus.title = "Show only this block, so its nested blocks fill the view";
+      focus.addEventListener(
+        "click", () => send("focus_request", { id: data.id }, "Focusing…"), { signal },
+      );
+      wrapper.append(focus);
+    }
     return wrapper;
   };
 
@@ -645,6 +667,49 @@ function render({ model, el }) {
     revision.textContent = value ? `rev ${value}` : "";
   };
 
+  const renderLayout = () => {
+    const rankdir = model.get("rankdir") || "LR";
+    const button = buttons("layout");
+    button.textContent = rankdir;
+    button.setAttribute("aria-label", `Graph direction ${rankdir}, activate to switch`);
+  };
+
+  // The trail runs from the widget's own root to the block in focus. Its first
+  // entry is that root; anything beyond it is a block we have drilled into, so
+  // the bar only earns its space once something is in focus.
+  const renderBreadcrumb = () => {
+    const trail = model.get("focus_trail") ?? [];
+    breadcrumb.replaceChildren();
+    breadcrumb.hidden = trail.length < 2;
+    if (trail.length < 2) return;
+    trail.forEach((entry, index) => {
+      if (index > 0) {
+        const sep = document.createElement("span");
+        sep.className = "loman-crumb-sep";
+        sep.textContent = "›";
+        sep.setAttribute("aria-hidden", "true");
+        breadcrumb.append(sep);
+      }
+      const last = index === trail.length - 1;
+      if (last) {
+        const here = document.createElement("span");
+        here.className = "loman-crumb loman-crumb-current";
+        here.setAttribute("aria-current", "location");
+        here.textContent = entry.label;
+        breadcrumb.append(here);
+        return;
+      }
+      const crumb = document.createElement("button");
+      crumb.className = "loman-crumb";
+      crumb.textContent = entry.label;
+      crumb.addEventListener(
+        "click", () => send("focus_request", { path: entry.path }, "Focusing…"), { signal },
+      );
+      breadcrumb.append(crumb);
+    });
+    applyEnabledState();
+  };
+
   const renderEditable = () => {
     renderDetail();
     applyEnabledState();
@@ -665,6 +730,10 @@ function render({ model, el }) {
   buttons("zoom-in").addEventListener("click", () => setZoom(zoom * ZOOM_STEP), { signal });
   buttons("fit").addEventListener("click", fitToPane, { signal });
   buttons("actual").addEventListener("click", () => setZoom(1), { signal });
+  buttons("layout").addEventListener("click", () => {
+    const next = model.get("rankdir") === "LR" ? "TB" : "LR";
+    send("layout_request", { rankdir: next }, "Changing layout…");
+  }, { signal });
 
   model.on("change:graph_svg", onGraphChanged);
   model.on("change:expanded_paths", wireOpenBlocks);
@@ -679,6 +748,8 @@ function render({ model, el }) {
   model.on("change:ack", renderStatus);
   model.on("change:revision", renderRevision);
   model.on("change:editable", renderEditable);
+  model.on("change:rankdir", renderLayout);
+  model.on("change:focus_trail", renderBreadcrumb);
 
   const cleanup = () => {
     controller.abort();
@@ -692,12 +763,16 @@ function render({ model, el }) {
     model.off("change:ack", renderStatus);
     model.off("change:revision", renderRevision);
     model.off("change:editable", renderEditable);
+    model.off("change:rankdir", renderLayout);
+    model.off("change:focus_trail", renderBreadcrumb);
   };
 
   renderGraph();
   renderEditable();
   renderStatus();
   renderRevision();
+  renderLayout();
+  renderBreadcrumb();
   // Opens at natural size rather than fitted: a large graph fitted to a notebook
   // pane is unreadable, and "show me the whole shape" is one click away on Fit.
   return cleanup;

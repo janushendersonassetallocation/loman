@@ -119,10 +119,19 @@ class ComputationWidget(anywidget.AnyWidget):
     editable = traitlets.Bool(True).tag(sync=True)
     repaint_states = traitlets.Bool(True).tag(sync=True)
     revision = traitlets.Int(0).tag(sync=True)
+    #: Graphviz layout direction. Defaults to ``LR`` because computations read
+    #: left to right, from inputs to results; the toolbar toggles it to ``TB``.
+    rankdir = traitlets.Unicode("LR").tag(sync=True)
+    #: Breadcrumb from the widget's own root down to the block in focus. Each
+    #: entry is ``{"label": str, "path": str}``; the front end renders it and
+    #: sends a focus_request to climb back up.
+    focus_trail = traitlets.List(traitlets.Dict(), default_value=[]).tag(sync=True)
 
     edit_request = traitlets.Dict(default_value={}).tag(sync=True)
     compute_request = traitlets.Dict(default_value={}).tag(sync=True)
     toggle_request = traitlets.Dict(default_value={}).tag(sync=True)
+    layout_request = traitlets.Dict(default_value={}).tag(sync=True)
+    focus_request = traitlets.Dict(default_value={}).tag(sync=True)
 
     def __init__(
         self,
@@ -140,6 +149,7 @@ class ComputationWidget(anywidget.AnyWidget):
         collapse_all: bool = True,
         editable: bool = True,
         max_rendered_nodes: int = DEFAULT_MAX_RENDERED_NODES,
+        rankdir: str = "LR",
     ) -> None:
         """Create a widget and subscribe it to ``computation``.
 
@@ -152,9 +162,13 @@ class ComputationWidget(anywidget.AnyWidget):
         :param max_rendered_nodes: Refuse an expand request that would put more
             than this many nodes on screen. It does not cap the initial view:
             what you asked to draw is drawn.
+        :param rankdir: Initial Graphviz layout direction, ``LR`` (default) or
+            ``TB``. A ``rankdir`` given in ``graph_attr`` takes precedence. The
+            toolbar toggles it live either way.
         """
         self.computation = computation
         self._root = root
+        self._base_root = root
         self._base_transformations = {} if node_transformations is None else node_transformations.copy()
         self._expanded: set[NodeKey] = set()
         self._draw_options: _DrawOptions = {
@@ -173,11 +187,15 @@ class ComputationWidget(anywidget.AnyWidget):
         self._canonical_status = ""
         self._canonical_severity = "idle"
         self._canonical_ack = 0
+        # An explicit rankdir in graph_attr wins, so a caller who set the layout
+        # direction the old way still gets what they asked for; otherwise the
+        # left-to-right default applies.
+        self._canonical_rankdir = str(graph_attr["rankdir"]) if graph_attr and "rankdir" in graph_attr else rankdir
         self._seen_requests: deque[str] = deque(maxlen=_REQUEST_HISTORY)
         self._max_rendered_nodes = max_rendered_nodes
         self._writing = 0
         self._unsubscribe: Callable[[], None] | None = None
-        super().__init__(editable=editable, repaint_states=colors == "state")
+        super().__init__(editable=editable, repaint_states=colors == "state", rankdir=self._canonical_rankdir)
         custom_colors = cmap if colors == "state" and isinstance(cmap, dict) else None
         self.state_colors = state_colors(custom_colors)
         self.refresh()
@@ -215,14 +233,38 @@ class ComputationWidget(anywidget.AnyWidget):
         """Restore a rooted view key to its full computation path."""
         return visible if self._root is None else to_nodekey(self._root).join(visible)
 
+    def _focus_trail(self) -> list[dict[str, str]]:
+        """Describe the path from the widget's own root to the block in focus.
+
+        The first entry is the widget's root, labelled ``All`` when the whole
+        computation is in view; each further entry is one block descended into.
+        Paths are full computation paths, so the front end can hand any of them
+        straight back as a focus_request.
+        """
+        base = None if self._base_root is None else to_nodekey(self._base_root)
+        current = None if self._root is None else to_nodekey(self._root)
+        trail = [{"label": "All" if base is None else base.label, "path": "" if base is None else str(base)}]
+        if current is None or current == base:
+            return trail
+        relative = current.drop_root(base)
+        acc = base if base is not None else NodeKey.root()
+        for part in relative.parts:  # type: ignore[union-attr]
+            acc = acc.join_parts(part)
+            trail.append({"label": str(part), "path": str(acc)})
+        return trail
+
     def _make_view(self) -> GraphView:
         """Create the current GraphView, including interactive expansions."""
         transformations = self._base_transformations.copy()
         transformations.update(dict.fromkeys(self._expanded, NodeTransformations.EXPAND))
+        options = dict(self._draw_options)
+        graph_attr = dict(options["graph_attr"] or {})
+        graph_attr["rankdir"] = self.rankdir
+        options["graph_attr"] = graph_attr
         return self.computation.draw(
             self._root,
             node_transformations=transformations,
-            **self._draw_options,
+            **options,  # type: ignore[arg-type]
         )
 
     @contextmanager
@@ -303,6 +345,7 @@ class ComputationWidget(anywidget.AnyWidget):
             # there is no shape left to click to close it again. Naming the open
             # blocks lets the front end make their cluster labels the handle.
             self.expanded_paths = sorted(str(block) for block in self._expanded)
+            self.focus_trail = self._focus_trail()
             self.revision = self.computation.revision
             if self.selected_id:
                 selected_visible = self._id_to_visible.get(self.selected_id)
@@ -367,8 +410,10 @@ class ComputationWidget(anywidget.AnyWidget):
         "composite_ids",
         "detail",
         "expanded_paths",
+        "focus_trail",
         "graph_svg",
         "node_states",
+        "rankdir",
         "revision",
         "status",
         "status_severity",
@@ -399,6 +444,19 @@ class ComputationWidget(anywidget.AnyWidget):
             if change["new"] != expected:
                 with self._own_write():
                     setattr(self, name, expected)
+            return
+        # rankdir and the focus trail are Python's own but do not need the view,
+        # so they are settled before the view-dependent traits below.
+        if name == "rankdir":
+            if change["new"] != self._canonical_rankdir:
+                with self._own_write():
+                    self.rankdir = self._canonical_rankdir
+            return
+        if name == "focus_trail":
+            expected = self._focus_trail()
+            if change["new"] != expected:
+                with self._own_write():
+                    self.focus_trail = expected
             return
         if self._view is None:
             return
@@ -557,6 +615,84 @@ class ComputationWidget(anywidget.AnyWidget):
         except Exception as exc:
             LOG.debug("Loman widget expand/collapse request failed", exc_info=True)
             self._fail(f"Expand/collapse failed: {type(exc).__name__}: {exc}")
+
+    @traitlets.observe("layout_request")
+    @_acknowledges
+    def _layout_requested(self, change: dict[str, Any]) -> None:
+        """Change the Graphviz layout direction, then relayout."""
+        request = change["new"]
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
+            return
+        rankdir = str(request.get("rankdir", "")).upper()
+        if rankdir not in {"LR", "TB", "RL", "BT"}:
+            self._fail(f"Layout failed: {rankdir or '(empty)'} is not a valid rankdir")
+            return
+        previous = self._canonical_rankdir
+        self._canonical_rankdir = rankdir
+        with self._own_write():
+            self.rankdir = rankdir
+        if self.refresh():
+            self._set_status(f"Layout direction {rankdir}")
+        else:
+            # The relayout failed and left the old picture, so keep rankdir
+            # agreeing with what is on screen rather than what was asked for.
+            self._canonical_rankdir = previous
+            with self._own_write():
+                self.rankdir = previous
+
+    def _resolve_focus(self, request: dict[str, Any]) -> NodeKey | None:
+        """Resolve a focus request to the block it names, or the widget's root.
+
+        :param request: A ``{"path": ...}`` climbing the breadcrumb, or a
+            ``{"id": ...}`` descending into a rendered composite block.
+        :return: The block to focus on, or the widget's own root when reset.
+        :raises ValueError: If the request names somewhere outside the root.
+        :raises KeyError: If the rendered ID is unknown.
+        """
+        if "path" in request:
+            path = request["path"]
+            if not path:
+                return self._base_root if self._base_root is None else to_nodekey(self._base_root)
+            target = to_nodekey(path)
+            base = None if self._base_root is None else to_nodekey(self._base_root)
+            if base is not None and target != base and not target.is_descendent_of(base):
+                msg = f"{target} is not within this widget's root"
+                raise ValueError(msg)
+            return target
+        assert self._view is not None  # noqa: S101
+        visible = self._id_to_visible[request["id"]]
+        if visible not in self._view.composite_nodes:
+            msg = "only blocks can be focused"
+            raise ValueError(msg)
+        return self._full_visible_key(visible)
+
+    @traitlets.observe("focus_request")
+    @_acknowledges
+    def _focus_requested(self, change: dict[str, Any]) -> None:
+        """Re-root the view onto one block, or back to the widget's own root.
+
+        Focusing drops every open expansion that is no longer under the new
+        root, since those blocks are no longer on screen to close.
+        """
+        request = change["new"]
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
+            return
+        if self._view is None and "id" in request:
+            self._fail("Focus failed: the graph is not rendered")
+            return
+        try:
+            target = self._resolve_focus(request)
+            self._root = target
+            if target is None:
+                self._expanded.clear()
+            else:
+                root_nk = to_nodekey(target)
+                self._expanded = {nk for nk in self._expanded if nk.is_descendent_of(root_nk)}
+            if self.refresh():
+                self._set_status("Showing the whole graph" if target is None else f"Focused on {target}")
+        except Exception as exc:
+            LOG.debug("Loman widget focus request failed", exc_info=True)
+            self._fail(f"Focus failed: {type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         """Unsubscribe from the computation and close the widget comm."""

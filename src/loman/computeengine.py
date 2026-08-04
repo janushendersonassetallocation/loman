@@ -2279,6 +2279,7 @@ class Computation:
         collapse_all: bool = True,
         editable: bool = True,
         max_rendered_nodes: int = 500,
+        rankdir: str = "LR",
     ) -> "ComputationWidget":
         """Create an interactive notebook widget for this computation.
 
@@ -2298,6 +2299,8 @@ class Computation:
             Expanding and collapsing blocks stays available either way.
         :param max_rendered_nodes: Refuse to open a block that would put more
             than this many nodes on screen. Does not cap the initial view.
+        :param rankdir: Initial Graphviz layout direction, ``LR`` (default) or
+            ``TB``, toggled live from the toolbar.
         :return: A live widget subscribed to this computation.
         """
         from .ui import ComputationWidget
@@ -2316,6 +2319,7 @@ class Computation:
             collapse_all=collapse_all,
             editable=editable,
             max_rendered_nodes=max_rendered_nodes,
+            rankdir=rankdir,
         )
 
     def view(self, cmap: Any = None, colors: str = "state", shapes: str | None = None) -> None:

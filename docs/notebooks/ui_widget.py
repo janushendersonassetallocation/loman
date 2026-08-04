@@ -137,7 +137,9 @@ def _(mo):
     | Open a block | Click it |
     | Close one block | Click its **title** once open |
     | Close everything | **Collapse all** |
+    | Focus a block | Select it, then **Focus** in its panel |
     | Inspect a node | Click it |
+    | Graph direction | **LR** / **TB** toggle |
     | Zoom | **+** / **−**, or ctrl/⌘ with the wheel |
     | Whole graph | **Fit** — **1:1** returns to natural size |
     | Pan | Drag the background |
@@ -336,6 +338,113 @@ def _(mo, read_only_ui):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## Direction and focus
+
+    Two controls make a deep graph navigable.
+
+    **Direction.** The graph is laid out left to right by default, the way a
+    computation reads: inputs on the left, results on the right. The **LR**
+    button in the toolbar flips it to **TB** and back. Pass
+    `comp.widget(rankdir="TB")` to start the other way.
+
+    **Focus.** Blocks can nest — here a book holds desks, and each desk holds
+    instruments. Opening every level at once is a wall of nodes. Instead, select
+    a block and press **Focus** in its panel: the graph re-roots on that block,
+    so its own nested blocks become the whole view. A breadcrumb appears under
+    the toolbar; click any step to climb back out, or **All** to return to the
+    top.
+
+    Try it: click `emea`, **Focus**; then click `rates` inside it, **Focus**
+    again. The breadcrumb reads **All › emea › rates**.
+    """)
+    return
+
+
+@app.cell
+def _(loman):
+    def build_desk():
+        """A book of desks, each holding instruments — three levels of blocks."""
+        comp = loman.Computation()
+        legs = {
+            "emea/rates/swap": 0.031,
+            "emea/rates/bond": 0.028,
+            "emea/credit/cds": 0.045,
+            "apac/rates/swap": 0.026,
+            "apac/equity/future": 0.052,
+        }
+        for path, rate in legs.items():
+            comp.add_node(f"{path}/notional", value=1_000_000.0)
+            comp.add_node(f"{path}/rate", value=rate)
+            comp.add_node(
+                f"{path}/pv",
+                lambda notional, rate: notional * rate,
+                kwds={"notional": f"{path}/notional", "rate": f"{path}/rate"},
+            )
+        comp.add_node(
+            "book_pv",
+            lambda **pvs: sum(pvs.values()),
+            kwds={path.replace("/", "_"): f"{path}/pv" for path in legs},
+        )
+        comp.compute_all()
+        return comp
+
+    desk = build_desk()
+    return (desk,)
+
+
+@app.cell
+def _(desk, mo):
+    desk_widget = desk.widget()
+    desk_ui = mo.ui.anywidget(desk_widget)
+    return (desk_ui,)
+
+
+@app.cell(hide_code=True)
+def _(desk_ui, mo):
+    _static_export = "data:text/javascript" in desk_ui.text
+    mo.Html(desk_ui.widget.graph_svg) if _static_export else desk_ui
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## A widget on a section of the graph
+
+    You do not have to render the whole computation. Pass `root=` to build a
+    widget scoped to one block, and only that section is drawn — its inputs from
+    the rest of the graph still resolve, they are simply out of view.
+
+    This is the static counterpart to **Focus**: `root=` fixes the section up
+    front, while **Focus** re-roots a full-graph widget as you explore. Both use
+    the same paths, so `desk.widget(root="emea")` opens where **Focus** on `emea`
+    lands.
+
+    Scoping keeps a dashboard tight: put the desk you own in one widget and a
+    neighbouring desk in another, each a live view of the same `Computation`. The
+    selection is still the real thing — `section.selected_name` reports the full
+    path, `emea/rates`, not a name local to the section.
+    """)
+    return
+
+
+@app.cell
+def _(desk, mo):
+    section = desk.widget(root="emea")
+    section_ui = mo.ui.anywidget(section)
+    return (section_ui,)
+
+
+@app.cell(hide_code=True)
+def _(mo, section_ui):
+    _static_export = "data:text/javascript" in section_ui.text
+    mo.Html(section_ui.widget.graph_svg) if _static_export else section_ui
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Worth knowing
 
     **A bare `comp` stays a static picture.** Evaluating `comp` on its own
@@ -372,10 +481,13 @@ def _(mo):
 
     ```python
     widget = comp.widget()          # mirrors comp.draw(), plus editable=
+    widget = comp.widget(root="emea")    # scope the widget to one block
     widget.selected_name            # the real Loman name, not a browser ID
     widget.selected_names           # every member, for a collapsed block
     widget.refresh()                # escape hatch after mutating comp.dag directly
     widget.close()                  # unsubscribe and release
+
+    comp.widget(rankdir="TB")       # start top-to-bottom; LR is the default
 
     unsubscribe = comp.subscribe(on_change)   # one batched event per mutation
     comp.revision                             # monotonic change counter

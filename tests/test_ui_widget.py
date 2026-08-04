@@ -1133,3 +1133,192 @@ class TestAcknowledgement:
         javascript = (STATIC / "widget.js").read_text()
         assert 'model.on("change:ack", renderStatus)' in javascript
         assert "setBusy(false)" in javascript.split("const renderStatus")[1]
+
+
+class TestLayoutDirection:
+    """The graph reads left to right by default, and the toolbar toggles it."""
+
+    def test_defaults_to_left_to_right(self):
+        """A plain widget lays the graph out with rankdir=LR."""
+        _comp, widget = make_widget()
+        try:
+            assert widget.rankdir == "LR"
+            assert "rankdir=LR" in widget._view.viz_dot.to_string()
+        finally:
+            widget.close()
+
+    def test_explicit_rankdir_argument_is_honoured(self):
+        """comp.widget(rankdir=...) starts in the direction asked for."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        widget = comp.widget(rankdir="TB")
+        try:
+            assert widget.rankdir == "TB"
+            assert "rankdir=TB" in widget._view.viz_dot.to_string()
+        finally:
+            widget.close()
+
+    def test_rankdir_in_graph_attr_takes_precedence(self):
+        """A direction set the old way, through graph_attr, still wins."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        widget = comp.widget(graph_attr={"rankdir": "BT"})
+        try:
+            assert widget.rankdir == "BT"
+            assert "rankdir=BT" in widget._view.viz_dot.to_string()
+        finally:
+            widget.close()
+
+    def test_toggle_relayouts_in_the_new_direction(self):
+        """A layout request re-runs Graphviz with the new rankdir."""
+        _comp, widget = make_widget()
+        try:
+            svg = widget.graph_svg
+
+            widget.layout_request = {"rankdir": "TB", "request_id": "l1"}
+
+            assert widget.rankdir == "TB"
+            assert widget.status == "Layout direction TB"
+            assert "rankdir=TB" in widget._view.viz_dot.to_string()
+            assert widget.graph_svg != svg
+        finally:
+            widget.close()
+
+    def test_an_invalid_direction_is_refused(self):
+        """A nonsense rankdir leaves the picture and the trait alone."""
+        _comp, widget = make_widget()
+        try:
+            widget.layout_request = {"rankdir": "sideways", "request_id": "l1"}
+
+            assert widget.status.startswith("Layout failed")
+            assert widget.status_severity == "error"
+            assert widget.rankdir == "LR"
+        finally:
+            widget.close()
+
+    def test_rankdir_survives_a_browser_echo(self):
+        """The direction is Python's own, like the other derived traits."""
+        _comp, widget = make_widget()
+        try:
+            widget.layout_request = {"rankdir": "TB", "request_id": "l1"}
+
+            widget.rankdir = "LR"
+
+            assert widget.rankdir == "TB"
+        finally:
+            widget.close()
+
+    def test_the_toolbar_wires_the_toggle(self):
+        """The button exists and drives a layout_request."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert 'data-action="layout"' in javascript
+        assert '"layout_request"' in javascript
+
+
+class TestFocus:
+    """Re-rooting the view onto one block, which nesting makes worthwhile."""
+
+    def test_focusing_a_block_reroots_the_view(self):
+        """Focusing shows only the chosen block's own contents."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            assert widget.status == "Focused on foo"
+            visible = {str(node) for node in widget._view.node_index_map}
+            assert {"a", "b", "c", "d"}.issubset(visible)
+            assert "bar" not in visible
+            assert widget.focus_trail == [
+                {"label": "All", "path": ""},
+                {"label": "foo", "path": "foo"},
+            ]
+        finally:
+            widget.close()
+
+    def test_focus_drills_into_nested_blocks(self):
+        """Once focused on a block, its own nested blocks become focusable."""
+        comp = Computation()
+        inner = Computation()
+        inner.add_node("x", value=1)
+        outer = Computation()
+        outer.add_block("mid", inner, keep_values=True)
+        comp.add_block("top", outer, keep_values=True)
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "top"), "request_id": "f1"}
+            widget.focus_request = {"id": node_id(widget, "mid"), "request_id": "f2"}
+
+            assert widget.status == "Focused on top/mid"
+            assert widget.focus_trail == [
+                {"label": "All", "path": ""},
+                {"label": "top", "path": "top"},
+                {"label": "mid", "path": "top/mid"},
+            ]
+            assert "x" in {str(node) for node in widget._view.node_index_map}
+        finally:
+            widget.close()
+
+    def test_a_breadcrumb_step_climbs_back_out(self):
+        """An empty path returns focus to the whole graph."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            widget.focus_request = {"path": "", "request_id": "f2"}
+
+            assert widget.status == "Showing the whole graph"
+            assert to_nodekey("foo") in widget._view.composite_nodes
+            assert widget.focus_trail == [{"label": "All", "path": ""}]
+        finally:
+            widget.close()
+
+    def test_only_blocks_can_be_focused(self):
+        """Focusing a plain node is refused rather than re-rooting on nothing."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "output"), "request_id": "f1"}
+
+            assert widget.status.startswith("Focus failed")
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_focusing_drops_expansions_outside_the_new_root(self):
+        """A block opened elsewhere is no longer reachable once focus moves."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"id": node_id(widget, "bar"), "request_id": "t1"}
+            assert widget.expanded_paths == ["bar"]
+
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            assert widget.expanded_paths == []
+        finally:
+            widget.close()
+
+    def test_focus_trail_survives_a_browser_echo(self):
+        """The breadcrumb is Python's own, like the other derived traits."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            widget.focus_trail = [{"label": "stale", "path": "x"}]
+
+            assert widget.focus_trail == [
+                {"label": "All", "path": ""},
+                {"label": "foo", "path": "foo"},
+            ]
+        finally:
+            widget.close()
+
+    def test_the_inspector_and_breadcrumb_are_wired(self):
+        """The Focus control and the breadcrumb both drive a focus_request."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert '"focus_request"' in javascript
+        assert "loman-breadcrumb" in javascript
+        assert "renderBreadcrumb" in javascript
