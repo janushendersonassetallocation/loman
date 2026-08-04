@@ -12,11 +12,24 @@ import contextlib
 import json
 import math
 
+import numpy as np
+import pandas as pd
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from loman.ui.value import MAX_REPR_LENGTH, ValueWireError, from_wire, to_wire
+from loman.ui.value import (
+    MAX_CELL_LENGTH,
+    MAX_REPR_LENGTH,
+    MAX_TABLE_COLS,
+    MAX_TABLE_ROWS,
+    MAX_TREE_CHILDREN,
+    MAX_TREE_DEPTH,
+    ValueWireError,
+    apply_cell_edit,
+    from_wire,
+    to_wire,
+)
 
 #: Every Python value the wire format claims to carry losslessly.
 SCALARS = st.one_of(
@@ -27,11 +40,15 @@ SCALARS = st.one_of(
     st.text(),
 )
 
-#: Values the wire format must degrade to a read-only repr instead.
-NON_SCALARS = st.one_of(
+#: Values that render as a bounded tree rather than a scalar.
+TREE_VALUES = st.one_of(
     st.lists(st.integers()),
     st.dictionaries(st.text(), st.integers()),
     st.tuples(st.integers(), st.text()),
+)
+
+#: Values the wire format must degrade to a read-only repr instead.
+OPAQUE_VALUES = st.one_of(
     st.sets(st.integers()),
     st.binary(),
     st.complex_numbers(allow_nan=False, allow_infinity=False),
@@ -65,9 +82,9 @@ def test_non_finite_float_roundtrip(value):
 
 def test_arbitrary_values_are_repr_only():
     """The browser never receives an arbitrary Python object."""
-    value = [1, 2, 3]
-    wire = to_wire(value)
-    assert wire == {"kind": "repr", "type": "list", "repr": "[1, 2, 3]"}
+    wire = to_wire(object())
+    assert wire["kind"] == "repr"
+    assert wire["type"] == "object"
     with pytest.raises(ValueWireError, match="Only scalar"):
         from_wire(wire)
 
@@ -94,8 +111,9 @@ def test_broken_repr_does_not_break_the_panel():
 
 def test_oversized_repr_is_truncated():
     """The panel is for orientation; the real object stays in Python."""
-    wire = to_wire(list(range(MAX_REPR_LENGTH)))
+    wire = to_wire({object() for _ in range(MAX_REPR_LENGTH)})
 
+    assert wire["kind"] == "repr"
     assert len(wire["repr"]) == MAX_REPR_LENGTH
     assert wire["repr"].endswith("...")
 
@@ -157,13 +175,25 @@ class TestWireFormatProperties:
         json.dumps(to_wire(value), allow_nan=False)
 
     @pytest.mark.property
-    @given(NON_SCALARS)
-    def test_non_scalars_degrade_to_bounded_json_safe_repr(self, value):
+    @given(OPAQUE_VALUES)
+    def test_opaque_values_degrade_to_bounded_json_safe_repr(self, value):
         """Arbitrary objects never reach the browser, and never blow the payload."""
         wire = to_wire(value)
 
         assert wire["kind"] == "repr"
         assert len(wire["repr"]) <= MAX_REPR_LENGTH
+        json.dumps(wire, allow_nan=False)
+        with pytest.raises(ValueWireError):
+            from_wire(wire)
+
+    @pytest.mark.property
+    @given(TREE_VALUES)
+    def test_containers_render_as_json_safe_trees(self, value):
+        """Nested data is shown structurally, and still cannot be sent back."""
+        wire = to_wire(value)
+
+        assert wire["kind"] == "tree"
+        assert wire["root"]["size"] == len(value)
         json.dumps(wire, allow_nan=False)
         with pytest.raises(ValueWireError):
             from_wire(wire)
@@ -191,3 +221,231 @@ class TestWireFormatProperties:
         else:
             with pytest.raises(ValueWireError):
                 from_wire(wire)
+
+
+class TestTableWireFormat:
+    """DataFrames, Series and arrays, sent as a bounded window."""
+
+    def test_dataframe_sends_a_window_and_the_true_shape(self):
+        """The scaling rule is never to serialize a value in bulk."""
+        frame = pd.DataFrame({"a": range(500), "b": [float(i) for i in range(500)]})
+
+        wire = to_wire(frame)
+
+        assert wire["kind"] == "table"
+        assert wire["type"] == "DataFrame"
+        assert wire["shape"] == [500, 2]
+        assert wire["shown"] == [MAX_TABLE_ROWS, 2]
+        assert len(wire["rows"]) == MAX_TABLE_ROWS
+        assert wire["column_kinds"] == ["int", "float"]
+        assert wire["editable"] is True
+
+    def test_wide_frames_are_windowed_by_column_too(self):
+        """A thousand-column frame must not arrive column by column."""
+        wire = to_wire(pd.DataFrame({f"c{i}": [i] for i in range(200)}))
+
+        assert wire["shape"] == [1, 200]
+        assert wire["shown"] == [1, MAX_TABLE_COLS]
+        assert len(wire["columns"]) == MAX_TABLE_COLS
+
+    def test_table_payload_is_valid_json(self):
+        """Missing values are the usual reason a frame will not serialize."""
+        frame = pd.DataFrame({"x": [1.0, float("nan"), float("inf")], "s": ["a", None, "c"]})
+
+        json.dumps(to_wire(frame), allow_nan=False)
+
+    def test_series_is_a_single_column_table(self):
+        """A Series is tabular, and keeps its name as the column heading."""
+        wire = to_wire(pd.Series([1.5, 2.5], name="dv01"))
+
+        assert wire["type"] == "Series"
+        assert wire["columns"] == ["dv01"]
+        assert wire["editable"] is True
+
+    def test_unnamed_series_still_has_a_heading(self):
+        """A blank column heading would be unreadable."""
+        assert to_wire(pd.Series([1, 2]))["columns"] == ["value"]
+
+    def test_arrays_render_but_are_not_editable(self):
+        """NumPy coerces silently on assignment, so an edit could lie."""
+        wire = to_wire(np.arange(6).reshape(2, 3))
+
+        assert wire["type"] == "ndarray"
+        assert wire["shape"] == [2, 3]
+        assert wire["editable"] is False
+
+    def test_one_dimensional_arrays_render_as_a_column(self):
+        """A 1-D array still has a shape worth reporting honestly."""
+        wire = to_wire(np.array([1.0, 2.0, 3.0]))
+
+        assert wire["shape"] == [3]
+        assert len(wire["rows"]) == 3
+
+    def test_high_dimensional_arrays_fall_back_to_repr(self):
+        """There is no honest table view of a 3-D array."""
+        assert to_wire(np.zeros((2, 2, 2)))["kind"] == "repr"
+
+
+class TestTreeWireFormat:
+    """Nested dicts and lists, bounded by depth and breadth."""
+
+    def test_nested_structure_is_described(self):
+        """The shape of the data is what the panel is for."""
+        wire = to_wire({"a": 1, "b": [1, 2], "c": {"d": "x"}})
+
+        assert wire["kind"] == "tree"
+        assert wire["root"]["type"] == "dict"
+        assert [child["key"] for child in wire["root"]["children"]] == ["a", "b", "c"]
+
+    def test_breadth_is_capped_and_reported(self):
+        """A large dict must not arrive whole."""
+        wire = to_wire({str(i): i for i in range(MAX_TREE_CHILDREN * 3)})
+
+        assert len(wire["root"]["children"]) == MAX_TREE_CHILDREN
+        assert wire["root"]["truncated"] is True
+        assert wire["root"]["size"] == MAX_TREE_CHILDREN * 3
+
+    def test_depth_is_capped(self):
+        """Deep nesting must terminate rather than recurse without bound."""
+        value: dict = {"leaf": 1}
+        for _ in range(MAX_TREE_DEPTH * 2):
+            value = {"down": value}
+
+        def deepest(node, depth=0):
+            """Walk to the bottom of the returned tree."""
+            children = node.get("children")
+            return depth if not children else deepest(children[0], depth + 1)
+
+        assert deepest(to_wire(value)["root"]) <= MAX_TREE_DEPTH
+
+    def test_leaves_carry_json_safe_values(self):
+        """A non-finite float inside a list still has to serialize."""
+        json.dumps(to_wire([1.0, float("nan"), object()]), allow_nan=False)
+
+
+class TestCellEditing:
+    """Replacing one cell of a tabular value."""
+
+    def test_edit_returns_a_copy_and_preserves_dtype(self):
+        """Loman's copy is shallow, so a value may be shared; never mutate it."""
+        frame = pd.DataFrame({"a": [1, 2], "b": [1.5, 2.5]})
+
+        updated = apply_cell_edit(frame, 1, 1, 9.5)
+
+        assert updated["b"].tolist() == [1.5, 9.5]
+        assert frame["b"].tolist() == [1.5, 2.5]
+        assert updated.dtypes.tolist() == frame.dtypes.tolist()
+
+    def test_series_edit_keeps_its_name(self):
+        """A Series round-trips through a frame internally; that must not show."""
+        updated = apply_cell_edit(pd.Series([1.0, 2.0], name="dv01"), 0, 0, 7.5)
+
+        assert isinstance(updated, pd.Series)
+        assert updated.name == "dv01"
+        assert updated.tolist() == [7.5, 2.0]
+
+    @pytest.mark.parametrize(
+        ("row", "column"),
+        [(99, 0), (0, 99), (-1, 0), (0, -1)],
+    )
+    def test_out_of_range_cells_are_rejected(self, row, column):
+        """A stale window from the browser cannot write outside the frame."""
+        with pytest.raises(ValueWireError, match="outside"):
+            apply_cell_edit(pd.DataFrame({"a": [1]}), row, column, 1)
+
+    def test_wrong_type_for_the_column_is_rejected(self):
+        """Editing must not silently change a column's dtype."""
+        with pytest.raises(ValueWireError, match="float"):
+            apply_cell_edit(pd.DataFrame({"a": [1.5]}), 0, 0, "not a number")
+
+    def test_bool_and_int_columns_are_kept_apart(self):
+        """A bool is an int subclass, which would otherwise slip through."""
+        with pytest.raises(ValueWireError, match="int"):
+            apply_cell_edit(pd.DataFrame({"a": [1]}), 0, 0, True)
+        with pytest.raises(ValueWireError, match="bool"):
+            apply_cell_edit(pd.DataFrame({"a": [True]}), 0, 0, 1)
+
+    def test_text_columns_accept_text(self):
+        """The common case still has to work."""
+        updated = apply_cell_edit(pd.DataFrame({"ccy": ["USD"]}), 0, 0, "GBP")
+
+        assert updated["ccy"].tolist() == ["GBP"]
+
+    def test_non_tabular_values_are_rejected(self):
+        """A cell address is meaningless for a scalar."""
+        with pytest.raises(ValueWireError, match="cannot be edited"):
+            apply_cell_edit(42, 0, 0, 1)
+
+    def test_unsupported_column_types_are_rejected(self):
+        """Better to refuse than to coerce a datetime from a text box."""
+        frame = pd.DataFrame({"t": pd.to_datetime(["2026-01-01"])})
+
+        with pytest.raises(ValueWireError, match="cannot set"):
+            apply_cell_edit(frame, 0, 0, "tomorrow")
+
+
+class TestWireFormatEdgeCases:
+    """Corners that only appear with real pandas and NumPy data."""
+
+    def test_numpy_scalars_are_unwrapped_to_python_types(self):
+        """np.int64 is not a Python int on every platform."""
+        wire = to_wire(pd.DataFrame({"a": np.array([7], dtype=np.int64)}))
+
+        assert wire["rows"] == [[7]]
+        json.dumps(wire, allow_nan=False)
+
+    def test_missing_values_become_null(self):
+        """NaT and NA have no JSON form, and read better as empty than as text."""
+        frame = pd.DataFrame({"t": pd.to_datetime(["2026-01-01", None])})
+
+        assert to_wire(frame)["rows"][1] == [None]
+
+    def test_unorderable_cell_values_fall_back_to_repr(self):
+        """pd.isna raises for some containers; that must not escape."""
+        wire = to_wire(pd.DataFrame({"a": [object()]}))
+
+        assert isinstance(wire["rows"][0][0], str)
+        assert len(wire["rows"][0][0]) <= MAX_CELL_LENGTH
+
+    def test_deeply_nested_branch_reports_truncation_without_children(self):
+        """At the depth cap a branch says so rather than descending further."""
+
+        def deepest(node):
+            """Walk to the bottom of the returned tree."""
+            children = node.get("children")
+            return node if not children else deepest(children[0])
+
+        value: dict = {"a": {"b": {"c": {"d": {"e": {"f": 1}}}}}}
+
+        bottom = deepest(to_wire(value)["root"])
+
+        assert bottom["truncated"] is True
+
+    def test_edit_rejected_when_the_dtype_cannot_hold_the_value(self):
+        """A null into an integer column has no integer representation."""
+        with pytest.raises(ValueWireError, match="Cannot put that value"):
+            apply_cell_edit(pd.DataFrame({"a": [1, 2]}), 0, 0, None)
+
+    def test_zero_dimensional_numpy_scalars_are_unwrapped(self):
+        """A 0-d array is a scalar, and must not render as array(3)."""
+        assert to_wire({"a": np.float64(3.5)})["root"]["children"][0]["value"] == 3.5
+
+    def test_cells_that_defeat_isna_fall_back_to_repr(self):
+        """pd.isna raises on an array, which must not escape the cell renderer."""
+        wire = to_wire(pd.DataFrame({"a": [np.array([1, 2])]}))
+
+        assert isinstance(wire["rows"][0][0], str)
+
+    def test_deeply_nested_lists_are_capped_too(self):
+        """The depth cap applies to lists as well as dicts."""
+
+        def deepest(node):
+            """Walk to the bottom of the returned tree."""
+            children = node.get("children")
+            return node if not children else deepest(children[0])
+
+        value: list = [1]
+        for _ in range(MAX_TREE_DEPTH * 2):
+            value = [value]
+
+        assert deepest(to_wire(value)["root"])["truncated"] is True

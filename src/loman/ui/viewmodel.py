@@ -136,10 +136,11 @@ def build_detail(
     )
     if isinstance(value, Error):
         detail["error"] = value.traceback
-    detail["editable"] = bool(
-        editable
-        and node.get(NodeAttributes.FUNC) is None
-        and node.get(NodeAttributes.STATE) != States.PLACEHOLDER
-        and value_wire["kind"] == "scalar"
+    # Editing is offered on input nodes only. Editing a calculated node would be
+    # silently discarded by the next compute, which is worse than not offering it.
+    writable_node = (
+        editable and node.get(NodeAttributes.FUNC) is None and node.get(NodeAttributes.STATE) != States.PLACEHOLDER
     )
+    detail["editable"] = bool(writable_node and value_wire["kind"] == "scalar")
+    detail["cells_editable"] = bool(writable_node and value_wire["kind"] == "table" and value_wire.get("editable"))
     return detail

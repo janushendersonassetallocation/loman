@@ -316,6 +316,154 @@ function render({ model, el }) {
     return `${(seconds * 1e6).toFixed(0)} µs`;
   };
 
+  const formatCell = (cell) => (cell === null || cell === undefined ? "" : String(cell));
+
+  const isNumericKind = (kind) => kind === "int" || kind === "float";
+
+  /* --------------------------------------------------------------- tables */
+
+  // One editor exists at a time rather than an input per cell: a 50x20 window
+  // would otherwise be a thousand live form controls.
+  const openCellEditor = (td, data, row, column) => {
+    if (busy || td.querySelector("input")) return;
+    const kind = data.column_kinds[column];
+    const original = td.textContent;
+    const input = document.createElement("input");
+    input.className = "loman-cell-input";
+    input.type = kind === "bool" ? "checkbox" : isNumericKind(kind) ? "number" : "text";
+    if (kind === "float") input.step = "any";
+    if (kind === "bool") input.checked = original === "true";
+    else input.value = original;
+    input.setAttribute("aria-label", `${data.columns[column]}, row ${row}`);
+
+    let settled = false;
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      td.textContent = original;
+    };
+    const commit = () => {
+      if (settled) return;
+      settled = true;
+      const value = kind === "bool" ? input.checked
+        : kind === "int" ? Number.parseInt(input.value, 10)
+        : kind === "float" ? Number.parseFloat(input.value)
+        : input.value;
+      td.textContent = formatCell(value);
+      send(
+        "edit_request",
+        { id: data.nodeId, cell: { row, column }, value: { kind: "scalar", type: kind, value } },
+        "Updating cell…",
+      );
+    };
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); commit(); }
+      if (event.key === "Escape") { event.preventDefault(); cancel(); }
+    }, { signal });
+    input.addEventListener("blur", commit, { signal });
+    td.replaceChildren(input);
+    input.focus();
+    if (input.type !== "checkbox") input.select();
+  };
+
+  const buildTable = (data) => {
+    const table = document.createElement("table");
+    table.className = "loman-table";
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headRow.append(document.createElement("th"));
+    data.columns.forEach((column, index) => {
+      const th = document.createElement("th");
+      th.textContent = column;
+      th.title = `${column} (${data.column_kinds[index]})`;
+      if (isNumericKind(data.column_kinds[index])) th.classList.add("loman-numeric");
+      headRow.append(th);
+    });
+    head.append(headRow);
+
+    const body = document.createElement("tbody");
+    data.rows.forEach((row, rowIndex) => {
+      const tr = document.createElement("tr");
+      const indexCell = document.createElement("th");
+      indexCell.scope = "row";
+      indexCell.textContent = formatCell(data.index[rowIndex]);
+      tr.append(indexCell);
+      row.forEach((cell, columnIndex) => {
+        const td = document.createElement("td");
+        const kind = data.column_kinds[columnIndex];
+        td.textContent = formatCell(cell);
+        if (cell === null) td.classList.add("loman-null");
+        if (isNumericKind(kind)) td.classList.add("loman-numeric");
+        if (data.cellsEditable && kind !== "other") {
+          td.classList.add("loman-editable-cell");
+          td.tabIndex = 0;
+          td.title = "Click to edit";
+          td.addEventListener("click", () => openCellEditor(td, data, rowIndex, columnIndex), { signal });
+          td.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") { event.preventDefault(); openCellEditor(td, data, rowIndex, columnIndex); }
+          }, { signal });
+        }
+        tr.append(td);
+      });
+      body.append(tr);
+    });
+    table.append(head, body);
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "loman-table-wrap";
+    wrapper.append(table);
+
+    const [rows, cols] = data.shape;
+    const [shownRows, shownCols] = data.shown;
+    const parts = [];
+    if (shownRows < rows) parts.push(`${shownRows} of ${rows} rows`);
+    if (cols !== undefined && shownCols < cols) parts.push(`${shownCols} of ${cols} columns`);
+    if (parts.length) {
+      const note = document.createElement("p");
+      note.className = "loman-note";
+      note.textContent = `Showing ${parts.join(", ")}. The whole value is in Python.`;
+      wrapper.append(note);
+    }
+    return wrapper;
+  };
+
+  /* ---------------------------------------------------------------- trees */
+
+  const buildTreeNode = (node, depth) => {
+    const label = node.key === undefined ? null : node.key;
+    if (node.type === "leaf") {
+      const line = document.createElement("div");
+      line.className = "loman-tree-leaf";
+      if (label !== null) {
+        const key = document.createElement("span");
+        key.className = "loman-tree-key";
+        key.textContent = `${label}:`;
+        line.append(key);
+      }
+      const value = document.createElement("span");
+      value.className = node.value === null ? "loman-null" : "loman-tree-value";
+      value.textContent = formatCell(node.value);
+      line.append(value);
+      return line;
+    }
+    const details = document.createElement("details");
+    details.className = "loman-tree-branch";
+    if (depth < 2) details.open = true;
+    const summary = document.createElement("summary");
+    const bracket = node.type === "dict" ? "{ }" : "[ ]";
+    summary.textContent = label === null ? `${bracket} ${node.size}` : `${label}: ${bracket} ${node.size}`;
+    details.append(summary);
+    for (const child of node.children ?? []) details.append(buildTreeNode(child, depth + 1));
+    if (node.truncated) {
+      const more = document.createElement("div");
+      more.className = "loman-note";
+      more.textContent = node.children ? "More items not shown." : "Nested further than the panel shows.";
+      details.append(more);
+    }
+    return details;
+  };
+
   const inputTypeFor = (type) => {
     if (type === "bool") return "checkbox";
     return (type === "int" || type === "float") ? "number" : "text";
@@ -382,10 +530,25 @@ function render({ model, el }) {
     // The traceback gets its own section below, properly formatted, so showing
     // the repr here would be the same information twice and unreadable once.
     if (data.error) return null;
+    const value = data.value;
+    if (value.kind === "table") {
+      const [rows, cols] = value.shape;
+      const size = cols === undefined ? `${rows}` : `${rows} × ${cols}`;
+      // Carried on the payload so the cell editor knows where to send an edit.
+      value.nodeId = data.id;
+      value.cellsEditable = Boolean(data.cells_editable);
+      return section(`${value.type} (${size})`, buildTable(value));
+    }
+    if (value.kind === "tree") {
+      const tree = document.createElement("div");
+      tree.className = "loman-tree";
+      tree.append(buildTreeNode(value.root, 0));
+      return section(`${value.type} (${value.root.size})`, tree);
+    }
     const pre = document.createElement("pre");
     pre.className = "loman-value";
-    pre.textContent = data.value.kind === "repr" ? data.value.repr : String(data.value.value);
-    const heading = data.value.kind === "repr" ? `Value (${data.value.type})` : "Value";
+    pre.textContent = value.kind === "repr" ? value.repr : String(value.value);
+    const heading = value.kind === "repr" ? `Value (${value.type})` : "Value";
     return section(heading, pre);
   };
 

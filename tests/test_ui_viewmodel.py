@@ -1,5 +1,7 @@
 """Tests for the pure view-model builders behind the notebook widget."""
 
+import numpy as np
+import pandas as pd
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -146,16 +148,63 @@ class TestBuildDetail:
         assert detail["inputs"] == ["a"]
         assert detail["timing"]["duration"] >= 0
 
-    def test_non_scalar_value_is_not_editable(self):
-        """Only the scalar wire format round-trips, so only scalars can be edited."""
+    def test_container_value_renders_as_a_read_only_tree(self):
+        """Nested data is shown structurally, but cannot be sent back whole."""
         comp = Computation()
         comp.add_node("a", value=[1, 2, 3])
         view = comp.draw(collapse_all=False)
 
         detail = build_detail(view, view.node_index_map[to_nodekey("a")], editable=True)
 
+        assert detail["value"]["kind"] == "tree"
         assert detail["editable"] is False
-        assert detail["value"]["kind"] == "repr"
+        assert detail["cells_editable"] is False
+
+    def test_dataframe_input_offers_cell_editing(self):
+        """A frame on an input node is editable cell by cell, not whole."""
+        comp = Computation()
+        comp.add_node("a", value=pd.DataFrame({"x": [1, 2]}))
+        view = comp.draw(collapse_all=False)
+
+        detail = build_detail(view, view.node_index_map[to_nodekey("a")], editable=True)
+
+        assert detail["value"]["kind"] == "table"
+        assert detail["editable"] is False
+        assert detail["cells_editable"] is True
+
+    def test_dataframe_on_a_calculated_node_is_not_cell_editable(self):
+        """An edit to a calculated node would vanish on the next compute."""
+        comp = Computation()
+        comp.add_node("a", value=pd.DataFrame({"x": [1, 2]}))
+        comp.add_node("b", lambda a: a * 2)
+        comp.compute_all()
+        view = comp.draw(collapse_all=False)
+
+        detail = build_detail(view, view.node_index_map[to_nodekey("b")], editable=True)
+
+        assert detail["value"]["kind"] == "table"
+        assert detail["cells_editable"] is False
+
+    def test_read_only_widget_offers_no_cell_editing(self):
+        """The editable flag gates the whole payload, tables included."""
+        comp = Computation()
+        comp.add_node("a", value=pd.DataFrame({"x": [1, 2]}))
+        view = comp.draw(collapse_all=False)
+
+        detail = build_detail(view, view.node_index_map[to_nodekey("a")], editable=False)
+
+        assert detail["cells_editable"] is False
+
+    def test_array_input_is_shown_but_not_cell_editable(self):
+        """NumPy coerces silently, so array cells stay read-only."""
+        comp = Computation()
+        comp.add_node("a", value=np.arange(4).reshape(2, 2))
+        view = comp.draw(collapse_all=False)
+
+        detail = build_detail(view, view.node_index_map[to_nodekey("a")], editable=True)
+
+        assert detail["value"]["kind"] == "table"
+        assert detail["cells_editable"] is False
 
     def test_read_only_widget_reports_nothing_editable(self):
         """The editable flag gates the payload, not just the browser control."""

@@ -62,15 +62,53 @@ returns the block path, and `selected_names` returns every member.
 - **Click a node** to see its state, value, timing, source, inputs and outputs.
   For a failed node, the panel shows the traceback.
 - **Click a collapsed block** to open it.
-- **Edit a scalar input** directly in the detail panel. Only input nodes holding
-  an `int`, `float`, `str`, `bool` or `None` are editable — everything else is
-  shown read-only, as a `repr`. This maps to `comp.insert`.
+- **Edit a scalar input** directly in the detail panel. This maps to
+  `comp.insert`.
 - **Compute** a node, a block, or the whole graph. This maps to `comp.compute`
   and `comp.compute_all`.
 - **Zoom** with the toolbar controls, and scroll to pan.
 
 Pass `editable=False` for a read-only widget. Opening and closing blocks stays
 available, because navigating a graph does not mutate it.
+
+## Value types
+
+The detail panel renders what it can:
+
+| Node value | Shown as | Editable |
+|---|---|---|
+| `int`, `float`, `str`, `bool`, `None` | A single field | Yes, on input nodes |
+| `DataFrame`, `Series` | A table | Yes, cell by cell, on input nodes |
+| `ndarray` (1-D or 2-D) | A table | No |
+| `dict`, `list`, `tuple` | An expandable tree | No |
+| Anything else | `repr` text | No |
+
+Click a table cell to edit it; Enter commits and Escape cancels. A cell edit is
+an ordinary `comp.insert` of a **modified copy**, so downstream nodes go stale
+exactly as they would from Python, and the previous value is never mutated in
+place — which matters because `Computation.copy()` is shallow and a value may be
+shared.
+
+Column types are enforced. Putting text in a float column is refused rather than
+silently changing the column's dtype, and `bool` and `int` columns are kept apart.
+Arrays are deliberately read-only: NumPy coerces on assignment, so an edit could
+change a value without saying so.
+
+### Large values stay in Python
+
+The widget never sends a value in bulk. A table shows its first 50 rows and 20
+columns and tells you the true shape; a tree is bounded by depth and breadth.
+Editing only reaches what is on screen.
+
+For anything larger — or for a proper data grid — read the value out and use your
+notebook's own tools. In marimo:
+
+```python
+mo.ui.data_editor(comp.v[widget.selected_name])
+```
+
+That is the same principle as everywhere else here: the widget navigates, and
+the real object stays in Python.
 
 ```python
 comp.widget(editable=False)

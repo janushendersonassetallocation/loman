@@ -13,6 +13,7 @@ import gc
 import weakref
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from loman import Computation, States
@@ -868,7 +869,8 @@ class TestAssetContract:
         """
         css = (STATIC / "widget.css").read_text()
         javascript = (STATIC / "widget.js").read_text()
-        assert "width: 100%" not in css
+        stage_svg = css.split(".loman-stage svg {")[1].split("}")[0]
+        assert "%" not in stage_svg
         assert "naturalSize.w * zoom" in javascript
 
     def test_hover_and_selection_are_styled_differently(self):
@@ -904,3 +906,107 @@ def test_widget_builds_for_each_colouring(colors):
         assert "<svg" in widget.graph_svg
     finally:
         widget.close()
+
+
+class TestCellEditing:
+    """Editing one cell of a tabular input node."""
+
+    @staticmethod
+    def make_frame_widget():
+        """Create a computation whose input node holds a DataFrame."""
+        comp = Computation()
+        comp.add_node("book", value=pd.DataFrame({"ccy": ["USD", "GBP"], "notional": [1.0, 2.0]}))
+        comp.add_node("total", lambda book: book["notional"].sum())
+        comp.compute_all()
+        return comp, comp.widget(collapse_all=False)
+
+    def test_cell_edit_updates_the_frame_and_downstream(self):
+        """A cell edit is an ordinary insert, so the graph reacts as usual."""
+        comp, widget = self.make_frame_widget()
+        try:
+            original = comp.value("book")
+            widget.edit_request = {
+                "id": node_id(widget, "book"),
+                "cell": {"row": 1, "column": 1},
+                "value": {"kind": "scalar", "type": "float", "value": 9.0},
+                "request_id": "c1",
+            }
+
+            assert comp.value("book")["notional"].tolist() == [1.0, 9.0]
+            assert original["notional"].tolist() == [1.0, 2.0], "the previous value must not be mutated"
+            assert comp.state("total") == States.COMPUTABLE
+            assert widget.status == "Updated book [1, 1]"
+        finally:
+            widget.close()
+
+    def test_cell_edit_is_refused_on_a_calculated_node(self):
+        """The next compute would silently discard it."""
+        _comp, widget = self.make_frame_widget()
+        try:
+            widget.edit_request = {
+                "id": node_id(widget, "total"),
+                "cell": {"row": 0, "column": 0},
+                "value": {"kind": "scalar", "type": "float", "value": 1.0},
+                "request_id": "c1",
+            }
+
+            assert widget.status == "Edit failed: this node's cells are not editable"
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_cell_edit_is_refused_on_a_read_only_widget(self):
+        """A crafted request cannot bypass editable=False."""
+        comp = Computation()
+        comp.add_node("book", value=pd.DataFrame({"x": [1]}))
+        widget = comp.widget(collapse_all=False, editable=False)
+        try:
+            widget.edit_request = {
+                "id": node_id(widget, "book"),
+                "cell": {"row": 0, "column": 0},
+                "value": {"kind": "scalar", "type": "int", "value": 5},
+                "request_id": "c1",
+            }
+
+            assert widget.status == "Edit failed: this widget is read-only"
+            assert comp.value("book")["x"].tolist() == [1]
+        finally:
+            widget.close()
+
+    def test_out_of_range_cell_reports_a_status(self):
+        """A stale window from the browser cannot write outside the frame."""
+        _comp, widget = self.make_frame_widget()
+        try:
+            widget.edit_request = {
+                "id": node_id(widget, "book"),
+                "cell": {"row": 99, "column": 0},
+                "value": {"kind": "scalar", "type": "str", "value": "x"},
+                "request_id": "c1",
+            }
+
+            assert widget.status.startswith("Edit failed: ValueWireError")
+            assert "outside" in widget.status
+        finally:
+            widget.close()
+
+    def test_wrong_type_for_the_column_reports_a_status(self):
+        """Editing must not silently change a column's dtype."""
+        comp, widget = self.make_frame_widget()
+        try:
+            widget.edit_request = {
+                "id": node_id(widget, "book"),
+                "cell": {"row": 0, "column": 1},
+                "value": {"kind": "scalar", "type": "str", "value": "lots"},
+                "request_id": "c1",
+            }
+
+            assert widget.status.startswith("Edit failed: ValueWireError")
+            assert comp.value("book")["notional"].tolist() == [1.0, 2.0]
+        finally:
+            widget.close()
+
+    def test_frontend_sends_cell_edits(self):
+        """The table renderer and the Python handler must agree on the payload."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "cell: { row, column }" in javascript
+        assert "openCellEditor" in javascript

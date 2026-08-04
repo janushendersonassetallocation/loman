@@ -15,7 +15,7 @@ from loman.computeengine import ComputationEvent
 from loman.consts import NodeTransformations
 from loman.nodekey import Name, NodeKey, to_nodekey
 
-from .value import from_wire
+from .value import apply_cell_edit, from_wire
 from .viewmodel import build_detail, node_states, state_colors
 
 if TYPE_CHECKING:
@@ -374,7 +374,11 @@ class ComputationWidget(anywidget.AnyWidget):
 
     @traitlets.observe("edit_request")
     def _edit_requested(self, change: dict[str, Any]) -> None:
-        """Validate and apply one scalar edit requested by the browser."""
+        """Validate and apply one edit requested by the browser.
+
+        Two shapes arrive here: replacing a scalar node's value outright, and
+        replacing a single cell of a tabular one.
+        """
         request = change["new"]
         if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
             return
@@ -391,6 +395,21 @@ class ComputationWidget(anywidget.AnyWidget):
                 self._fail("Edit failed: collapsed blocks cannot be edited")
                 return
             current_detail = self._detail_for(request["id"])
+            cell = request.get("cell")
+            if cell is not None:
+                if not current_detail.get("cells_editable"):
+                    self._fail("Edit failed: this node's cells are not editable")
+                    return
+                node_key = members[0]
+                updated = apply_cell_edit(
+                    self.computation.value(node_key),
+                    int(cell["row"]),
+                    int(cell["column"]),
+                    from_wire(request["value"]),
+                )
+                self.computation.insert(node_key, updated)
+                self._set_status(f"Updated {node_key} [{cell['row']}, {cell['column']}]")
+                return
             if not current_detail.get("editable"):
                 self._fail("Edit failed: this node is not an editable scalar input")
                 return
