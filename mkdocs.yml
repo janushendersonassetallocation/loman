@@ -102,5 +102,6 @@ nav:
       - Testing: development/TESTS.md
       - UI Extra Design: development/UI_EXTRA_PLAN.md
       - UI Extra As Built: development/UI_EXTRA_AS_BUILT.md
+      - UI Extra UX Review: development/UI_EXTRA_UX_REVIEW.md
       - Contributing: CONTRIBUTING.md
       - Code of Conduct: CODE_OF_CONDUCT.md
