@@ -46,6 +46,10 @@ _REQUEST_HISTORY = 64
 #: ``max_rendered_nodes=`` if you know what you are asking for.
 DEFAULT_MAX_RENDERED_NODES = 500
 
+#: Sentinel from :meth:`ComputationWidget._canonical_output`: the trait is
+#: view-dependent and no view exists yet, so its echoed value is left alone.
+_NO_CANONICAL = object()
+
 
 def _acknowledges(method: Callable[[Any, dict[str, Any]], None]) -> Callable[[Any, dict[str, Any]], None]:
     """Acknowledge a browser request once the observer has finished with it."""
@@ -405,6 +409,39 @@ class ComputationWidget(anywidget.AnyWidget):
         if hasattr(self, "_view"):
             self._refresh_detail()
 
+    def _canonical_output(self, name: str) -> Any:
+        """Return the value trait ``name`` should hold.
+
+        Split from :meth:`_canonical_output_changed` to keep that observer flat:
+        this owns the per-trait lookup. Returns :data:`_NO_CANONICAL` when the
+        trait is view-dependent and no view has been rendered yet, so its echoed
+        value is left untouched rather than reverted to nothing.
+
+        :param name: Name of the derived trait being checked.
+        :return: The canonical value, or :data:`_NO_CANONICAL`.
+        """
+        view_independent: dict[str, Callable[[], Any]] = {
+            "ack": lambda: self._canonical_ack,
+            "status": lambda: self._canonical_status,
+            "status_severity": lambda: self._canonical_severity,
+            "rankdir": lambda: self._canonical_rankdir,
+            "focus_trail": self._focus_trail,
+        }
+        if name in view_independent:
+            return view_independent[name]()
+        if self._view is None:
+            return _NO_CANONICAL
+        view = self._view
+        view_dependent: dict[str, Callable[[], Any]] = {
+            "composite_ids": lambda: [view.node_index_map[node] for node in view.composite_nodes],
+            "detail": lambda: self._detail_for(self.selected_id),
+            "expanded_paths": lambda: sorted(str(block) for block in self._expanded),
+            "graph_svg": lambda: self._canonical_graph_svg,
+            "node_states": lambda: node_states(view),
+            "revision": lambda: self.computation.revision,
+        }
+        return view_dependent[name]()
+
     @traitlets.observe(
         "ack",
         "composite_ids",
@@ -431,50 +468,11 @@ class ComputationWidget(anywidget.AnyWidget):
         if self._writing or not hasattr(self, "_canonical_status"):
             return
         name = change["name"]
-        expected: Any
-        # Status still matters when rendering failed, so these two are checked
-        # before the view is required to exist.
-        if name == "ack":
-            if change["new"] != self._canonical_ack:
-                with self._own_write():
-                    self.ack = self._canonical_ack
+        expected = self._canonical_output(name)
+        if expected is _NO_CANONICAL or change["new"] == expected:
             return
-        if name in {"status", "status_severity"}:
-            expected = self._canonical_status if name == "status" else self._canonical_severity
-            if change["new"] != expected:
-                with self._own_write():
-                    setattr(self, name, expected)
-            return
-        # rankdir and the focus trail are Python's own but do not need the view,
-        # so they are settled before the view-dependent traits below.
-        if name == "rankdir":
-            if change["new"] != self._canonical_rankdir:
-                with self._own_write():
-                    self.rankdir = self._canonical_rankdir
-            return
-        if name == "focus_trail":
-            expected = self._focus_trail()
-            if change["new"] != expected:
-                with self._own_write():
-                    self.focus_trail = expected
-            return
-        if self._view is None:
-            return
-        if name == "composite_ids":
-            expected = [self._view.node_index_map[node] for node in self._view.composite_nodes]
-        elif name == "detail":
-            expected = self._detail_for(self.selected_id)
-        elif name == "expanded_paths":
-            expected = sorted(str(block) for block in self._expanded)
-        elif name == "graph_svg":
-            expected = self._canonical_graph_svg
-        elif name == "node_states":
-            expected = node_states(self._view)
-        else:
-            expected = self.computation.revision
-        if change["new"] != expected:
-            with self._own_write():
-                setattr(self, name, expected)
+        with self._own_write():
+            setattr(self, name, expected)
 
     @traitlets.observe("edit_request")
     @_acknowledges
