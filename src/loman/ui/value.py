@@ -127,9 +127,16 @@ def _column_kind(dtype: Any) -> str:
 
 
 def _frame_to_wire(frame: pd.DataFrame, *, type_name: str, editable: bool) -> dict[str, Any]:
-    """Describe a window onto a DataFrame."""
+    """Describe a window onto a DataFrame.
+
+    The window is the **tail**, because rows are usually appended and the recent
+    end is the interesting one. ``row_offset`` is where the window starts in the
+    full frame: cell edits address absolute positions, so the browser has to add
+    it back before asking for one.
+    """
     rows, cols = frame.shape
-    window = frame.iloc[:MAX_TABLE_ROWS, :MAX_TABLE_COLS]
+    row_offset = max(rows - MAX_TABLE_ROWS, 0)
+    window = frame.iloc[row_offset:, :MAX_TABLE_COLS]
     return {
         "kind": "table",
         "type": type_name,
@@ -139,6 +146,7 @@ def _frame_to_wire(frame: pd.DataFrame, *, type_name: str, editable: bool) -> di
         "column_kinds": [_column_kind(window.dtypes.iloc[i]) for i in range(window.shape[1])],
         "shape": [int(rows), int(cols)],
         "shown": [int(window.shape[0]), int(window.shape[1])],
+        "row_offset": int(row_offset),
         "editable": editable,
     }
 

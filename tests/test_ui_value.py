@@ -449,3 +449,48 @@ class TestWireFormatEdgeCases:
             value = [value]
 
         assert deepest(to_wire(value)["root"])["truncated"] is True
+
+
+class TestTailWindow:
+    """The window is the tail, because rows are usually appended."""
+
+    def test_a_long_frame_shows_its_last_rows(self):
+        """The recent end is the interesting one for an appended frame."""
+        frame = pd.DataFrame({"n": range(500)})
+
+        wire = to_wire(frame)
+
+        assert wire["rows"][-1] == [499]
+        assert wire["rows"][0] == [500 - MAX_TABLE_ROWS]
+        assert wire["row_offset"] == 500 - MAX_TABLE_ROWS
+
+    def test_the_index_shown_matches_the_rows_shown(self):
+        """Row labels must not be taken from a different end of the frame."""
+        frame = pd.DataFrame({"n": range(200)}, index=[f"r{i}" for i in range(200)])
+
+        wire = to_wire(frame)
+
+        assert wire["index"][0] == f"r{200 - MAX_TABLE_ROWS}"
+        assert wire["index"][-1] == "r199"
+
+    def test_a_short_frame_has_no_offset(self):
+        """Everything fits, so on-screen positions are frame positions."""
+        wire = to_wire(pd.DataFrame({"n": [1, 2, 3]}))
+
+        assert wire["row_offset"] == 0
+        assert wire["shown"] == [3, 1]
+
+    def test_editing_addresses_absolute_rows(self):
+        """A cell edit names its position in the frame, not on screen.
+
+        The browser adds ``row_offset`` back before asking, so the last visible
+        row of a long frame is the last row of the value.
+        """
+        frame = pd.DataFrame({"n": list(range(500))})
+        wire = to_wire(frame)
+        last_visible = wire["row_offset"] + len(wire["rows"]) - 1
+
+        updated = apply_cell_edit(frame, last_visible, 0, -1)
+
+        assert updated["n"].iloc[-1] == -1
+        assert last_visible == 499

@@ -188,10 +188,35 @@ def _(mo):
     rather than coerced. Arrays stay read-only because NumPy coerces silently on
     assignment, so an edit could change a value without saying so.
 
-    Large values are never sent whole: a table shows its first 50 rows and 20
-    columns and says so. For a full grid, read the value out and use marimo's
-    own editor — `mo.ui.data_editor(comp.v[widget.selected_name])`.
+    Large values are never sent whole: a table shows its **last** 50 rows and
+    first 20 columns and says so. Rows are usually appended, so the recent end
+    is the interesting one.
+
+    For the whole thing, press **Show full**. The widget cannot render it — it
+    is host-neutral and calling marimo's renderers would make the extra depend
+    on marimo and break Jupyter — so it publishes the node name and the cell
+    below renders it with marimo's own table.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, widget, widget_ui):
+    # Reading the wrapper's value makes this cell react to the Show full button.
+    _widget_state = widget_ui.value
+    _name = widget.full_view
+    if not _name:
+        full_view_panel = mo.md("**Nothing opened.** Press **Show full** on a node's value above.")
+    else:
+        full_view_panel = mo.vstack(
+            [
+                mo.md(f"### `{_name}` in full"),
+                mo.ui.table(widget.full_view_value, selection=None)
+                if hasattr(widget.full_view_value, "shape")
+                else mo.json(widget.full_view_value),
+            ]
+        )
+    full_view_panel
     return
 
 

@@ -48,7 +48,9 @@
   min-width: 0;
   color: var(--loman-ink);
   background: var(--loman-chrome);
-  border: 1px solid var(--loman-line-strong);
+  /* A hairline rather than a hard edge: the chrome is painted in the host's own
+     backdrop colour, so the widget should read as part of the page. */
+  border: 1px solid var(--loman-line);
   border-radius: var(--loman-radius);
   overflow: hidden;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -71,6 +73,36 @@
     --loman-field: #1a1a19;
     --loman-accent: #3987e5;
   }
+}
+
+/* The front end samples the host page's backdrop and stamps the theme it
+   implies. That beats prefers-color-scheme, because a notebook's own light/dark
+   toggle never touches the OS setting. --loman-chrome and --loman-panel are set
+   inline from the sampled colour, so only the remaining roles are listed. */
+.loman-widget[data-host-theme="light"] {
+  color-scheme: light;
+  --loman-canvas: #ffffff;
+  --loman-raised: #ffffff;
+  --loman-ink: #0b0b0b;
+  --loman-ink-2: #52514e;
+  --loman-ink-3: #898781;
+  --loman-line: rgba(11, 11, 11, 0.10);
+  --loman-line-strong: #c3c2b7;
+  --loman-field: #ffffff;
+  --loman-accent: #2a78d6;
+}
+
+.loman-widget[data-host-theme="dark"] {
+  color-scheme: dark;
+  --loman-canvas: #ffffff;
+  --loman-raised: #202020;
+  --loman-ink: #ffffff;
+  --loman-ink-2: #c3c2b7;
+  --loman-ink-3: #898781;
+  --loman-line: rgba(255, 255, 255, 0.10);
+  --loman-line-strong: #383835;
+  --loman-field: #1a1a19;
+  --loman-accent: #3987e5;
 }
 
 /* ---------------------------------------------------------------- toolbar */
@@ -488,3 +520,14 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
 .loman-tree-key { color: var(--loman-ink-3); }
 .loman-tree-value { color: var(--loman-ink); overflow-wrap: anywhere; }
 .loman-tree .loman-null::after { content: "None"; color: var(--loman-ink-3); }
+
+/* A section heading that carries an action, such as "Show full". */
+.loman-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.loman-section-head h4 { margin: 0; }
+.loman-widget button.loman-show-full { padding: 2px 8px; font-size: 11px; }

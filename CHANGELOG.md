@@ -11,6 +11,11 @@
   editing and compute controls
 - `GraphView` now exposes `original_nodes`, `composite_nodes` and `node_index_map`, so callers
   can map rendered nodes back to computation nodes
+- The widget's detail panel renders DataFrames, Series, arrays and nested data, with editable
+  cells on tabular input nodes, a tail window onto long frames, and a "Show full" button that
+  hands the node to the notebook to render with its own tools
+- The widget matches the background of the page it is embedded in, and takes its light or dark
+  theme from that rather than from the operating system setting
 
 ## [0.5.3] (2025-06-20)
 

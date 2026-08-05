@@ -1214,6 +1214,29 @@ class TestLayoutDirection:
         assert 'data-action="layout"' in javascript
         assert '"layout_request"' in javascript
 
+    def test_an_empty_direction_is_refused(self):
+        """The message has to read sensibly when nothing was supplied."""
+        _comp, widget = make_widget()
+        try:
+            widget.layout_request = {"rankdir": "", "request_id": "l1"}
+
+            assert widget.status == "Layout failed: (empty) is not a valid rankdir"
+        finally:
+            widget.close()
+
+    def test_a_failed_relayout_keeps_the_direction_on_screen(self, mocker):
+        """Rankdir must describe the picture, not the request that failed."""
+        _comp, widget = make_widget()
+        try:
+            mocker.patch.object(GraphView, "svg", side_effect=OSError("dot not found"))
+
+            widget.layout_request = {"rankdir": "TB", "request_id": "l1"}
+
+            assert widget.rankdir == "LR", "the picture is still left to right"
+            assert widget.status.startswith("Unable to render graph")
+        finally:
+            widget.close()
+
 
 class TestFocus:
     """Re-rooting the view onto one block, which nesting makes worthwhile."""
@@ -1322,3 +1345,197 @@ class TestFocus:
         assert '"focus_request"' in javascript
         assert "loman-breadcrumb" in javascript
         assert "renderBreadcrumb" in javascript
+
+
+class TestFullView:
+    """Handing a node to the notebook to render in full.
+
+    The widget only ever holds a window onto a large value, and it cannot call
+    the host's renderers without depending on that host. So it publishes which
+    node was asked for and the notebook renders it.
+    """
+
+    @staticmethod
+    def frame_widget():
+        """Create a computation whose input node holds a DataFrame."""
+        comp = Computation()
+        comp.add_node("book", value=pd.DataFrame({"n": range(200)}))
+        return comp, comp.widget(collapse_all=False)
+
+    def test_requesting_a_node_publishes_its_name(self):
+        """The notebook reads widget.full_view to know what to render."""
+        _comp, widget = self.frame_widget()
+        try:
+            widget.full_view_request = {"id": node_id(widget, "book"), "request_id": "f1"}
+
+            assert widget.full_view == "book"
+            assert widget.status == "Showing book in full below"
+        finally:
+            widget.close()
+
+    def test_the_full_value_is_reachable_without_indexing(self):
+        """The convenience property saves guarding the empty case."""
+        comp, widget = self.frame_widget()
+        try:
+            assert widget.full_view_value is None
+
+            widget.full_view_request = {"id": node_id(widget, "book"), "request_id": "f1"}
+
+            assert widget.full_view_value.equals(comp.value("book"))
+        finally:
+            widget.close()
+
+    def test_an_empty_request_closes_the_full_view(self):
+        """The button toggles, so it has to be able to clear the selection."""
+        _comp, widget = self.frame_widget()
+        try:
+            widget.full_view_request = {"id": node_id(widget, "book"), "request_id": "f1"}
+
+            widget.full_view_request = {"request_id": "f2"}
+
+            assert widget.full_view == ""
+            assert widget.status == "Closed the full view"
+        finally:
+            widget.close()
+
+    def test_a_collapsed_block_has_no_single_value(self):
+        """A block stands for many nodes, so there is nothing to render."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.full_view_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            assert widget.status == "Show full failed: a collapsed block has no single value"
+            assert widget.full_view == ""
+        finally:
+            widget.close()
+
+    def test_an_unknown_node_reports_a_status(self):
+        """A stale rendered ID cannot raise out of a traitlets observer."""
+        _comp, widget = self.frame_widget()
+        try:
+            widget.full_view_request = {"id": "n999", "request_id": "f1"}
+
+            assert widget.status.startswith("Show full failed: KeyError")
+        finally:
+            widget.close()
+
+    def test_the_published_name_survives_a_browser_echo(self):
+        """full_view is Python's, like the other derived traits."""
+        _comp, widget = self.frame_widget()
+        try:
+            widget.full_view_request = {"id": node_id(widget, "book"), "request_id": "f1"}
+
+            widget.full_view = "something else"
+
+            assert widget.full_view == "book"
+        finally:
+            widget.close()
+
+    def test_the_frontend_offers_the_button_for_windowed_values(self):
+        """Only values the panel cannot show whole are worth opening elsewhere."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "buildShowFull" in javascript
+        assert 'send(\n      "full_view_request"' in javascript or '"full_view_request"' in javascript
+        assert 'value.kind === "table" || value.kind === "tree" || value.kind === "repr"' in javascript
+
+
+class TestHostIntegration:
+    """The widget wears the host page's backdrop rather than its own."""
+
+    def test_the_frontend_samples_the_host_background(self):
+        """A widget that looks pasted on does not read as part of the page."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "hostBackground" in javascript
+        assert "--loman-chrome" in javascript
+        assert "--loman-panel" in javascript
+
+    def test_the_sampled_theme_beats_the_os_preference(self):
+        """A notebook's own light/dark toggle never touches prefers-color-scheme.
+
+        The stamped attribute has to outrank the media query, or a dark notebook
+        on a light desktop would render the widget light.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        css = (STATIC / "widget.css").read_text()
+        assert "relativeLuminance" in javascript
+        assert "dataset.hostTheme" in javascript
+        for theme in ("light", "dark"):
+            assert f'.loman-widget[data-host-theme="{theme}"]' in css
+        # Attribute selectors outrank the bare class used inside the media query.
+        assert css.index("@media (prefers-color-scheme: dark)") < css.index('[data-host-theme="dark"]')
+
+
+class TestUnrenderedWidgetRequests:
+    """Every request path degrades when the first Graphviz render failed."""
+
+    @pytest.fixture
+    def broken(self, mocker):
+        """Build a widget whose initial render fails, then a block computation."""
+        mocker.patch.object(GraphView, "svg", side_effect=OSError("dot not found"))
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        yield comp, widget
+        widget.close()
+
+    def test_focus_reports_a_status(self, broken):
+        """There is no rendered block to focus on."""
+        _comp, widget = broken
+        widget.focus_request = {"id": "n0", "request_id": "f1"}
+        assert widget.status == "Focus failed: the graph is not rendered"
+
+    def test_show_full_reports_a_status(self, broken):
+        """There is no rendered node to resolve."""
+        _comp, widget = broken
+        widget.full_view_request = {"id": "n0", "request_id": "f1"}
+        assert widget.status == "Show full failed: the graph is not rendered"
+
+
+class TestRequestsThatAreIgnored:
+    """An empty payload is the trait's default, not a click."""
+
+    @pytest.mark.parametrize(
+        "trait",
+        ["edit_request", "compute_request", "toggle_request", "layout_request", "focus_request", "full_view_request"],
+    )
+    def test_a_cleared_request_is_ignored_but_acknowledged(self, trait):
+        """Clearing a request must not act, but must still release the spinner."""
+        _comp, widget = make_widget()
+        try:
+            setattr(widget, trait, {"request_id": "seed", "id": node_id(widget, "price")})
+            settled_status = widget.status
+            settled_ack = widget.ack
+
+            setattr(widget, trait, {})
+
+            assert widget.status == settled_status
+            assert widget.ack > settled_ack
+        finally:
+            widget.close()
+
+
+class TestFocusScope:
+    """A focused widget cannot be steered outside its own root."""
+
+    def test_focusing_outside_the_widget_root_is_refused(self):
+        """A section-scoped widget must stay inside its section."""
+        comp = create_example_block_computation()
+        widget = comp.widget(root=to_nodekey("foo"))
+        try:
+            widget.focus_request = {"path": "bar", "request_id": "f1"}
+
+            assert widget.status.startswith("Focus failed: ValueError")
+            assert "not within this widget's root" in widget.status
+        finally:
+            widget.close()
+
+    def test_focusing_the_widget_root_itself_is_allowed(self):
+        """Climbing the breadcrumb back to the root is not going outside it."""
+        comp = create_example_block_computation()
+        widget = comp.widget(root=to_nodekey("foo"))
+        try:
+            widget.focus_request = {"path": "foo", "request_id": "f1"}
+
+            assert widget.status == "Focused on foo"
+        finally:
+            widget.close()

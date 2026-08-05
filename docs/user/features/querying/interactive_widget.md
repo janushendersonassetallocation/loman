@@ -71,6 +71,13 @@ returns the block path, and `selected_names` returns every member.
 Pass `editable=False` for a read-only widget. Opening and closing blocks stays
 available, because navigating a graph does not mutate it.
 
+```python
+comp.widget(editable=False)
+```
+
+Everything else mirrors `comp.draw()`, so `root`, `colors`, `shapes`,
+`collapse_all` and the Graphviz attribute dictionaries all work the same way.
+
 ## Value types
 
 The detail panel renders what it can:
@@ -96,26 +103,25 @@ change a value without saying so.
 
 ### Large values stay in Python
 
-The widget never sends a value in bulk. A table shows its first 50 rows and 20
-columns and tells you the true shape; a tree is bounded by depth and breadth.
-Editing only reaches what is on screen.
+The widget never sends a value in bulk. A table shows its **last** 50 rows and
+first 20 columns and tells you the true shape; a tree is bounded by depth and
+breadth. The tail is shown because rows are usually appended, so the recent end
+is the interesting one. Editing only reaches what is on screen.
 
-For anything larger — or for a proper data grid — read the value out and use your
-notebook's own tools. In marimo:
-
-```python
-mo.ui.data_editor(comp.v[widget.selected_name])
-```
-
-That is the same principle as everywhere else here: the widget navigates, and
-the real object stays in Python.
+For the whole value, press **Show full**. The widget cannot render it — it is a
+host-neutral AnyWidget, and calling marimo's renderers would make the extra
+depend on marimo and drop Jupyter support — so it publishes the node name for
+the notebook to render:
 
 ```python
-comp.widget(editable=False)
+_ = widget_ui.value            # react to the button
+name = widget.full_view        # "" when nothing is open
+mo.ui.table(widget.full_view_value) if name else None
 ```
 
-Everything else mirrors `comp.draw()`, so `root`, `colors`, `shapes`,
-`collapse_all` and the Graphviz attribute dictionaries all work the same way.
+`full_view_value` is a convenience for `comp.v[widget.full_view]`, guarding the
+empty case. This is the same principle as everywhere else here: the widget
+navigates, and the real object stays in Python.
 
 ## Observing changes yourself
 
@@ -140,6 +146,15 @@ Bound methods are held weakly, so `comp.subscribe(obj.handler)` does not keep
 `obj` alive. Plain functions and lambdas are held strongly until you unsubscribe.
 
 ## Things worth knowing
+
+### It wears the host's colours
+
+On load the widget samples the background of the page it is embedded in and
+paints its own chrome to match, so it reads as part of the notebook rather than
+a box dropped onto it. The sampled brightness also picks light or dark, which is
+more reliable than `prefers-color-scheme`: a notebook's own theme toggle never
+changes the operating system setting. The Graphviz canvas stays light in both,
+because Graphviz paints a white background and black labels into the SVG.
 
 ### A bare `comp` stays a static picture
 

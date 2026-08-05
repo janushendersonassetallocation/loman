@@ -71,6 +71,70 @@ function render({ model, el }) {
     return `${Date.now()}-${Math.random()}-${++sequence}`;
   };
 
+  /* ------------------------------------------------------- host integration */
+
+  // The widget should look part of the page it is embedded in rather than a
+  // box dropped onto it, so it samples the host's own background and wears it.
+  //
+  // That colour is also a better theme signal than prefers-color-scheme: a
+  // notebook's own light/dark toggle does not touch the OS setting, and
+  // :host-context is not supported everywhere. Luminance of the actual backdrop
+  // is what the widget is really sitting on.
+  // Resolved through a canvas rather than parsed. A computed background can
+  // come back in any colour syntax the browser supports --- marimo reports
+  // `color(srgb 0.09 0.11 0.10)`, whose components are 0-1 rather than 0-255 ---
+  // and painting a pixel is the one way to normalise all of them.
+  let colourProbe = null;
+  const parseColour = (value) => {
+    const text = String(value);
+    if (!text || text === "transparent") return null;
+    if (!colourProbe) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      colourProbe = canvas.getContext("2d", { willReadFrequently: true });
+    }
+    if (!colourProbe) return null;
+    // fillStyle silently keeps its old value if the colour will not parse, so
+    // a known sentinel makes an unsupported syntax detectable.
+    colourProbe.fillStyle = "#000000";
+    colourProbe.fillStyle = text;
+    colourProbe.clearRect(0, 0, 1, 1);
+    colourProbe.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = colourProbe.getImageData(0, 0, 1, 1).data;
+    return a === 0 ? null : { r, g, b };
+  };
+
+  const relativeLuminance = ({ r, g, b }) => {
+    const channel = (value) => {
+      const v = value / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+
+  // Walks out of the shadow root as well as up the DOM, since the widget is
+  // mounted inside one and its host page is what supplies the backdrop.
+  const hostBackground = () => {
+    let node = el.parentNode;
+    while (node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const colour = parseColour(getComputedStyle(node).backgroundColor);
+        if (colour) return colour;
+      }
+      node = node.parentNode ?? node.host ?? null;
+    }
+    return null;
+  };
+
+  const applyHostTheme = () => {
+    const colour = hostBackground();
+    if (!colour) return;
+    const backdrop = `rgb(${colour.r}, ${colour.g}, ${colour.b})`;
+    el.dataset.hostTheme = relativeLuminance(colour) < 0.4 ? "dark" : "light";
+    el.style.setProperty("--loman-chrome", backdrop);
+    el.style.setProperty("--loman-panel", backdrop);
+  };
+
   /* ------------------------------------------------------------ busy state */
 
   // Compute runs synchronously in the kernel, so the tab would otherwise sit
@@ -344,7 +408,10 @@ function render({ model, el }) {
 
   // One editor exists at a time rather than an input per cell: a 50x20 window
   // would otherwise be a thousand live form controls.
-  const openCellEditor = (td, data, row, column) => {
+  const openCellEditor = (td, data, windowRow, column) => {
+    // The window is the tail of the frame, so the row on screen is not the row
+    // in the value. Edits address absolute positions.
+    const row = (data.row_offset ?? 0) + windowRow;
     if (busy || td.querySelector("input")) return;
     const kind = data.column_kinds[column];
     const original = td.textContent;
@@ -437,12 +504,12 @@ function render({ model, el }) {
     const [rows, cols] = data.shape;
     const [shownRows, shownCols] = data.shown;
     const parts = [];
-    if (shownRows < rows) parts.push(`${shownRows} of ${rows} rows`);
-    if (cols !== undefined && shownCols < cols) parts.push(`${shownCols} of ${cols} columns`);
+    if (shownRows < rows) parts.push(`last ${shownRows} of ${rows} rows`);
+    if (cols !== undefined && shownCols < cols) parts.push(`first ${shownCols} of ${cols} columns`);
     if (parts.length) {
       const note = document.createElement("p");
       note.className = "loman-note";
-      note.textContent = `Showing ${parts.join(", ")}. The whole value is in Python.`;
+      note.textContent = `Showing ${parts.join(", ")}.`;
       wrapper.append(note);
     }
     return wrapper;
@@ -556,31 +623,61 @@ function render({ model, el }) {
     return head;
   };
 
+  // The panel only ever holds a window onto a big value, and this widget cannot
+  // call the host's renderers. So "Show full" hands the node's name back to
+  // Python and the notebook renders it with whatever it has.
+  const buildShowFull = (data) => {
+    const showing = model.get("full_view") === data.name;
+    const button = document.createElement("button");
+    button.className = "loman-nav loman-show-full";
+    button.textContent = showing ? "Hide full" : "Show full";
+    button.title = showing
+      ? "Stop publishing this node for the notebook to render"
+      : "Publish this node so the notebook can render all of it";
+    button.addEventListener("click", () => send(
+      "full_view_request",
+      showing ? {} : { id: data.id },
+      showing ? "Closing…" : "Opening full view…",
+    ), { signal });
+    return button;
+  };
+
   const buildValue = (data) => {
     // An Error value reprs as the whole exception plus an escaped traceback.
     // The traceback gets its own section below, properly formatted, so showing
     // the repr here would be the same information twice and unreadable once.
     if (data.error) return null;
     const value = data.value;
+    // Anything windowed or truncated is worth offering in full elsewhere.
+    const partial = value.kind === "table" || value.kind === "tree" || value.kind === "repr";
+    const heading = (title) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "loman-section-head";
+      const label = document.createElement("h4");
+      label.textContent = title;
+      wrapper.append(label);
+      if (partial && !data.composite) wrapper.append(buildShowFull(data));
+      return wrapper;
+    };
     if (value.kind === "table") {
       const [rows, cols] = value.shape;
       const size = cols === undefined ? `${rows}` : `${rows} × ${cols}`;
       // Carried on the payload so the cell editor knows where to send an edit.
       value.nodeId = data.id;
       value.cellsEditable = Boolean(data.cells_editable);
-      return section(`${value.type} (${size})`, buildTable(value));
+      return section(null, heading(`${value.type} (${size})`), buildTable(value));
     }
     if (value.kind === "tree") {
       const tree = document.createElement("div");
       tree.className = "loman-tree";
       tree.append(buildTreeNode(value.root, 0));
-      return section(`${value.type} (${value.root.size})`, tree);
+      return section(null, heading(`${value.type} (${value.root.size})`), tree);
     }
     const pre = document.createElement("pre");
     pre.className = "loman-value";
     pre.textContent = value.kind === "repr" ? value.repr : String(value.value);
-    const heading = value.kind === "repr" ? `Value (${value.type})` : "Value";
-    return section(heading, pre);
+    if (value.kind !== "repr") return section("Value", pre);
+    return section(null, heading(`Value (${value.type})`), pre);
   };
 
   const buildMeta = (data) => {
@@ -740,6 +837,7 @@ function render({ model, el }) {
   model.on("change:node_states", repaint);
   model.on("change:selected_id", renderDetail);
   model.on("change:detail", renderDetail);
+  model.on("change:full_view", renderDetail);
   model.on("change:status", renderStatus);
   model.on("change:status_severity", renderStatus);
   // A request that changes nothing else still acknowledges, which is what
@@ -753,11 +851,13 @@ function render({ model, el }) {
 
   const cleanup = () => {
     controller.abort();
+    themeWatcher.disconnect();
     model.off("change:graph_svg", onGraphChanged);
     model.off("change:expanded_paths", wireOpenBlocks);
     model.off("change:node_states", repaint);
     model.off("change:selected_id", renderDetail);
     model.off("change:detail", renderDetail);
+    model.off("change:full_view", renderDetail);
     model.off("change:status", renderStatus);
     model.off("change:status_severity", renderStatus);
     model.off("change:ack", renderStatus);
@@ -766,6 +866,14 @@ function render({ model, el }) {
     model.off("change:rankdir", renderLayout);
     model.off("change:focus_trail", renderBreadcrumb);
   };
+
+  applyHostTheme();
+  // A notebook theme toggle restyles the page rather than the widget, so the
+  // backdrop is re-sampled whenever the host's own attributes change.
+  const themeWatcher = new MutationObserver(applyHostTheme);
+  for (const target of [document.documentElement, document.body].filter(Boolean)) {
+    themeWatcher.observe(target, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
+  }
 
   renderGraph();
   renderEditable();

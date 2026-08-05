@@ -130,12 +130,25 @@ class ComputationWidget(anywidget.AnyWidget):
     #: entry is ``{"label": str, "path": str}``; the front end renders it and
     #: sends a focus_request to climb back up.
     focus_trail = traitlets.List(traitlets.Dict(), default_value=[]).tag(sync=True)
+    #: Name of the node whose full value the user asked to see, or ``""``.
+    #:
+    #: The widget only ever sends a window of a large value, and it cannot call
+    #: the host's own renderers --- it is a host-neutral AnyWidget, and reaching
+    #: into marimo would make the extra depend on it and break Jupyter. So the
+    #: "Show full" button publishes the request here instead, and the notebook
+    #: renders it with whatever it likes::
+    #:
+    #:     _ = widget_ui.value                      # react to the button
+    #:     name = widget.full_view
+    #:     mo.ui.table(comp.v[name]) if name else None
+    full_view = traitlets.Unicode("").tag(sync=True)
 
     edit_request = traitlets.Dict(default_value={}).tag(sync=True)
     compute_request = traitlets.Dict(default_value={}).tag(sync=True)
     toggle_request = traitlets.Dict(default_value={}).tag(sync=True)
     layout_request = traitlets.Dict(default_value={}).tag(sync=True)
     focus_request = traitlets.Dict(default_value={}).tag(sync=True)
+    full_view_request = traitlets.Dict(default_value={}).tag(sync=True)
 
     def __init__(
         self,
@@ -191,6 +204,7 @@ class ComputationWidget(anywidget.AnyWidget):
         self._canonical_status = ""
         self._canonical_severity = "idle"
         self._canonical_ack = 0
+        self._canonical_full_view = ""
         # An explicit rankdir in graph_attr wins, so a caller who set the layout
         # direction the old way still gets what they asked for; otherwise the
         # left-to-right default applies.
@@ -426,6 +440,7 @@ class ComputationWidget(anywidget.AnyWidget):
             "status_severity": lambda: self._canonical_severity,
             "rankdir": lambda: self._canonical_rankdir,
             "focus_trail": self._focus_trail,
+            "full_view": lambda: self._canonical_full_view,
         }
         if name in view_independent:
             return view_independent[name]()
@@ -448,6 +463,7 @@ class ComputationWidget(anywidget.AnyWidget):
         "detail",
         "expanded_paths",
         "focus_trail",
+        "full_view",
         "graph_svg",
         "node_states",
         "rankdir",
@@ -691,6 +707,57 @@ class ComputationWidget(anywidget.AnyWidget):
         except Exception as exc:
             LOG.debug("Loman widget focus request failed", exc_info=True)
             self._fail(f"Focus failed: {type(exc).__name__}: {exc}")
+
+    @traitlets.observe("full_view_request")
+    @_acknowledges
+    def _full_view_requested(self, change: dict[str, Any]) -> None:
+        """Publish which node the user asked to see in full.
+
+        The widget deliberately does not render it. It only ever holds a window
+        onto a large value, and it cannot call the host's own renderers without
+        depending on that host. Naming the node here lets the notebook render it
+        with whatever it has --- ``mo.ui.table`` in marimo, a plain repr in
+        Jupyter --- which is the same division of labour as ``selected_name``.
+        """
+        request = change["new"]
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
+            return
+        try:
+            if not request.get("id"):
+                self._set_full_view("")
+                self._set_status("Closed the full view")
+                return
+            if self._view is None:
+                self._fail("Show full failed: the graph is not rendered")
+                return
+            visible = self._id_to_visible[request["id"]]
+            members = self._view.original_nodes[visible]
+            if len(members) != 1:
+                self._fail("Show full failed: a collapsed block has no single value")
+                return
+            name = str(members[0].name)
+            self._set_full_view(name)
+            self._set_status(f"Showing {name} in full below")
+        except Exception as exc:
+            LOG.debug("Loman widget full-view request failed", exc_info=True)
+            self._fail(f"Show full failed: {type(exc).__name__}: {exc}")
+
+    def _set_full_view(self, name: str) -> None:
+        """Record the node whose full value the notebook should render."""
+        self._canonical_full_view = name
+        with self._own_write():
+            self.full_view = name
+
+    @property
+    def full_view_value(self) -> Any:
+        """Return the value behind :attr:`full_view`, or ``None`` if unset.
+
+        Convenience for the common notebook cell, which would otherwise have to
+        guard the empty case before indexing the computation.
+        """
+        if not self.full_view:
+            return None
+        return self.computation.value(self.full_view)
 
     def close(self) -> None:
         """Unsubscribe from the computation and close the widget comm."""
