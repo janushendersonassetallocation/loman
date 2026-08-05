@@ -542,3 +542,8 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
 }
 .loman-section-head h4 { margin: 0; }
 .loman-widget button.loman-show-full { padding: 2px 8px; font-size: 11px; }
+
+/* An open block's frame isolates it, the same as a collapsed block's frame. */
+.loman-canvas .loman-block-frame { cursor: zoom-in; }
+.loman-canvas .loman-block-frame:hover { stroke: var(--loman-accent); stroke-width: 2px; }
+.loman-canvas .loman-block-frame:focus-visible { stroke: var(--loman-accent); stroke-width: 2.5px; outline: none; }

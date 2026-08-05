@@ -1642,3 +1642,72 @@ class TestFrameClickFocus:
             assert "only blocks can be focused" in widget.status
         finally:
             widget.close()
+
+
+class TestFocusFromAnExpandedView:
+    """Focus has to be reachable once blocks are open, not only while collapsed.
+
+    A collapsed block is a node with a frame; an open one is a Graphviz cluster
+    with a frame. Wiring only the first meant that after opening a few levels
+    there was no way to focus at all, and so no way to reach the breadcrumb and
+    its Reset.
+    """
+
+    def test_the_frontend_wires_open_block_frames_too(self):
+        """The cluster frame sends the same focus request a node frame does."""
+        javascript = (STATIC / "widget.js").read_text()
+        wiring = javascript.split("const wireOpenBlocks = () => {")[1].split("\n  };")[0]
+        assert "loman-block-frame" in wiring
+        assert '"focus_request"' in wiring
+        # The label still closes the block; the frame must not steal that.
+        assert '"toggle_request"' in wiring
+
+    def test_svg_tooltips_are_built_with_append_child(self):
+        """Node.append returns undefined, so assigning to its result throws.
+
+        That mistake silently took the rest of the handler with it, leaving open
+        blocks with neither a close nor a focus target.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        helper = javascript.split("const svgTooltip = (element, text) => {")[1].split("};")[0]
+        assert "appendChild" in helper
+        assert ".append(document.createElementNS" not in javascript
+
+    def test_focusing_by_path_works_while_blocks_are_open(self):
+        """This is the request an open block's frame sends."""
+        comp = Computation()
+        inner = Computation()
+        inner.add_node("x", value=1)
+        mid = Computation()
+        mid.add_block("cds", inner, keep_values=True)
+        comp.add_block("credit", mid, keep_values=True)
+        widget = comp.widget()
+        try:
+            widget._expanded = {to_nodekey("credit"), to_nodekey("credit/cds")}
+            widget.refresh()
+
+            widget.focus_request = {"path": "credit", "request_id": "f1"}
+
+            assert widget.status == "Focused on credit"
+            assert [entry["label"] for entry in widget.focus_trail] == ["Reset", "credit"]
+            # Expansions under the new root survive; the rest are gone.
+            assert widget.expanded_paths == ["credit/cds"]
+        finally:
+            widget.close()
+
+    def test_reset_returns_to_the_top_and_clears_expansions(self):
+        """Reset means the whole graph, not merely an unfocused deep view."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"id": node_id(widget, "foo"), "request_id": "t1"}
+            widget.focus_request = {"id": node_id(widget, "bar"), "request_id": "f1"}
+            assert widget.focus_trail[-1]["label"] == "bar"
+
+            widget.focus_request = {"path": "", "request_id": "f2"}
+
+            assert widget.status == "Showing the whole graph"
+            assert widget.focus_trail == [{"label": "Reset", "path": ""}]
+            assert widget.expanded_paths == []
+        finally:
+            widget.close()

@@ -61,9 +61,12 @@ returns the block path, and `selected_names` returns every member.
 
 - **Click a node** to see its state, value, timing, source, inputs and outputs.
   For a failed node, the panel shows the traceback.
-- **Click a collapsed block** to open it, or **click its frame** — the border
-  around it — to isolate that block as the root. The breadcrumb that appears
-  climbs back out, and its first entry, **Reset**, returns to the whole graph.
+- **Click a block** to open it, or **click its frame** — the border around it —
+  to isolate that block as the root. The frame keeps that meaning once the block
+  is open, so you can keep drilling in and then isolate any level. Clicking an
+  open block's **title** closes it again.
+- The breadcrumb that appears after isolating climbs back out a level at a time.
+  Its first entry, **Reset**, returns to the whole graph and closes everything.
 - **Edit a scalar input** directly in the detail panel. This maps to
   `comp.insert`.
 - **Compute** a node, a block, or the whole graph. This maps to `comp.compute`

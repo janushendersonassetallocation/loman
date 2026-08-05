@@ -381,6 +381,13 @@ function render({ model, el }) {
   // click to close it. Its label is the handle instead: Graphviz titles the
   // group "cluster_<path>", and Python says which of those are open blocks
   // rather than plain `group=` clusters, which are not closeable.
+  // SVG has no title attribute, so a hover tooltip is a child <title> element.
+  const svgTooltip = (element, text) => {
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = text;
+    element.appendChild(title);
+  };
+
   const wireOpenBlocks = () => {
     const open = new Set(model.get("expanded_paths") ?? []);
     stage.querySelectorAll("g.cluster").forEach((cluster) => {
@@ -394,10 +401,28 @@ function render({ model, el }) {
       label.setAttribute("tabindex", "0");
       label.setAttribute("role", "button");
       label.setAttribute("aria-label", `Close block ${path}`);
+      svgTooltip(label, `Close ${path}`);
       const close = () => { if (!busy) send("toggle_request", { path, collapse: true }, "Closing block…"); };
       label.addEventListener("click", (event) => { event.stopPropagation(); close(); }, { signal });
       label.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); close(); }
+      }, { signal });
+
+      // An opened block keeps its frame, and the frame keeps its meaning:
+      // clicking it isolates the block as the root, exactly as it does while
+      // the block is still collapsed. Without this there is no way to focus
+      // from an expanded view, and so no way to reach the breadcrumb.
+      const frame = cluster.querySelector("polygon, path");
+      if (!frame) return;
+      frame.classList.add("loman-block-frame");
+      frame.setAttribute("tabindex", "0");
+      frame.setAttribute("role", "button");
+      frame.setAttribute("aria-label", `Isolate block ${path}`);
+      svgTooltip(frame, `Isolate ${path} — make it the root`);
+      const focus = () => { if (!busy) send("focus_request", { path }, "Focusing…"); };
+      frame.addEventListener("click", (event) => { event.stopPropagation(); focus(); }, { signal });
+      frame.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); focus(); }
       }, { signal });
     });
   };
