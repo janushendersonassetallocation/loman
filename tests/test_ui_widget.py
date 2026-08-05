@@ -1711,3 +1711,42 @@ class TestFocusFromAnExpandedView:
             assert widget.expanded_paths == []
         finally:
             widget.close()
+
+
+class TestBreadcrumbVisibility:
+    """Reset has to be visible before it is needed, not after."""
+
+    def test_the_bar_appears_once_a_block_is_merely_open(self):
+        """It used to require focus, which is the one thing Reset undoes.
+
+        With blocks opened but nothing focused there was no Reset on screen, and
+        no way to discover one, so a deep view had no way back to the top.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const renderBreadcrumb = () => {")[1].split("\n  };")[0]
+        assert 'model.get("expanded_paths")' in body
+        assert "trail.length < 2 && !opened" in body
+        # A lone Reset still has to do something when nothing is focused.
+        assert 'send("focus_request", { path: "" }' in body
+
+    def test_the_bar_redraws_when_expansions_change(self):
+        """Its visibility now depends on expansions, so it must follow them."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert 'model.on("change:expanded_paths", renderBreadcrumb)' in javascript
+        assert 'model.off("change:expanded_paths", renderBreadcrumb)' in javascript
+
+    def test_resetting_from_an_open_but_unfocused_view_works(self):
+        """That is the request the lone Reset sends."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"id": node_id(widget, "foo"), "request_id": "t1"}
+            assert widget.expanded_paths == ["foo"]
+            assert widget.focus_trail == [{"label": "Reset", "path": ""}], "nothing is focused"
+
+            widget.focus_request = {"path": "", "request_id": "f1"}
+
+            assert widget.expanded_paths == []
+            assert widget.status == "Showing the whole graph"
+        finally:
+            widget.close()

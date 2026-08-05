@@ -870,9 +870,25 @@ function render({ model, el }) {
   // the bar only earns its space once something is in focus.
   const renderBreadcrumb = () => {
     const trail = model.get("focus_trail") ?? [];
+    const opened = (model.get("expanded_paths") ?? []).length > 0;
     breadcrumb.replaceChildren();
-    breadcrumb.hidden = trail.length < 2;
-    if (trail.length < 2) return;
+    // Shown whenever the view has been narrowed at all, not only once something
+    // is in focus. Reset was previously invisible until you had already
+    // focused, which is the one thing it exists to undo.
+    breadcrumb.hidden = trail.length < 2 && !opened;
+    if (breadcrumb.hidden) return;
+    if (trail.length < 2) {
+      const reset = document.createElement("button");
+      reset.className = "loman-crumb";
+      reset.textContent = trail[0]?.label ?? "Reset";
+      reset.title = "Show the whole graph and close every open block";
+      reset.addEventListener(
+        "click", () => send("focus_request", { path: "" }, "Resetting…"), { signal },
+      );
+      breadcrumb.append(reset);
+      applyEnabledState();
+      return;
+    }
     trail.forEach((entry, index) => {
       if (index > 0) {
         const sep = document.createElement("span");
@@ -941,6 +957,7 @@ function render({ model, el }) {
 
   model.on("change:graph_svg", onGraphChanged);
   model.on("change:expanded_paths", wireOpenBlocks);
+  model.on("change:expanded_paths", renderBreadcrumb);
   model.on("change:node_states", repaint);
   model.on("change:selected_id", renderDetail);
   model.on("change:detail", renderDetail);
@@ -962,6 +979,7 @@ function render({ model, el }) {
     themeWatcher.disconnect();
     model.off("change:graph_svg", onGraphChanged);
     model.off("change:expanded_paths", wireOpenBlocks);
+    model.off("change:expanded_paths", renderBreadcrumb);
     model.off("change:node_states", repaint);
     model.off("change:selected_id", renderDetail);
     model.off("change:detail", renderDetail);
