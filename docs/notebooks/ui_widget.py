@@ -340,6 +340,12 @@ def _(mo):
     because opening a block inspects the graph rather than mutating it. The
     guard is enforced in Python, not just hidden in the browser.
 
+    This one also passes `fit_on_render=True`, so it scales to show the whole
+    graph whenever it re-renders instead of opening at natural size. It only
+    ever shrinks — blowing a small graph up to fill the pane is not what fit
+    means — so it is worth turning on when the shape matters more than the
+    labels.
+
     This is a second widget on the same computation: both follow it, and both
     stay in step.
     """)
@@ -348,7 +354,7 @@ def _(mo):
 
 @app.cell
 def _(book, mo):
-    read_only = book.widget(editable=False)
+    read_only = book.widget(editable=False, fit_on_render=True)
     read_only_ui = mo.ui.anywidget(read_only)
     return (read_only_ui,)
 

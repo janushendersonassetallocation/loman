@@ -121,6 +121,10 @@ class ComputationWidget(anywidget.AnyWidget):
     ack = traitlets.Int(0).tag(sync=True)
     expanded_paths = traitlets.List(traitlets.Unicode(), default_value=[]).tag(sync=True)
     editable = traitlets.Bool(True).tag(sync=True)
+    #: Scale the graph down to fit the pane whenever it is re-rendered, if it
+    #: would otherwise overflow. Off by default: a large graph fitted into a
+    #: notebook pane is unreadable, and reading is the usual reason to open one.
+    fit_on_render = traitlets.Bool(False).tag(sync=True)
     repaint_states = traitlets.Bool(True).tag(sync=True)
     revision = traitlets.Int(0).tag(sync=True)
     #: Graphviz layout direction. Defaults to ``LR`` because computations read
@@ -165,6 +169,7 @@ class ComputationWidget(anywidget.AnyWidget):
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        fit_on_render: bool = False,
         max_rendered_nodes: int = DEFAULT_MAX_RENDERED_NODES,
         rankdir: str = "LR",
     ) -> None:
@@ -213,7 +218,12 @@ class ComputationWidget(anywidget.AnyWidget):
         self._max_rendered_nodes = max_rendered_nodes
         self._writing = 0
         self._unsubscribe: Callable[[], None] | None = None
-        super().__init__(editable=editable, repaint_states=colors == "state", rankdir=self._canonical_rankdir)
+        super().__init__(
+            editable=editable,
+            fit_on_render=fit_on_render,
+            repaint_states=colors == "state",
+            rankdir=self._canonical_rankdir,
+        )
         custom_colors = cmap if colors == "state" and isinstance(cmap, dict) else None
         self.state_colors = state_colors(custom_colors)
         self.refresh()
@@ -254,14 +264,14 @@ class ComputationWidget(anywidget.AnyWidget):
     def _focus_trail(self) -> list[dict[str, str]]:
         """Describe the path from the widget's own root to the block in focus.
 
-        The first entry is the widget's root, labelled ``All`` when the whole
+        The first entry is the widget's root, labelled ``Reset`` when the whole
         computation is in view; each further entry is one block descended into.
         Paths are full computation paths, so the front end can hand any of them
         straight back as a focus_request.
         """
         base = None if self._base_root is None else to_nodekey(self._base_root)
         current = None if self._root is None else to_nodekey(self._root)
-        trail = [{"label": "All" if base is None else base.label, "path": "" if base is None else str(base)}]
+        trail = [{"label": "Reset" if base is None else base.label, "path": "" if base is None else str(base)}]
         if current is None or current == base:
             return trail
         relative = current.drop_root(base)

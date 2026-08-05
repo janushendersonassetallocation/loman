@@ -1253,7 +1253,7 @@ class TestFocus:
             assert {"a", "b", "c", "d"}.issubset(visible)
             assert "bar" not in visible
             assert widget.focus_trail == [
-                {"label": "All", "path": ""},
+                {"label": "Reset", "path": ""},
                 {"label": "foo", "path": "foo"},
             ]
         finally:
@@ -1274,7 +1274,7 @@ class TestFocus:
 
             assert widget.status == "Focused on top/mid"
             assert widget.focus_trail == [
-                {"label": "All", "path": ""},
+                {"label": "Reset", "path": ""},
                 {"label": "top", "path": "top"},
                 {"label": "mid", "path": "top/mid"},
             ]
@@ -1293,7 +1293,7 @@ class TestFocus:
 
             assert widget.status == "Showing the whole graph"
             assert to_nodekey("foo") in widget._view.composite_nodes
-            assert widget.focus_trail == [{"label": "All", "path": ""}]
+            assert widget.focus_trail == [{"label": "Reset", "path": ""}]
         finally:
             widget.close()
 
@@ -1333,7 +1333,7 @@ class TestFocus:
             widget.focus_trail = [{"label": "stale", "path": "x"}]
 
             assert widget.focus_trail == [
-                {"label": "All", "path": ""},
+                {"label": "Reset", "path": ""},
                 {"label": "foo", "path": "foo"},
             ]
         finally:
@@ -1447,8 +1447,29 @@ class TestHostIntegration:
         """A widget that looks pasted on does not read as part of the page."""
         javascript = (STATIC / "widget.js").read_text()
         assert "hostBackground" in javascript
-        assert "--loman-chrome" in javascript
-        assert "--loman-panel" in javascript
+        assert "--loman-backdrop" in javascript
+
+    def test_the_host_palette_is_adopted_only_once_it_is_confirmed(self):
+        """--background is a common name; another design system may own it.
+
+        Adopting the host's tokens blindly would repaint the widget in whatever
+        those names happen to mean there, so they are used only when the host's
+        declared background matches the backdrop it actually paints.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        assert "resolveHostToken" in javascript
+        assert "sameColour" in javascript
+        assert "dataset.hostTokens" in javascript
+        # The Graphviz canvas is not the host's to theme: it paints a white
+        # background and black labels into the SVG itself.
+        mapping = javascript.split("const HOST_TOKEN_MAP = [")[1].split("];")[0]
+        assert "--loman-canvas" not in mapping
+        # Every adopted token keeps a fallback, for a host defining only some of
+        # them. --background is the exception: it is the one that was verified.
+        for line in mapping.strip().splitlines():
+            if "var(" not in line or 'var(--background)"' in line:
+                continue
+            assert "," in line.split("var(", 1)[1], f"no fallback for: {line.strip()}"
 
     def test_the_sampled_theme_beats_the_os_preference(self):
         """A notebook's own light/dark toggle never touches prefers-color-scheme.
@@ -1537,5 +1558,87 @@ class TestFocusScope:
             widget.focus_request = {"path": "foo", "request_id": "f1"}
 
             assert widget.status == "Focused on foo"
+        finally:
+            widget.close()
+
+
+class TestFitOnRender:
+    """Auto-fitting, for when the shape matters more than the labels."""
+
+    def test_it_is_off_by_default(self):
+        """A graph fitted into a notebook pane is unreadable past a few nodes."""
+        _comp, widget = make_widget()
+        try:
+            assert widget.fit_on_render is False
+        finally:
+            widget.close()
+
+    def test_the_option_reaches_the_front_end(self):
+        """It is the browser that measures the pane, so it has to be synced."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        widget = comp.widget(fit_on_render=True)
+        try:
+            assert widget.fit_on_render is True
+            assert widget.trait_metadata("fit_on_render", "sync") is True
+        finally:
+            widget.close()
+
+    def test_the_front_end_only_ever_shrinks(self):
+        """Blowing a small graph up to fill the pane is not what fit means."""
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const fitIfRequested = () => {")[1].split("};")[0]
+        assert 'model.get("fit_on_render")' in body
+        assert "if (scale < 1) fitToPane();" in body
+
+
+class TestFrameClickFocus:
+    """A block's frame isolates it; its interior opens it."""
+
+    def test_the_front_end_distinguishes_frame_from_interior(self):
+        """One shape opens the block, the ring around it re-roots the view."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "const onFrame" in javascript
+        activate = javascript.split("const activate = (id, composite, event) => {")[1].split("\n  };")[0]
+        assert '"focus_request"' in activate
+        assert '"toggle_request"' in activate
+
+    def test_focusing_by_rendered_id_isolates_the_block(self):
+        """That request is what a frame click sends."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            assert widget.status == "Focused on foo"
+            assert [entry["label"] for entry in widget.focus_trail] == ["Reset", "foo"]
+            visible = {str(node) for node in widget._view.node_index_map}
+            assert "bar" not in visible, "the rest of the graph is out of view"
+        finally:
+            widget.close()
+
+    def test_the_breadcrumb_root_reads_as_a_reset(self):
+        """It is an action, not a place, so it is not labelled after the graph."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+            assert widget.focus_trail[0]["label"] == "Reset"
+
+            widget.focus_request = {"path": "", "request_id": "f2"}
+
+            assert widget.status == "Showing the whole graph"
+            assert widget.focus_trail == [{"label": "Reset", "path": ""}]
+        finally:
+            widget.close()
+
+    def test_focusing_a_plain_node_is_refused(self):
+        """Only blocks contain anything to isolate."""
+        _comp, widget = make_widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "price"), "request_id": "f1"}
+
+            assert widget.status.startswith("Focus failed")
+            assert "only blocks can be focused" in widget.status
         finally:
             widget.close()

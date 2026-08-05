@@ -2278,6 +2278,7 @@ class Computation:
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        fit_on_render: bool = False,
         max_rendered_nodes: int = 500,
         rankdir: str = "LR",
     ) -> "ComputationWidget":
@@ -2297,6 +2298,9 @@ class Computation:
 
         :param editable: Allow scalar input editing and computation controls.
             Expanding and collapsing blocks stays available either way.
+        :param fit_on_render: Scale the graph to fit the pane on every render,
+            rather than opening at natural size. Useful when the shape of a
+            large graph matters more than its labels.
         :param max_rendered_nodes: Refuse to open a block that would put more
             than this many nodes on screen. Does not cap the initial view.
         :param rankdir: Initial Graphviz layout direction, ``LR`` (default) or
@@ -2318,6 +2322,7 @@ class Computation:
             show_expansion=show_expansion,
             collapse_all=collapse_all,
             editable=editable,
+            fit_on_render=fit_on_render,
             max_rendered_nodes=max_rendered_nodes,
             rankdir=rankdir,
         )

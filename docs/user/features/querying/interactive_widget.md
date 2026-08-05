@@ -61,7 +61,9 @@ returns the block path, and `selected_names` returns every member.
 
 - **Click a node** to see its state, value, timing, source, inputs and outputs.
   For a failed node, the panel shows the traceback.
-- **Click a collapsed block** to open it.
+- **Click a collapsed block** to open it, or **click its frame** — the border
+  around it — to isolate that block as the root. The breadcrumb that appears
+  climbs back out, and its first entry, **Reset**, returns to the whole graph.
 - **Edit a scalar input** directly in the detail panel. This maps to
   `comp.insert`.
 - **Compute** a node, a block, or the whole graph. This maps to `comp.compute`
@@ -73,6 +75,15 @@ available, because navigating a graph does not mutate it.
 
 ```python
 comp.widget(editable=False)
+```
+
+Pass `fit_on_render=True` to scale the graph to fit the pane on every render
+instead of opening at natural size. It only ever shrinks — blowing a small graph
+up to fill the pane is not what fit means — so it is worth turning on when the
+shape of a large graph matters more than its labels.
+
+```python
+comp.widget(fit_on_render=True)
 ```
 
 Everything else mirrors `comp.draw()`, so `root`, `colors`, `shapes`,
@@ -149,12 +160,22 @@ Bound methods are held weakly, so `comp.subscribe(obj.handler)` does not keep
 
 ### It wears the host's colours
 
-On load the widget samples the background of the page it is embedded in and
-paints its own chrome to match, so it reads as part of the notebook rather than
-a box dropped onto it. The sampled brightness also picks light or dark, which is
-more reliable than `prefers-color-scheme`: a notebook's own theme toggle never
-changes the operating system setting. The Graphviz canvas stays light in both,
-because Graphviz paints a white background and black labels into the SVG.
+On load the widget samples the background of the page it is embedded in. That
+brightness picks light or dark, which is more reliable than
+`prefers-color-scheme`: a notebook's own theme toggle never changes the
+operating system setting.
+
+If the host also publishes a shadcn-style palette — `--background`,
+`--foreground`, `--card`, `--border`, `--primary`, `--muted-foreground`,
+`--radius`, as marimo does — the widget wears that palette directly, so it is
+the same colours as the rest of the app rather than an approximation of them.
+Those names are only adopted once the host's declared `--background` matches the
+backdrop it actually paints; otherwise another design system owns them and the
+widget keeps its own.
+
+The graph itself stays on a light sheet in both themes, because Graphviz paints
+a white background and black labels into the SVG. The pane behind that sheet
+takes the host's colour, so the graph reads as paper on the page.
 
 ### A bare `comp` stays a static picture
 

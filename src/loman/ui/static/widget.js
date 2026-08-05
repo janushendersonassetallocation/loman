@@ -12,6 +12,22 @@ const ZOOM_STEP = 1.25;
 // Point-to-pixel, the ratio Graphviz's `pt` dimensions imply in CSS.
 const PT_TO_PX = 96 / 72;
 
+// Loman's roles mapped onto the shadcn-style names marimo and others publish.
+// --loman-canvas is deliberately absent: Graphviz paints a white background and
+// black labels into the SVG itself, so that surface is not the host's to theme.
+const HOST_TOKEN_MAP = [
+  ["--loman-chrome", "var(--background)"],
+  ["--loman-panel", "var(--card, var(--background))"],
+  ["--loman-raised", "var(--card, var(--background))"],
+  ["--loman-ink", "var(--foreground, currentColor)"],
+  ["--loman-ink-2", "var(--muted-foreground, var(--foreground))"],
+  ["--loman-ink-3", "var(--muted-foreground, var(--foreground))"],
+  ["--loman-line-strong", "var(--border, var(--input))"],
+  ["--loman-field", "var(--background)"],
+  ["--loman-accent", "var(--primary)"],
+  ["--loman-radius", "var(--radius, 8px)"],
+];
+
 function render({ model, el }) {
   const controller = new AbortController();
   const signal = controller.signal;
@@ -126,13 +142,44 @@ function render({ model, el }) {
     return null;
   };
 
+  // Resolves a host custom property to a real colour. Values arrive as
+  // `light-dark(#fff, #181c1a)` or `var(...)` chains, which only the browser can
+  // work out, so a throwaway probe in the host document does the resolving.
+  const resolveHostToken = (name) => {
+    const probe = document.createElement("span");
+    probe.style.cssText = `position:absolute;visibility:hidden;color:var(${name})`;
+    document.body?.appendChild(probe);
+    const resolved = getComputedStyle(probe).color;
+    probe.remove();
+    return parseColour(resolved);
+  };
+
+  const sameColour = (a, b, tolerance = 12) =>
+    a && b && Math.abs(a.r - b.r) <= tolerance && Math.abs(a.g - b.g) <= tolerance && Math.abs(a.b - b.b) <= tolerance;
+
   const applyHostTheme = () => {
-    const colour = hostBackground();
-    if (!colour) return;
-    const backdrop = `rgb(${colour.r}, ${colour.g}, ${colour.b})`;
-    el.dataset.hostTheme = relativeLuminance(colour) < 0.4 ? "dark" : "light";
-    el.style.setProperty("--loman-chrome", backdrop);
-    el.style.setProperty("--loman-panel", backdrop);
+    const backdrop = hostBackground();
+    if (!backdrop) return;
+    // Set the scheme first: the host's tokens are written with light-dark(), so
+    // they only resolve correctly once this element has the right color-scheme.
+    el.dataset.hostTheme = relativeLuminance(backdrop) < 0.4 ? "dark" : "light";
+
+    el.style.setProperty("--loman-backdrop", `rgb(${backdrop.r}, ${backdrop.g}, ${backdrop.b})`);
+
+    // Custom properties inherit through the shadow boundary, so the host's own
+    // palette can be used directly --- but only once it is confirmed to mean
+    // what the shadcn-style names suggest. If --background does not agree with
+    // the backdrop actually painted, another design system owns those names and
+    // the widget keeps its own palette.
+    const adopt = sameColour(resolveHostToken("--background"), backdrop);
+    el.dataset.hostTokens = String(adopt);
+    // Assigned here rather than in a stylesheet rule: these are set on the
+    // shadow host, where a rule inside the shadow root does not reliably win.
+    // Each keeps a fallback, for a host that defines only some of them.
+    for (const [ours, theirs] of HOST_TOKEN_MAP) {
+      if (adopt) el.style.setProperty(ours, theirs);
+      else el.style.removeProperty(ours);
+    }
   };
 
   /* ------------------------------------------------------------ busy state */
@@ -299,14 +346,35 @@ function render({ model, el }) {
     }
   };
 
-  const activate = (id, composite) => {
+  // A collapsed block is drawn as nested rectangles: an outer frame and an
+  // inner fill. Clicking the fill opens the block; clicking the frame around it
+  // isolates the block as the root instead, which is the same thing the
+  // inspector's Focus button does but without hunting for the button.
+  const onFrame = (node, event) => {
+    const rects = [...node.querySelectorAll("polygon, ellipse, path")].map((s) => s.getBoundingClientRect());
+    if (rects.length < 2) return false;
+    // Graphviz emits the nested shapes inner-first, but that is an
+    // implementation detail of the renderer rather than a promise, so the
+    // smallest one is taken as the interior.
+    const inner = rects.reduce((a, b) => (a.width * a.height <= b.width * b.height ? a : b));
+    return (
+      event.clientX < inner.left || event.clientX > inner.right ||
+      event.clientY < inner.top || event.clientY > inner.bottom
+    );
+  };
+
+  const activate = (id, composite, event) => {
     if (busy) return;
-    if (composite) {
-      send("toggle_request", { id }, "Opening block…");
-    } else {
+    if (!composite) {
       model.set("selected_id", id);
       model.save_changes();
+      return;
     }
+    if (event && onFrame(event.currentTarget, event)) {
+      send("focus_request", { id }, "Focusing…");
+      return;
+    }
+    send("toggle_request", { id }, "Opening block…");
   };
 
   // An open block is a Graphviz cluster, not a node, so there is no shape to
@@ -347,11 +415,12 @@ function render({ model, el }) {
       node.setAttribute("role", "option");
       node.classList.toggle("loman-composite", composite);
       node.setAttribute("aria-label", composite ? "Collapsed block, activate to open" : "Computation node");
-      node.addEventListener("click", () => activate(id, composite), { signal });
+      if (composite) node.title = "Click to open · click the frame to isolate this block";
+      node.addEventListener("click", (event) => activate(id, composite, event), { signal });
       node.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          activate(id, composite);
+          activate(id, composite, null);
         }
       }, { signal });
     });
@@ -812,9 +881,22 @@ function render({ model, el }) {
     applyEnabledState();
   };
 
+  const fitIfRequested = () => {
+    if (!model.get("fit_on_render") || !naturalSize) return;
+    // Only shrink. Blowing a small graph up to fill the pane is not what
+    // "fit" means here, and it would make every label enormous.
+    const padding = 24;
+    const scale = Math.min(
+      (canvas.clientWidth - padding) / naturalSize.w,
+      (canvas.clientHeight - padding) / naturalSize.h,
+    );
+    if (scale < 1) fitToPane();
+  };
+
   const onGraphChanged = () => {
     setBusy(false);
     renderGraph();
+    fitIfRequested();
   };
 
   buttons("compute-all").addEventListener(
@@ -848,6 +930,7 @@ function render({ model, el }) {
   model.on("change:editable", renderEditable);
   model.on("change:rankdir", renderLayout);
   model.on("change:focus_trail", renderBreadcrumb);
+  model.on("change:fit_on_render", fitIfRequested);
 
   const cleanup = () => {
     controller.abort();
@@ -865,6 +948,7 @@ function render({ model, el }) {
     model.off("change:editable", renderEditable);
     model.off("change:rankdir", renderLayout);
     model.off("change:focus_trail", renderBreadcrumb);
+    model.off("change:fit_on_render", fitIfRequested);
   };
 
   applyHostTheme();
@@ -876,6 +960,8 @@ function render({ model, el }) {
   }
 
   renderGraph();
+  // clientWidth is 0 until the widget is laid out, so the first fit waits a frame.
+  requestAnimationFrame(fitIfRequested);
   renderEditable();
   renderStatus();
   renderRevision();

@@ -15,7 +15,10 @@
   cells on tabular input nodes, a tail window onto long frames, and a "Show full" button that
   hands the node to the notebook to render with its own tools
 - The widget matches the background of the page it is embedded in, and takes its light or dark
-  theme from that rather than from the operating system setting
+  theme from that rather than from the operating system setting. Where the host publishes a
+  shadcn-style palette, as marimo does, the widget wears that palette directly
+- Clicking a block's frame isolates it as the root; the breadcrumb resets from there
+- Added `fit_on_render` to scale the graph to the pane on every render
 
 ## [0.5.3] (2025-06-20)
 
