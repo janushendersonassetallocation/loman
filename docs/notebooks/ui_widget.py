@@ -134,10 +134,10 @@ def _(mo):
 
     | Action | How |
     |---|---|
-    | Open a block | Click it |
+    | Open a block | Click its middle |
+    | Isolate a block | Click its **frame** — the border around it |
     | Close one block | Click its **title** once open |
     | Close everything | **Collapse all** |
-    | Focus a block | Select it, then **Focus** in its panel |
     | Inspect a node | Click it |
     | Graph direction | **LR** / **TB** toggle |
     | Zoom | **+** / **−**, or ctrl/⌘ with the wheel |
@@ -321,13 +321,42 @@ def _(book, mo):
             ]
         )
 
-    unsubscribe = book.subscribe(capture_event)
-    return get_event_log, unsubscribe
+    book.subscribe(capture_event)
+    return (get_event_log,)
 
 
 @app.cell(hide_code=True)
 def _(get_event_log, mo):
     mo.ui.table(list(reversed(get_event_log()[-8:])), selection=None, pagination=False)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## It looks like part of the app
+
+    The widget takes its colours from the page it is embedded in rather than
+    bringing its own. On load it reads the host's background: the brightness of
+    that decides light or dark, which is more reliable than
+    `prefers-color-scheme` because marimo's theme toggle never touches the
+    operating system setting.
+
+    Marimo also publishes a full palette as CSS custom properties, and those
+    inherit through the widget's shadow boundary, so the widget wears marimo's
+    own `--background`, `--card`, `--foreground`, `--border` and `--primary`
+    instead of approximating them. Switch the notebook between light and dark
+    and the widget follows.
+
+    The names are generic enough that another design system could mean something
+    else by them, so they are adopted only once the host's declared
+    `--background` matches the backdrop it actually paints. Anywhere else, the
+    widget falls back to its own palette.
+
+    The graph keeps a light sheet in both themes — Graphviz paints black labels
+    onto it — but the pane behind that sheet takes the host colour, so the graph
+    reads as paper on the page rather than a white hole in a dark app.
+    """)
     return
 
 
@@ -379,14 +408,18 @@ def _(mo):
     `comp.widget(rankdir="TB")` to start the other way.
 
     **Focus.** Blocks can nest — here a book holds desks, and each desk holds
-    instruments. Opening every level at once is a wall of nodes. Instead, select
-    a block and press **Focus** in its panel: the graph re-roots on that block,
-    so its own nested blocks become the whole view. A breadcrumb appears under
-    the toolbar; click any step to climb back out, or **All** to return to the
-    top.
+    instruments. Opening every level at once is a wall of nodes. Instead
+    **click a block's frame**, the border drawn around it, and the graph
+    re-roots on that block so its own nested blocks become the whole view.
+    Clicking the middle of the block still opens it in place, so one shape
+    carries both moves without a modifier key. The **Focus** button in a
+    selected block's panel does the same thing.
 
-    Try it: click `emea`, **Focus**; then click `rates` inside it, **Focus**
-    again. The breadcrumb reads **All › emea › rates**.
+    A breadcrumb appears under the toolbar. Click any step to climb back out, or
+    **Reset** to return to the top.
+
+    Try it: click the frame of `emea`, then the frame of `rates` inside it. The
+    breadcrumb reads **Reset › emea › rates**.
     """)
     return
 
@@ -511,14 +544,19 @@ def _(mo):
     ## The API in one place
 
     ```python
-    widget = comp.widget()          # mirrors comp.draw(), plus editable=
+    widget = comp.widget()               # mirrors comp.draw(), plus the options below
     widget = comp.widget(root="emea")    # scope the widget to one block
+    comp.widget(rankdir="TB")            # start top-to-bottom; LR is the default
+    comp.widget(editable=False)          # inspect only; navigation still works
+    comp.widget(fit_on_render=True)      # scale to the pane on every render
+    comp.widget(max_rendered_nodes=2000) # raise the ceiling on opening a block
+
     widget.selected_name            # the real Loman name, not a browser ID
     widget.selected_names           # every member, for a collapsed block
+    widget.full_view                # node the Show full button published, or "\"
+    widget.full_view_value          # that node's value, or None
     widget.refresh()                # escape hatch after mutating comp.dag directly
     widget.close()                  # unsubscribe and release
-
-    comp.widget(rankdir="TB")       # start top-to-bottom; LR is the default
 
     unsubscribe = comp.subscribe(on_change)   # one batched event per mutation
     comp.revision                             # monotonic change counter
