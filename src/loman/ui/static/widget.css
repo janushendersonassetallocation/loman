@@ -586,3 +586,9 @@ button.loman-crumb.loman-crumb-action {
   font-size: 11px;
   padding: 1px 8px;
 }
+
+/* The close target behind a block's title. Transparent, but painted, so it
+   hit-tests: the title text alone is a ~58x21 px target and it is the only way
+   to close a block. */
+.loman-canvas .loman-block-handle-hit { cursor: zoom-out; pointer-events: all; }
+.loman-canvas g.loman-open-block:hover .loman-block-handle { fill: var(--loman-accent); }

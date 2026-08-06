@@ -26,6 +26,10 @@
   full width whenever nothing is being inspected
 - The widget keeps its recent layouts, so navigating back out of a block does not re-run
   Graphviz over a picture it has already drawn
+- BUGFIX: clicking an open block's title did not close it. Pressing anywhere in the graph
+  entered the panning state immediately, which made the canvas inert to hit-testing before
+  the button came back up; panning now waits for the pointer to actually move. The title bar
+  is also the close target now, rather than the width of the word
 - Added `fit_on_render` to scale the graph to the pane on every render
 
 ## [0.5.3] (2025-06-20)

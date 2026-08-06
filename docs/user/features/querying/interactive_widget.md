@@ -64,8 +64,9 @@ returns the block path, and `selected_names` returns every member.
   click and closes again on **Escape** or its **×**, so the graph has the full
   width whenever you are not reading a node.
 - **Click a block** to open it where it stands, so its insides appear beside
-  its neighbours with the edges between them drawn. Clicking an open block's
-  **title** closes it again, and **Collapse all** closes everything.
+  its neighbours with the edges between them drawn. Clicking anywhere along an
+  open block's **title bar** closes it again, and **Collapse all** closes
+  everything.
 - **Alt-click a block** to isolate it instead: the block becomes the root and
   you see only its top layer, the way clicking a folder shows that folder. That
   is the move for a graph too large to open in place.

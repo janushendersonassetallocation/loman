@@ -2072,3 +2072,113 @@ class TestGraphLabelInk:
             best = max(contrast(colour, 0.0), contrast(colour, 1.0))
             name = "MIXED" if state is None else state.name
             assert best >= 4.5, f"{name} ({colour}) is illegible in either ink: {best:.2f}:1"
+
+
+class TestPanningDoesNotSwallowClicks:
+    """Panning makes the canvas inert, so it must not begin on a press alone.
+
+    ``.loman-panning * { pointer-events: none }`` is what lets a drag scroll
+    without selecting text or triggering hovers. Applied on pointerdown, it
+    also took the element out of hit-testing between press and release, so the
+    browser dispatched the click to the canvas instead. An open block's title
+    is the only control inside the canvas that is not excluded from starting a
+    pan, so closing a block was the thing that silently stopped working.
+    """
+
+    def test_a_press_alone_does_not_enter_the_panning_state(self):
+        """The class goes on after movement, not on pointerdown."""
+        javascript = (STATIC / "widget.js").read_text()
+        down = javascript.split('canvas.addEventListener("pointerdown", (event) => {')[1].split("}, { signal });")[0]
+        assert 'classList.add("loman-panning")' not in down
+        assert "setPointerCapture" not in down, "capture also redirects the click away"
+        assert "dragging: false" in down
+
+    def test_the_drag_threshold_is_what_commits_to_panning(self):
+        """Below it the press is still a click; above it, a drag."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "const PAN_THRESHOLD" in javascript
+        move = javascript.split('canvas.addEventListener("pointermove", (event) => {')[1].split("}, { signal });")[0]
+        assert "Math.abs(dx) < PAN_THRESHOLD && Math.abs(dy) < PAN_THRESHOLD" in move
+        assert 'classList.add("loman-panning")' in move
+        assert "setPointerCapture" in move
+        # The scroll must not sit behind the capture call: setPointerCapture
+        # throws when the pointer is no longer active, which would abort the
+        # handler before it moved anything.
+        capture, scroll = move.split("setPointerCapture", 1)
+        assert "canvas.scrollLeft = panning.left - dx" in scroll
+        assert "try {" in capture
+        assert "} catch {" in scroll
+
+    def test_capture_is_only_released_when_it_was_taken(self):
+        """A press that never became a drag never captured the pointer."""
+        javascript = (STATIC / "widget.js").read_text()
+        end = javascript.split("const endPan = (event) => {")[1].split("\n  };")[0]
+        assert "wasDragging" in end
+        assert "releasePointerCapture" in end
+
+    def test_the_pointer_events_rule_still_applies_while_dragging(self):
+        """It is what stops a pan selecting text; only its timing was wrong."""
+        css = (STATIC / "widget.css").read_text()
+        assert ".loman-canvas.loman-panning * { pointer-events: none; }" in css
+
+    def test_closing_a_block_by_path_still_works_in_python(self):
+        """The request the title sends, independent of whether it can be hit."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.toggle_request = {"id": node_id(widget, "foo"), "request_id": "t1"}
+            assert widget.expanded_paths == ["foo"]
+
+            widget.toggle_request = {"path": "foo", "collapse": True, "request_id": "t2"}
+
+            assert widget.expanded_paths == []
+            assert widget.status == "Closed foo"
+        finally:
+            widget.close()
+
+
+class TestClosingAnOpenBlock:
+    """The title is the only way to close a block, so it has to be hittable."""
+
+    def test_the_title_bar_is_the_target_rather_than_the_word(self):
+        """A block title measures about 58x21 px, which is a lot to ask.
+
+        A transparent rect behind the label, stretched to the block's own width,
+        makes the whole title bar the target. Measured at 4.3x the area, and a
+        real click 19 px clear of the word lands on it.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const closeTarget = (cluster, label) => {")[1].split("\n  };")[0]
+        assert "label.getBBox()" in body
+        assert 'hit.setAttribute("fill", "transparent")' in body, "an unpainted rect does not hit-test"
+        assert "loman-block-handle-hit" in body
+        # Stretched to the frame, so the bar is as wide as the block.
+        assert 'cluster.querySelector("polygon")' in body
+        assert "cluster.insertBefore(hit, label)" in body
+
+    def test_the_target_is_wired_to_the_same_close(self):
+        """Two elements, one behaviour; the label must not be the only one."""
+        javascript = (STATIC / "widget.js").read_text()
+        wiring = javascript.split("const wireOpenBlocks = () => {")[1].split("\n  };")[0]
+        assert "const onClick = (event) => { event.stopPropagation(); close(); };" in wiring
+        assert 'label.addEventListener("click", onClick' in wiring
+        assert 'hit.addEventListener("click", onClick' in wiring
+
+    def test_a_label_that_cannot_be_measured_is_survivable(self):
+        """A label that cannot be measured must not break the wiring.
+
+        ``getBBox`` throws when the element is not laid out.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const closeTarget = (cluster, label) => {")[1].split("\n  };")[0]
+        assert "try {" in body
+        assert "catch" in body
+        assert "return null" in body
+        wiring = javascript.split("const wireOpenBlocks = () => {")[1].split("\n  };")[0]
+        assert "if (hit) {" in wiring, "a null target must not break the wiring"
+
+    def test_the_target_hit_tests_in_css(self):
+        """`fill: transparent` alone is not enough on every engine."""
+        css = (STATIC / "widget.css").read_text()
+        rule = css.split(".loman-canvas .loman-block-handle-hit {")[1].split("}")[0]
+        assert "pointer-events: all" in rule

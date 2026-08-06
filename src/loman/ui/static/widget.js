@@ -9,6 +9,13 @@ const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 8;
 const ZOOM_STEP = 1.25;
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// How far the pointer must travel before a press counts as a drag rather than
+// a click. A press that never moves has to stay a click, because panning makes
+// the canvas inert to hit-testing and would swallow it.
+const PAN_THRESHOLD = 4;
+
 // Point-to-pixel, the ratio Graphviz's `pt` dimensions imply in CSS.
 const PT_TO_PX = 96 / 72;
 
@@ -280,22 +287,41 @@ function render({ model, el }) {
   canvas.addEventListener("pointerdown", (event) => {
     // Left button on empty canvas only; node clicks and text selection win.
     if (event.button !== 0 || event.target.closest("g.node, .loman-legend")) return;
-    panning = { x: event.clientX, y: event.clientY, left: canvas.scrollLeft, top: canvas.scrollTop };
-    canvas.classList.add("loman-panning");
-    canvas.setPointerCapture(event.pointerId);
+    panning = { x: event.clientX, y: event.clientY, left: canvas.scrollLeft, top: canvas.scrollTop, dragging: false };
   }, { signal });
 
   canvas.addEventListener("pointermove", (event) => {
     if (!panning) return;
-    canvas.scrollLeft = panning.left - (event.clientX - panning.x);
-    canvas.scrollTop = panning.top - (event.clientY - panning.y);
+    const dx = event.clientX - panning.x;
+    const dy = event.clientY - panning.y;
+    if (!panning.dragging) {
+      if (Math.abs(dx) < PAN_THRESHOLD && Math.abs(dy) < PAN_THRESHOLD) return;
+      // Only now is this a drag rather than a click. Committing on pointerdown
+      // is what broke closing an open block: panning sets pointer-events:none
+      // across the canvas, so the title stopped being a target between press
+      // and release and the click landed on the canvas instead.
+      panning.dragging = true;
+      canvas.classList.add("loman-panning");
+      // Capture keeps the drag alive once the pointer leaves the pane. It is
+      // an improvement on panning, not a requirement for it, and it throws
+      // when the pointer is no longer active --- so it must not sit between
+      // the gesture and the scroll it performs.
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch {
+        // The drag still works, it just stops at the edge of the pane.
+      }
+    }
+    canvas.scrollLeft = panning.left - dx;
+    canvas.scrollTop = panning.top - dy;
   }, { signal });
 
   const endPan = (event) => {
     if (!panning) return;
+    const wasDragging = panning.dragging;
     panning = null;
     canvas.classList.remove("loman-panning");
-    if (event.pointerId !== undefined && canvas.hasPointerCapture?.(event.pointerId)) {
+    if (wasDragging && event.pointerId !== undefined && canvas.hasPointerCapture?.(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
     }
   };
@@ -406,9 +432,36 @@ function render({ model, el }) {
   // rather than plain `group=` clusters, which are not closeable.
   // SVG has no title attribute, so a hover tooltip is a child <title> element.
   const svgTooltip = (element, text) => {
-    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    const title = document.createElementNS(SVG_NS, "title");
     title.textContent = text;
     element.appendChild(title);
+  };
+
+  // A block title is a thin thing to aim at --- "market" measures 58x21 --- and
+  // it is the only way to close a block. A transparent rectangle behind it,
+  // padded and stretched to the full width of the block, turns the whole title
+  // bar into the target instead of the six characters of the word.
+  const closeTarget = (cluster, label) => {
+    let box;
+    try {
+      box = label.getBBox();
+    } catch {
+      return null; // Not laid out yet; the label itself still works.
+    }
+    const frame = cluster.querySelector("polygon");
+    const span = frame?.getBBox?.();
+    const pad = 7;
+    const hit = document.createElementNS(SVG_NS, "rect");
+    hit.setAttribute("x", span ? span.x : box.x - pad);
+    hit.setAttribute("y", box.y - pad);
+    hit.setAttribute("width", span ? span.width : box.width + pad * 2);
+    hit.setAttribute("height", box.height + pad * 2);
+    hit.setAttribute("fill", "transparent");
+    hit.classList.add("loman-block-handle-hit");
+    // Behind the label so the text still takes its own hover styling, and
+    // before the member nodes so it can never sit over one of them.
+    cluster.insertBefore(hit, label);
+    return hit;
   };
 
   const wireOpenBlocks = () => {
@@ -426,10 +479,16 @@ function render({ model, el }) {
       label.setAttribute("aria-label", `Close block ${path}`);
       svgTooltip(label, `Close ${path}`);
       const close = () => { if (!busy) send("toggle_request", { path, collapse: true }, "Closing block…"); };
-      label.addEventListener("click", (event) => { event.stopPropagation(); close(); }, { signal });
+      const onClick = (event) => { event.stopPropagation(); close(); };
+      label.addEventListener("click", onClick, { signal });
       label.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); close(); }
       }, { signal });
+      const hit = closeTarget(cluster, label);
+      if (hit) {
+        svgTooltip(hit, `Close ${path}`);
+        hit.addEventListener("click", onClick, { signal });
+      }
     });
   };
 
