@@ -56,7 +56,7 @@ function render({ model, el }) {
       <div class="loman-canvas" tabindex="0">
         <div class="loman-stage"></div>
       </div>
-      <aside class="loman-inspector" aria-label="Node inspector"></aside>
+      <aside class="loman-inspector" aria-label="Node inspector" hidden></aside>
     </div>
     <div class="loman-status" role="status" data-severity="idle">
       <span class="loman-status-dot" aria-hidden="true"></span>
@@ -198,6 +198,8 @@ function render({ model, el }) {
     buttons("collapse-all").disabled = busy;
     buttons("layout").disabled = busy;
     breadcrumb.querySelectorAll("button").forEach((node) => { node.disabled = busy; });
+    // Except the one crumb that acts rather than navigates.
+    breadcrumb.querySelectorAll("button.loman-crumb-action").forEach((node) => { node.disabled = !canMutate; });
     // Focusing a block navigates rather than mutates, so it stays live when
     // read-only; only the mutating controls follow `canMutate`.
     inspector.querySelectorAll("button:not(.loman-nav)").forEach((node) => { node.disabled = !canMutate; });
@@ -317,7 +319,7 @@ function render({ model, el }) {
     const colors = model.get("state_colors");
     const selected = model.get("selected_id");
     stage.querySelectorAll("g.node").forEach((node) => {
-      const id = node.querySelector("title")?.textContent;
+      const id = node.dataset.lomanId;
       const shape = node.querySelector("ellipse, polygon, path");
       if (id && shape && colors[states[id]]) shape.setAttribute("fill", colors[states[id]]);
       node.classList.toggle("loman-selected", id === selected);
@@ -346,23 +348,16 @@ function render({ model, el }) {
     }
   };
 
-  // A collapsed block is drawn as nested rectangles: an outer frame and an
-  // inner fill. Clicking the fill opens the block; clicking the frame around it
-  // isolates the block as the root instead, which is the same thing the
-  // inspector's Focus button does but without hunting for the button.
-  const onFrame = (node, event) => {
-    const rects = [...node.querySelectorAll("polygon, ellipse, path")].map((s) => s.getBoundingClientRect());
-    if (rects.length < 2) return false;
-    // Graphviz emits the nested shapes inner-first, but that is an
-    // implementation detail of the renderer rather than a promise, so the
-    // smallest one is taken as the interior.
-    const inner = rects.reduce((a, b) => (a.width * a.height <= b.width * b.height ? a : b));
-    return (
-      event.clientX < inner.left || event.clientX > inner.right ||
-      event.clientY < inner.top || event.clientY > inner.bottom
-    );
-  };
-
+  // Clicking a block goes into it: the block becomes the root and the view
+  // shows its top layer, exactly as clicking a folder shows that folder. The
+  // breadcrumb is how you come back out.
+  //
+  // This used to be split by where in the shape you clicked --- the interior
+  // opened the block in place, the border around it re-rooted --- which nobody
+  // guesses and nothing on screen announces. Opening in place is still worth
+  // having, because it shows a block's insides alongside its neighbours with
+  // the edges between them drawn, so it keeps a modifier rather than the
+  // primary click.
   const activate = (id, composite, event) => {
     if (busy) return;
     if (!composite) {
@@ -370,11 +365,11 @@ function render({ model, el }) {
       model.save_changes();
       return;
     }
-    if (event && onFrame(event.currentTarget, event)) {
-      send("focus_request", { id }, "Focusing…");
+    if (event?.altKey) {
+      send("toggle_request", { id }, "Expanding block…");
       return;
     }
-    send("toggle_request", { id }, "Opening block…");
+    send("focus_request", { id }, "Opening block…");
   };
 
   // An open block is a Graphviz cluster, not a node, so there is no shape to
@@ -407,23 +402,6 @@ function render({ model, el }) {
       label.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") { event.preventDefault(); close(); }
       }, { signal });
-
-      // An opened block keeps its frame, and the frame keeps its meaning:
-      // clicking it isolates the block as the root, exactly as it does while
-      // the block is still collapsed. Without this there is no way to focus
-      // from an expanded view, and so no way to reach the breadcrumb.
-      const frame = cluster.querySelector("polygon, path");
-      if (!frame) return;
-      frame.classList.add("loman-block-frame");
-      frame.setAttribute("tabindex", "0");
-      frame.setAttribute("role", "button");
-      frame.setAttribute("aria-label", `Isolate block ${path}`);
-      svgTooltip(frame, `Isolate ${path} — make it the root`);
-      const focus = () => { if (!busy) send("focus_request", { path }, "Focusing…"); };
-      frame.addEventListener("click", (event) => { event.stopPropagation(); focus(); }, { signal });
-      frame.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); focus(); }
-      }, { signal });
     });
   };
 
@@ -433,19 +411,27 @@ function render({ model, el }) {
     const svg = stage.querySelector("svg");
     naturalSize = svg ? readNaturalSize(svg) : null;
     stage.querySelectorAll("g.node").forEach((node) => {
-      const id = node.querySelector("title")?.textContent;
+      const heading = node.querySelector("title");
+      const id = heading?.textContent;
       if (!id) return;
+      // Graphviz's rendered ID lives in <title>, which is also the only thing
+      // SVG has by way of a tooltip --- so hovering any node showed "n2".
+      // Moving the ID to a data attribute frees <title> to say something.
+      // (SVGElement has no `title` property to assign, unlike HTMLElement.)
+      node.dataset.lomanId = id;
       const composite = model.get("composite_ids").includes(id);
       node.tabIndex = 0;
       node.setAttribute("role", "option");
       node.classList.toggle("loman-composite", composite);
-      node.setAttribute("aria-label", composite ? "Collapsed block, activate to open" : "Computation node");
-      if (composite) node.title = "Click to open · click the frame to isolate this block";
+      node.setAttribute("aria-label", composite ? "Block, activate to open it" : "Computation node");
+      heading.textContent = composite
+        ? "Click to open this block · alt-click to expand it here"
+        : "Click to inspect this node";
       node.addEventListener("click", (event) => activate(id, composite, event), { signal });
       node.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          activate(id, composite, null);
+          activate(id, composite, event);
         }
       }, { signal });
     });
@@ -704,6 +690,13 @@ function render({ model, el }) {
     return wrapper;
   };
 
+  // Clearing the selection is what closes the inspector, so the graph gets the
+  // whole width back. They are the same act, and only Python owns `detail`.
+  const clearSelection = () => {
+    model.set("selected_id", "");
+    model.save_changes();
+  };
+
   const buildHead = (data) => {
     const head = document.createElement("div");
     head.className = "loman-node-head";
@@ -713,7 +706,13 @@ function render({ model, el }) {
     const badge = document.createElement("span");
     badge.className = "loman-badge";
     badge.append(swatchFor(data.state), document.createTextNode(data.state));
-    head.append(name, badge);
+    const close = document.createElement("button");
+    close.className = "loman-nav loman-close";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Close the inspector");
+    close.title = "Close the inspector (Escape)";
+    close.addEventListener("click", clearSelection, { signal });
+    head.append(name, badge, close);
     return head;
   };
 
@@ -812,21 +811,19 @@ function render({ model, el }) {
     return section(null, details);
   };
 
-  const renderEmpty = () => {
-    const empty = document.createElement("p");
-    empty.className = "loman-empty";
-    empty.textContent = model.get("graph_svg")
-      ? "Select a node to inspect it. Drag to pan, ctrl or ⌘ with the wheel to zoom."
-      : "No graph to show.";
-    inspector.append(empty);
-  };
-
+  // The inspector is only earned by a click. Left standing empty it costs a
+  // third of the width for a sentence, which is the difference between a
+  // widget you embed in an app and one you tolerate in a notebook.
   const renderDetail = () => {
     const data = model.get("detail");
     inspector.replaceChildren();
-    if (!data?.id) {
-      renderEmpty();
+    const open = Boolean(data?.id);
+    inspector.hidden = !open;
+    el.dataset.inspector = open ? "open" : "closed";
+    if (!open) {
       repaint();
+      // The canvas just got wider, so a fitted graph is no longer fitted.
+      fitIfRequested();
       return;
     }
     inspector.append(buildHead(data));
@@ -843,14 +840,23 @@ function render({ model, el }) {
     if (data.source) inspector.append(buildSource(data.source));
     applyEnabledState();
     repaint();
+    // Likewise: opening the panel narrows the canvas.
+    fitIfRequested();
   };
 
   /* ------------------------------------------------------------- wiring */
 
+  // With the inspector closed until it is asked for, the status bar is the only
+  // place left that can say what the graph responds to. It carries the hint
+  // until Python has something of its own to report.
+  const IDLE_HINT =
+    "Click a node to inspect it · click a block to open it · drag to pan · ctrl or ⌘ with the wheel to zoom";
+
   const renderStatus = () => {
     setBusy(false);
     statusBar.dataset.severity = model.get("status_severity") || "idle";
-    statusText.textContent = model.get("status");
+    statusText.textContent =
+      model.get("status") || (model.get("graph_svg") ? IDLE_HINT : "No graph to show.");
   };
 
   const renderRevision = () => {
@@ -904,6 +910,17 @@ function render({ model, el }) {
         here.setAttribute("aria-current", "location");
         here.textContent = entry.label;
         breadcrumb.append(here);
+        // A block used to be selectable, and its panel is where "compute this
+        // whole block" lived. Clicking a block now goes into it instead, so the
+        // action follows you: it acts on the block you are standing in.
+        const compute = document.createElement("button");
+        compute.className = "loman-crumb loman-crumb-action";
+        compute.textContent = "Compute";
+        compute.title = `Compute every node in ${entry.label}`;
+        compute.addEventListener(
+          "click", () => send("compute_request", { path: entry.path }, "Computing…"), { signal },
+        );
+        breadcrumb.append(compute);
         return;
       }
       const crumb = document.createElement("button");
@@ -939,6 +956,17 @@ function render({ model, el }) {
     renderGraph();
     fitIfRequested();
   };
+
+  // Escape closes the inspector, the same as its × button. Bound on the widget
+  // rather than the canvas, so it still works from inside the panel itself.
+  el.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || inspector.hidden) return;
+    // Escape in a field cancels that edit. Closing the panel out from under
+    // someone mid-keystroke would throw away what they were typing.
+    if (event.target?.closest?.("input")) return;
+    event.preventDefault();
+    clearSelection();
+  }, { signal });
 
   buttons("compute-all").addEventListener(
     "click", () => send("compute_request", { all: true }, "Computing…"), { signal },

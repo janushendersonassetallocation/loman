@@ -17,7 +17,12 @@
 - The widget matches the background of the page it is embedded in, and takes its light or dark
   theme from that rather than from the operating system setting. Where the host publishes a
   shadcn-style palette, as marimo does, the widget wears that palette directly
-- Clicking a block's frame isolates it as the root; the breadcrumb resets from there
+- Clicking a block in the widget goes into it, so the view shows that block's top layer and
+  the breadcrumb leads back out; alt-clicking expands it in place instead
+- The widget's detail panel opens on a click and closes on Escape, so the graph has the
+  full width whenever nothing is being inspected
+- The widget keeps its recent layouts, so navigating back out of a block does not re-run
+  Graphviz over a picture it has already drawn
 - Added `fit_on_render` to scale the graph to the pane on every render
 
 ## [0.5.3] (2025-06-20)

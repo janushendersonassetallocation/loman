@@ -1592,16 +1592,28 @@ class TestFitOnRender:
         assert "if (scale < 1) fitToPane();" in body
 
 
-class TestFrameClickFocus:
-    """A block's frame isolates it; its interior opens it."""
+class TestBlockNavigation:
+    """Clicking a block goes into it, the way clicking a folder does."""
 
-    def test_the_front_end_distinguishes_frame_from_interior(self):
-        """One shape opens the block, the ring around it re-roots the view."""
+    def test_a_plain_click_on_a_block_opens_it_rather_than_expanding_it(self):
+        """The primary gesture re-roots; expanding in place keeps a modifier.
+
+        Which of the two you got used to depend on whether the click landed on
+        a block's border or its interior, which nothing on screen announced.
+        """
         javascript = (STATIC / "widget.js").read_text()
-        assert "const onFrame" in javascript
         activate = javascript.split("const activate = (id, composite, event) => {")[1].split("\n  };")[0]
-        assert '"focus_request"' in activate
-        assert '"toggle_request"' in activate
+        assert "const onFrame" not in javascript, "the border no longer means anything different"
+        assert "event?.altKey" in activate
+        # The modifier branch expands; everything else about a block re-roots.
+        expand, focus = activate.split("event?.altKey")[1].split('send("focus_request"')
+        assert '"toggle_request"' in expand
+        assert '"toggle_request"' not in focus
+
+    def test_the_graph_says_what_a_block_click_will_do(self):
+        """The gesture has to be announced somewhere other than the docs."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "Click to open this block · alt-click to expand it here" in javascript
 
     def test_focusing_by_rendered_id_isolates_the_block(self):
         """That request is what a frame click sends."""
@@ -1647,20 +1659,18 @@ class TestFrameClickFocus:
 class TestFocusFromAnExpandedView:
     """Focus has to be reachable once blocks are open, not only while collapsed.
 
-    A collapsed block is a node with a frame; an open one is a Graphviz cluster
-    with a frame. Wiring only the first meant that after opening a few levels
-    there was no way to focus at all, and so no way to reach the breadcrumb and
-    its Reset.
+    An expanded block is a Graphviz cluster rather than a node, so it has no
+    shape to click. Its label closes it again; the blocks nested inside it are
+    ordinary collapsed nodes, so clicking one goes into it as usual.
     """
 
-    def test_the_frontend_wires_open_block_frames_too(self):
-        """The cluster frame sends the same focus request a node frame does."""
+    def test_an_open_blocks_label_closes_it_and_nothing_else_is_wired(self):
+        """The frame carries no meaning now, so it must not be a control."""
         javascript = (STATIC / "widget.js").read_text()
         wiring = javascript.split("const wireOpenBlocks = () => {")[1].split("\n  };")[0]
-        assert "loman-block-frame" in wiring
-        assert '"focus_request"' in wiring
-        # The label still closes the block; the frame must not steal that.
         assert '"toggle_request"' in wiring
+        assert "collapse: true" in wiring
+        assert "loman-block-frame" not in javascript, "clicking a border is the gesture being removed"
 
     def test_svg_tooltips_are_built_with_append_child(self):
         """Node.append returns undefined, so assigning to its result throws.
@@ -1750,3 +1760,235 @@ class TestBreadcrumbVisibility:
             assert widget.status == "Showing the whole graph"
         finally:
             widget.close()
+
+
+class TestInspectorOnDemand:
+    """The panel is earned by a click, so the graph gets the width otherwise."""
+
+    def test_the_panel_starts_hidden(self):
+        """Standing empty it spends a third of the width on one sentence."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert '<aside class="loman-inspector" aria-label="Node inspector" hidden>' in javascript
+        body = javascript.split("const renderDetail = () => {")[1].split("\n  };")[0]
+        assert "inspector.hidden = !open" in body
+
+    def test_a_hidden_panel_gives_its_width_back(self):
+        """A hidden grid child still holds its column open; a flex one does not."""
+        css = (STATIC / "widget.css").read_text()
+        main = css.split(".loman-main {")[1].split("}")[0]
+        assert "display: flex" in main
+        assert "grid-template-columns" not in main
+        assert ".loman-inspector[hidden] { display: none; }" in css
+
+    def test_the_hint_moved_to_the_status_bar(self):
+        """It used to live in the panel, which is no longer always there."""
+        javascript = (STATIC / "widget.js").read_text()
+        css = (STATIC / "widget.css").read_text()
+        assert "IDLE_HINT" in javascript
+        assert "loman-empty" not in javascript
+        assert "loman-empty" not in css
+
+    def test_closing_the_panel_clears_the_selection(self):
+        """Closing and deselecting are the same act, and Python owns detail."""
+        _comp, widget = make_widget()
+        try:
+            widget.selected_id = node_id(widget, "price")
+            assert widget.detail["name"] == "price"
+
+            widget.selected_id = ""
+
+            assert widget.detail == {}
+        finally:
+            widget.close()
+
+    def test_the_front_end_closes_by_clearing_the_selection(self):
+        """Hiding the panel without telling Python would desynchronise them."""
+        javascript = (STATIC / "widget.js").read_text()
+        helper = javascript.split("const clearSelection = () => {")[1].split("};")[0]
+        assert 'model.set("selected_id", "")' in helper
+
+    def test_escape_leaves_a_field_being_edited_alone(self):
+        """Escape in a field cancels that edit; it must not also close the panel."""
+        javascript = (STATIC / "widget.js").read_text()
+        handler = javascript.split('if (event.key !== "Escape" || inspector.hidden) return;')[1]
+        assert 'event.target?.closest?.("input")' in handler.split("clearSelection();")[0]
+
+
+class TestComputingABlockYouAreInside:
+    """Clicking a block now goes into it, so its Compute follows you there."""
+
+    def test_the_breadcrumb_carries_the_action(self):
+        """The block being looked inside is not a shape on screen to click."""
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const renderBreadcrumb = () => {")[1].split("\n  };")[0]
+        assert "loman-crumb-action" in body
+        assert 'send("compute_request", { path: entry.path }' in body
+
+    def test_the_action_crumb_is_gated_on_editable_unlike_the_rest(self):
+        """Navigating a read-only graph is fine; computing it is not."""
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const applyEnabledState = () => {")[1].split("\n  };")[0]
+        gate = body.split("button.loman-crumb-action")[1]
+        assert "!canMutate" in gate.split("\n")[0]
+
+    def test_computing_a_block_by_path(self):
+        """That is the request the action crumb sends."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.compute_request = {"path": "foo", "request_id": "c1"}
+
+            assert widget.status == "Computed foo"
+            assert comp.state("foo/c") == States.UPTODATE
+        finally:
+            widget.close()
+
+    def test_a_read_only_widget_refuses_to_compute_a_block(self):
+        """Read-only has to mean read-only by every route into it."""
+        comp = create_example_block_computation()
+        widget = comp.widget(editable=False)
+        try:
+            widget.compute_request = {"path": "foo", "request_id": "c1"}
+
+            assert widget.status == "Compute failed: this widget is read-only"
+        finally:
+            widget.close()
+
+    def test_an_unknown_block_reports_rather_than_raises(self):
+        """A traitlets observer must never let an exception escape."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.compute_request = {"path": "nowhere", "request_id": "c1"}
+
+            assert widget.status.startswith("Compute failed")
+        finally:
+            widget.close()
+
+
+class TestLayoutReuse:
+    """Retracing ground already covered should not re-run Graphviz."""
+
+    @staticmethod
+    def _count_layouts(widget) -> list[int]:
+        """Replace the widget's renderer with one that records its calls."""
+        calls: list[int] = []
+        original = widget._make_view
+
+        def counting():
+            calls.append(1)
+            return original()
+
+        widget._make_view = counting
+        return calls
+
+    def test_going_back_out_reuses_the_layout_it_came_from(self):
+        """The way back is the trip certain to happen, so it costs nothing."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            calls = self._count_layouts(widget)
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+            assert len(calls) == 1, "going in is a view never laid out before"
+
+            widget.focus_request = {"path": "", "request_id": "f2"}
+            assert len(calls) == 1, "the top level was already laid out"
+
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f3"}
+            assert len(calls) == 1, "and so was the block"
+        finally:
+            widget.close()
+
+    def test_a_structural_change_discards_stored_layouts(self):
+        """A stored view describes a shape of graph that no longer exists."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+            widget.focus_request = {"path": "", "request_id": "f2"}
+            calls = self._count_layouts(widget)
+
+            comp.add_node("extra", value=1)
+            assert len(calls) == 1, "the change itself redraws"
+
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f3"}
+            assert len(calls) == 2, "the stored layout predates the new node"
+        finally:
+            widget.close()
+
+    def test_expansions_and_direction_are_part_of_the_layout_identity(self):
+        """Same root, different picture, so they cannot share an entry."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            first = widget._layout_key()
+            widget.toggle_request = {"id": node_id(widget, "foo"), "request_id": "t1"}
+            assert widget._layout_key() != first
+
+            opened = widget._layout_key()
+            widget.layout_request = {"rankdir": "TB", "request_id": "l1"}
+            assert widget._layout_key() != opened
+        finally:
+            widget.close()
+
+    def test_nothing_is_stored_when_the_colours_depend_on_values(self):
+        """Colouring by timing can want a new picture without the shape moving."""
+        comp = create_example_block_computation()
+        widget = comp.widget(colors="timing")
+        try:
+            assert widget._layout_key() is None
+
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+
+            assert widget._layout_cache == {}
+        finally:
+            widget.close()
+
+    def test_the_store_is_bounded(self, monkeypatch):
+        """It holds SVGs, so an unbounded one grows with every click."""
+        monkeypatch.setattr("loman.ui.widget._LAYOUT_CACHE_SIZE", 1)
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            widget.focus_request = {"id": node_id(widget, "foo"), "request_id": "f1"}
+            widget.focus_request = {"path": "", "request_id": "f2"}
+
+            assert len(widget._layout_cache) == 1
+        finally:
+            widget.close()
+
+    def test_refresh_still_lays_the_graph_out_again(self):
+        """It is the escape hatch for changes the widget could not see."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            calls = self._count_layouts(widget)
+            widget.refresh()
+            widget.refresh()
+
+            assert len(calls) == 2, "an explicit refresh must never be served from store"
+        finally:
+            widget.close()
+
+
+class TestNodeTooltips:
+    """SVG gives one hover tooltip per element, and Graphviz had spent it."""
+
+    def test_the_rendered_id_moves_off_the_only_tooltip_svg_has(self):
+        """`node.title = ...` does nothing: SVGElement has no such property.
+
+        Graphviz writes the rendered ID into ``<title>``, so hovering any node
+        showed "n2". Nothing was left to say what clicking would do.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        assert "node.dataset.lomanId = id" in javascript
+        assert "node.title =" not in javascript
+        repaint = javascript.split("const repaint = () => {")[1].split("\n  };")[0]
+        assert "node.dataset.lomanId" in repaint, "the ID is read from the data attribute now"
+        assert 'querySelector("title")' not in repaint
+
+    def test_both_kinds_of_node_say_what_a_click_does(self):
+        """Alt-click is otherwise announced nowhere on screen."""
+        javascript = (STATIC / "widget.js").read_text()
+        assert "Click to open this block · alt-click to expand it here" in javascript
+        assert "Click to inspect this node" in javascript

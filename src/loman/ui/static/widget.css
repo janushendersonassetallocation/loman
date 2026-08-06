@@ -195,9 +195,10 @@ button.loman-crumb:disabled { opacity: 0.45; cursor: default; }
 
 /* ------------------------------------------------------------------- body */
 
+/* Flex rather than a two-column grid: the inspector is hidden until a node is
+   clicked, and a hidden grid child still holds its column open. */
 .loman-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  display: flex;
   height: clamp(360px, 52vh, 560px);
   min-height: 0;
 }
@@ -206,6 +207,7 @@ button.loman-crumb:disabled { opacity: 0.45; cursor: default; }
    it to fit the pane is what made every label shrink as blocks were opened. */
 .loman-canvas {
   position: relative;
+  flex: 1 1 auto;
   overflow: auto;
   min-width: 0;
   min-height: 0;
@@ -277,25 +279,43 @@ button.loman-crumb:disabled { opacity: 0.45; cursor: default; }
 
 /* -------------------------------------------------------------- inspector */
 
+/* Opened by a click and closed again by one, so the graph has the full width
+   whenever nothing is being inspected. */
 .loman-inspector {
   display: flex;
+  flex: 0 0 clamp(240px, 30%, 320px);
   flex-direction: column;
   min-height: 0;
   overflow: auto;
   background: var(--loman-panel);
   border-left: 1px solid var(--loman-line);
 }
+.loman-inspector[hidden] { display: none; }
 
-.loman-empty {
-  margin: auto;
-  padding: 24px 16px;
-  text-align: center;
-  color: var(--loman-ink-3);
-  font-size: 12px;
+.loman-node-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0 8px;
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--loman-line);
 }
+.loman-node-head .loman-badge { grid-column: 1; justify-self: start; }
+.loman-widget button.loman-close {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--loman-ink-3);
+  font-size: 16px;
+  line-height: 1.2;
+}
+.loman-widget button.loman-close:hover:not(:disabled) { color: var(--loman-ink); background: var(--loman-raised); }
 
-.loman-node-head { padding: 12px 12px 8px; border-bottom: 1px solid var(--loman-line); }
 .loman-node-name {
+  grid-column: 1;
+  grid-row: 1;
   margin: 0 0 6px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   font-size: 13px;
@@ -432,9 +452,14 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 720px) {
-  .loman-main { grid-template-columns: 1fr; height: auto; }
-  .loman-canvas { height: 320px; }
-  .loman-inspector { max-height: 300px; border-left: 0; border-top: 1px solid var(--loman-line); }
+  .loman-main { flex-direction: column; height: auto; }
+  .loman-canvas { height: 320px; flex: none; }
+  .loman-inspector {
+    flex: none;
+    max-height: 300px;
+    border-left: 0;
+    border-top: 1px solid var(--loman-line);
+  }
   .loman-legend { display: none; }
 }
 
@@ -543,7 +568,12 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
 .loman-section-head h4 { margin: 0; }
 .loman-widget button.loman-show-full { padding: 2px 8px; font-size: 11px; }
 
-/* An open block's frame isolates it, the same as a collapsed block's frame. */
-.loman-canvas .loman-block-frame { cursor: zoom-in; }
-.loman-canvas .loman-block-frame:hover { stroke: var(--loman-accent); stroke-width: 2px; }
-.loman-canvas .loman-block-frame:focus-visible { stroke: var(--loman-accent); stroke-width: 2.5px; outline: none; }
+/* The one crumb that acts on the block you are standing in rather than
+   navigating away from it, so it is set apart from the path itself. */
+button.loman-crumb.loman-crumb-action {
+  margin-left: 4px;
+  border: 1px solid var(--loman-line-strong);
+  color: var(--loman-ink-2);
+  font-size: 11px;
+  padding: 1px 8px;
+}

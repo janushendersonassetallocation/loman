@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 import logging
-from collections import deque
+from collections import OrderedDict, deque
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -49,6 +49,19 @@ DEFAULT_MAX_RENDERED_NODES = 500
 #: Sentinel from :meth:`ComputationWidget._canonical_output`: the trait is
 #: view-dependent and no view exists yet, so its echoed value is left alone.
 _NO_CANONICAL = object()
+
+#: How many laid-out views to keep, keyed by what the layout depends on.
+#:
+#: Navigating is a walk down one path and back up it: open a block, look, come
+#: back out. The way back is the part that should cost nothing, because it is
+#: retracing ground already covered, and a dozen entries covers a deeper stack
+#: than anyone navigates by hand. Entries are Graphviz SVGs at roughly 0.6 KiB
+#: per rendered node, so the ceiling is a few hundred KiB.
+#:
+#: Rendering the layer below before it is asked for was the alternative, and it
+#: costs one ``dot`` run per block on screen for views most people never open.
+#: The trip back is the one that is certain to happen.
+_LAYOUT_CACHE_SIZE = 12
 
 
 def _acknowledges(method: Callable[[Any, dict[str, Any]], None]) -> Callable[[Any, dict[str, Any]], None]:
@@ -204,6 +217,7 @@ class ComputationWidget(anywidget.AnyWidget):
             "collapse_all": collapse_all,
         }
         self._view: GraphView | None = None
+        self._layout_cache: OrderedDict[tuple[Any, ...], tuple[GraphView, str]] = OrderedDict()
         self._id_to_visible: dict[str, NodeKey] = {}
         self._canonical_graph_svg = ""
         self._canonical_status = ""
@@ -339,14 +353,60 @@ class ComputationWidget(anywidget.AnyWidget):
         with self._own_write():
             self.ack = self._canonical_ack
 
+    def _layout_key(self) -> tuple[Any, ...] | None:
+        """Return what the layout about to be drawn depends on, or ``None``.
+
+        ``None`` means this layout must not be cached. With any colouring other
+        than by state the fills come from values rather than states, so an
+        otherwise identical view can want a different picture without the
+        structure having moved. Colouring by state repaints in the browser, so
+        a stored layout stays correct as the computation runs.
+        """
+        if not self.repaint_states:
+            return None
+        return (
+            str(self._root),
+            tuple(sorted(str(block) for block in self._expanded)),
+            self.rankdir,
+        )
+
+    def _layout(self) -> tuple[GraphView, str]:
+        """Lay the current view out, reusing a stored one where that is sound.
+
+        Structural changes clear the cache outright rather than being part of
+        the key, because a stored :class:`GraphView` describes a shape of graph
+        that no longer exists once nodes come and go.
+        """
+        key = self._layout_key()
+        if key is not None and key in self._layout_cache:
+            self._layout_cache.move_to_end(key)
+            return self._layout_cache[key]
+        view = self._make_view()
+        result = (view, view.svg() or "")
+        if key is not None:
+            self._layout_cache[key] = result
+            while len(self._layout_cache) > _LAYOUT_CACHE_SIZE:
+                self._layout_cache.popitem(last=False)
+        return result
+
     def refresh(self) -> bool:
         """Force a full graph refresh, including SVG layout and node identity.
 
         This is the explicit escape hatch for changes the subscription cannot
-        see, such as mutating ``computation.dag`` directly.
+        see, such as mutating ``computation.dag`` directly. Stored layouts are
+        discarded, since a change the widget could not see is exactly the kind
+        that invalidates them.
 
         :return: True on success. On failure the previous picture is left alone
             and :attr:`status` explains what went wrong.
+        """
+        self._layout_cache.clear()
+        return self._redraw()
+
+    def _redraw(self) -> bool:
+        """Re-render from the current root and expansions, reusing layouts.
+
+        :return: True on success, leaving the previous picture alone otherwise.
         """
         selected_members: frozenset[NodeKey] | None = None
         if self._view is not None and self.selected_id:
@@ -354,8 +414,7 @@ class ComputationWidget(anywidget.AnyWidget):
             if selected_visible is not None:
                 selected_members = frozenset(self._view.original_nodes[selected_visible])
         try:
-            view = self._make_view()
-            svg = view.svg() or ""
+            view, svg = self._layout()
         except Exception as exc:
             # Rendering shells out to ``dot``; a missing binary, an unwriteable
             # temp dir or a malformed attribute all surface here, and none of
@@ -566,6 +625,14 @@ class ComputationWidget(anywidget.AnyWidget):
                 self.computation.compute_all()
                 self._set_status("Computed all available nodes")
                 return
+            if request.get("path"):
+                # Named by path rather than by rendered ID because the block in
+                # question is the one being looked inside, and so is not itself
+                # a shape on screen.
+                block = to_nodekey(request["path"])
+                self.computation.compute(block)
+                self._set_status(f"Computed {block}")
+                return
             if self._view is None:
                 self._fail("Compute failed: the graph is not rendered")
                 return
@@ -634,7 +701,7 @@ class ComputationWidget(anywidget.AnyWidget):
                 block = self._full_visible_key(visible)
                 self._expanded.add(block)
                 success = f"Opened {block}"
-            if self.refresh():
+            if self._redraw():
                 self._set_status(success)
         except Exception as exc:
             LOG.debug("Loman widget expand/collapse request failed", exc_info=True)
@@ -655,7 +722,7 @@ class ComputationWidget(anywidget.AnyWidget):
         self._canonical_rankdir = rankdir
         with self._own_write():
             self.rankdir = rankdir
-        if self.refresh():
+        if self._redraw():
             self._set_status(f"Layout direction {rankdir}")
         else:
             # The relayout failed and left the old picture, so keep rankdir
@@ -712,7 +779,7 @@ class ComputationWidget(anywidget.AnyWidget):
             else:
                 root_nk = to_nodekey(target)
                 self._expanded = {nk for nk in self._expanded if nk.is_descendent_of(root_nk)}
-            if self.refresh():
+            if self._redraw():
                 self._set_status("Showing the whole graph" if target is None else f"Focused on {target}")
         except Exception as exc:
             LOG.debug("Loman widget focus request failed", exc_info=True)

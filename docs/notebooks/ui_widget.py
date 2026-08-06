@@ -134,18 +134,20 @@ def _(mo):
 
     | Action | How |
     |---|---|
-    | Open a block | Click its middle |
-    | Isolate a block | Click its **frame** — the border around it |
-    | Close one block | Click its **title** once open |
+    | Go into a block | Click it |
+    | Come back out | The **breadcrumb** under the toolbar |
+    | Expand a block in place | **Alt-click** it |
+    | Close an expanded block | Click its **title** |
     | Close everything | **Collapse all** |
-    | Inspect a node | Click it |
+    | Inspect a node | Click it — **Escape** closes the panel |
     | Graph direction | **LR** / **TB** toggle |
     | Zoom | **+** / **−**, or ctrl/⌘ with the wheel |
     | Whole graph | **Fit** — **1:1** returns to natural size |
     | Pan | Drag the background |
 
-    `risk` is red because `risk/utilisation` divides by zero. Open the block,
-    click the failing node, and the panel shows the traceback.
+    `risk` is red because `risk/utilisation` divides by zero. Click into the
+    block, click the failing node, and the panel shows the traceback. The panel
+    only appears once you ask for it, so until then the graph has the full width.
     """)
     return
 
@@ -408,18 +410,22 @@ def _(mo):
     `comp.widget(rankdir="TB")` to start the other way.
 
     **Focus.** Blocks can nest — here a book holds desks, and each desk holds
-    instruments. Opening every level at once is a wall of nodes. Instead
-    **click a block's frame**, the border drawn around it, and the graph
-    re-roots on that block so its own nested blocks become the whole view.
-    Clicking the middle of the block still opens it in place, so one shape
-    carries both moves without a modifier key. The **Focus** button in a
-    selected block's panel does the same thing.
+    instruments. Opening every level at once is a wall of nodes. So **clicking a
+    block goes into it**: the block becomes the root and the graph shows its top
+    layer, exactly as clicking a folder shows that folder. What is inside is
+    blocks again, so you keep clicking down.
 
-    A breadcrumb appears under the toolbar. Click any step to climb back out, or
-    **Reset** to return to the top.
+    A breadcrumb appears under the toolbar. Click any step to climb back out,
+    **Reset** to return to the top, or **Compute** to compute every node in the
+    block you are standing in.
 
-    Try it: click the frame of `emea`, then the frame of `rates` inside it. The
-    breadcrumb reads **Reset › emea › rates**.
+    Try it: click `emea`, then `rates` inside it. The breadcrumb reads
+    **Reset › emea › rates**. Going back out is instant — the widget keeps the
+    layouts it has already drawn.
+
+    **Expanding in place.** Sometimes you want a block's insides *beside* its
+    neighbours, with the edges between them drawn, rather than on their own.
+    **Alt-click** a block for that, and click its title to close it again.
     """)
     return
 
@@ -479,10 +485,10 @@ def _(mo):
     widget scoped to one block, and only that section is drawn — its inputs from
     the rest of the graph still resolve, they are simply out of view.
 
-    This is the static counterpart to **Focus**: `root=` fixes the section up
-    front, while **Focus** re-roots a full-graph widget as you explore. Both use
-    the same paths, so `desk.widget(root="emea")` opens where **Focus** on `emea`
-    lands.
+    This is the static counterpart to clicking into a block: `root=` fixes the
+    section up front, while clicking re-roots a full-graph widget as you
+    explore. Both use the same paths, so `desk.widget(root="emea")` opens
+    exactly where clicking `emea` lands.
 
     Scoping keeps a dashboard tight: put the desk you own in one widget and a
     neighbouring desk in another, each a live view of the same `Computation`. The

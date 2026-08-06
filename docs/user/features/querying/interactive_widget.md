@@ -60,13 +60,18 @@ returns the block path, and `selected_names` returns every member.
 ## What you can do in the widget
 
 - **Click a node** to see its state, value, timing, source, inputs and outputs.
-  For a failed node, the panel shows the traceback.
-- **Click a block** to open it, or **click its frame** — the border around it —
-  to isolate that block as the root. The frame keeps that meaning once the block
-  is open, so you can keep drilling in and then isolate any level. Clicking an
-  open block's **title** closes it again.
-- The breadcrumb that appears after isolating climbs back out a level at a time.
-  Its first entry, **Reset**, returns to the whole graph and closes everything.
+  For a failed node, the panel shows the traceback. The panel opens on that
+  click and closes again on **Escape** or its **×**, so the graph has the full
+  width whenever you are not reading a node.
+- **Click a block** to go into it: the block becomes the root and you see its
+  top layer, the same way clicking a folder shows that folder. Blocks nested
+  inside are blocks again, so you keep clicking down.
+- The breadcrumb climbs back out a level at a time. Its first entry, **Reset**,
+  returns to the whole graph and closes everything; its last carries a
+  **Compute** for the block you are standing in.
+- **Alt-click a block** to expand it where it stands instead, keeping it beside
+  its neighbours with the edges between them drawn. Clicking an expanded
+  block's **title** closes it again.
 - **Edit a scalar input** directly in the detail panel. This maps to
   `comp.insert`.
 - **Compute** a node, a block, or the whole graph. This maps to `comp.compute`
@@ -205,6 +210,14 @@ Graphviz output costs roughly 0.6 KiB and 0.6 ms of layout per rendered node,
 both linear. State changes repaint the existing picture in place and re-send only
 a small state map — about 32× smaller than the SVG — so computing a large graph
 is cheap. Structural changes re-run Graphviz.
+
+Navigating does not. The last dozen layouts are kept, so going into a block and
+coming back out again does not lay the same picture out twice — the trip back is
+the one certain to happen. On a 36-block graph a round trip measures 0.2 ms
+rather than 199 ms, which is the difference between instant and noticeable.
+Anything that changes the graph's shape discards the stored layouts, and so does
+`refresh()`. With `colors="timing"` nothing is kept, because there the picture
+depends on values rather than on shape.
 
 To keep one click from hanging the kernel, the widget refuses to open a block
 that would put more than 500 nodes on screen. Raise it if you mean to:
