@@ -12,7 +12,6 @@
   color-scheme: light;
 
   /* surfaces */
-  --loman-canvas: #ffffff;
   --loman-chrome: #f9f9f7;
   --loman-panel: #ffffff;
   --loman-raised: #ffffff;
@@ -26,8 +25,8 @@
   --loman-line: rgba(11, 11, 11, 0.10);
   --loman-line-strong: #c3c2b7;
 
-  /* form fields; distinct from --loman-canvas, which is the Graphviz paper
-     surface and stays white in both themes */
+  /* form fields; a surface of their own, so nothing else's background can
+     drift underneath ink that assumes this one */
   --loman-field: #ffffff;
 
   /* accent, used only for selection and focus */
@@ -61,7 +60,6 @@
 @media (prefers-color-scheme: dark) {
   .loman-widget {
     color-scheme: dark;
-    --loman-canvas: #ffffff;
     --loman-chrome: #0d0d0d;
     --loman-panel: #141413;
     --loman-raised: #202020;
@@ -81,7 +79,6 @@
    inline from the sampled colour, so only the remaining roles are listed. */
 .loman-widget[data-host-theme="light"] {
   color-scheme: light;
-  --loman-canvas: #ffffff;
   --loman-chrome: var(--loman-backdrop, #f9f9f7);
   --loman-panel: var(--loman-backdrop, #ffffff);
   --loman-raised: #ffffff;
@@ -96,7 +93,6 @@
 
 .loman-widget[data-host-theme="dark"] {
   color-scheme: dark;
-  --loman-canvas: #ffffff;
   --loman-chrome: var(--loman-backdrop, #0d0d0d);
   --loman-panel: var(--loman-backdrop, #141413);
   --loman-raised: #202020;
@@ -221,15 +217,29 @@ button.loman-crumb:disabled { opacity: 0.45; cursor: default; }
 .loman-canvas.loman-panning { cursor: grabbing; }
 .loman-canvas.loman-panning * { pointer-events: none; }
 
+/* No surface of its own. Graphviz is told bgcolor=transparent, so the graph
+   sits directly on the host's background rather than on a sheet of paper
+   dropped onto it. */
 .loman-stage {
   padding: 12px;
   width: max-content;
   margin: auto;
-  background: var(--loman-canvas);
-  border-radius: var(--loman-radius-sm);
-  border: 1px solid var(--loman-line);
 }
 .loman-stage svg { display: block; max-width: none; }
+
+/* Graphviz writes black ink for the white page it no longer paints. Everything
+   structural --- edges, arrowheads, edge labels, block borders and block
+   titles --- is retinted to the widget's own ink, which is the host's ink
+   wherever the host publishes a palette.
+
+   Node fills are deliberately absent: they carry state, Python owns them, and
+   a CSS `fill` would beat the attribute the repaint sets. Node labels are set
+   from JavaScript instead, per node, against whatever fill they land on. */
+.loman-stage svg g.edge path { stroke: var(--loman-ink-2); }
+.loman-stage svg g.edge polygon { fill: var(--loman-ink-2); stroke: var(--loman-ink-2); }
+.loman-stage svg g.edge text { fill: var(--loman-ink-2); }
+.loman-stage svg g.cluster > polygon { stroke: var(--loman-line-strong); }
+.loman-stage svg g.cluster > text { fill: var(--loman-ink); }
 
 /* Hover is a hint; selection is a statement. They must not look alike. */
 .loman-canvas g.node { cursor: pointer; outline: none; }
@@ -465,7 +475,6 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
 
 :host-context([data-theme="dark"]) .loman-widget {
   color-scheme: dark;
-  --loman-canvas: #ffffff;
   --loman-chrome: #0d0d0d;
   --loman-panel: #141413;
   --loman-raised: #202020;

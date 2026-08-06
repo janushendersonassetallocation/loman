@@ -134,10 +134,10 @@ def _(mo):
 
     | Action | How |
     |---|---|
-    | Go into a block | Click it |
+    | Open a block in place | Click it |
+    | Isolate a block | **Alt-click** it |
     | Come back out | The **breadcrumb** under the toolbar |
-    | Expand a block in place | **Alt-click** it |
-    | Close an expanded block | Click its **title** |
+    | Close an open block | Click its **title** |
     | Close everything | **Collapse all** |
     | Inspect a node | Click it — **Escape** closes the panel |
     | Graph direction | **LR** / **TB** toggle |
@@ -145,9 +145,12 @@ def _(mo):
     | Whole graph | **Fit** — **1:1** returns to natural size |
     | Pan | Drag the background |
 
-    `risk` is red because `risk/utilisation` divides by zero. Click into the
-    block, click the failing node, and the panel shows the traceback. The panel
-    only appears once you ask for it, so until then the graph has the full width.
+    `risk` is red because `risk/utilisation` divides by zero. Open the block,
+    click the failing node, and the panel shows the traceback. The panel only
+    appears once you ask for it, so until then the graph has the full width.
+
+    The graph has no page of its own — Graphviz is told to paint none — so it
+    sits directly on marimo's background and follows the notebook's theme.
     """)
     return
 
@@ -409,23 +412,24 @@ def _(mo):
     button in the toolbar flips it to **TB** and back. Pass
     `comp.widget(rankdir="TB")` to start the other way.
 
-    **Focus.** Blocks can nest — here a book holds desks, and each desk holds
-    instruments. Opening every level at once is a wall of nodes. So **clicking a
-    block goes into it**: the block becomes the root and the graph shows its top
-    layer, exactly as clicking a folder shows that folder. What is inside is
-    blocks again, so you keep clicking down.
+    **Opening.** Clicking a block opens it where it stands, so its insides
+    appear beside its neighbours with the edges between them drawn. That is
+    usually the reason to look inside a block at all. Click its title to close
+    it again.
+
+    **Isolating.** Blocks can nest — here a book holds desks, and each desk
+    holds instruments. Opening every level at once is a wall of nodes, so
+    **alt-click** a block instead: it becomes the root and the graph shows only
+    its top layer, exactly as clicking a folder shows that folder. What is
+    inside is blocks again, so you keep alt-clicking down.
 
     A breadcrumb appears under the toolbar. Click any step to climb back out,
     **Reset** to return to the top, or **Compute** to compute every node in the
     block you are standing in.
 
-    Try it: click `emea`, then `rates` inside it. The breadcrumb reads
+    Try it: alt-click `emea`, then `rates` inside it. The breadcrumb reads
     **Reset › emea › rates**. Going back out is instant — the widget keeps the
     layouts it has already drawn.
-
-    **Expanding in place.** Sometimes you want a block's insides *beside* its
-    neighbours, with the edges between them drawn, rather than on their own.
-    **Alt-click** a block for that, and click its title to close it again.
     """)
     return
 
@@ -485,10 +489,10 @@ def _(mo):
     widget scoped to one block, and only that section is drawn — its inputs from
     the rest of the graph still resolve, they are simply out of view.
 
-    This is the static counterpart to clicking into a block: `root=` fixes the
-    section up front, while clicking re-roots a full-graph widget as you
+    This is the static counterpart to isolating a block: `root=` fixes the
+    section up front, while alt-clicking re-roots a full-graph widget as you
     explore. Both use the same paths, so `desk.widget(root="emea")` opens
-    exactly where clicking `emea` lands.
+    exactly where alt-clicking `emea` lands.
 
     Scoping keeps a dashboard tight: put the desk you own in one widget and a
     neighbouring desk in another, each a live view of the same `Computation`. The

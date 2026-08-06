@@ -63,15 +63,15 @@ returns the block path, and `selected_names` returns every member.
   For a failed node, the panel shows the traceback. The panel opens on that
   click and closes again on **Escape** or its **×**, so the graph has the full
   width whenever you are not reading a node.
-- **Click a block** to go into it: the block becomes the root and you see its
-  top layer, the same way clicking a folder shows that folder. Blocks nested
-  inside are blocks again, so you keep clicking down.
+- **Click a block** to open it where it stands, so its insides appear beside
+  its neighbours with the edges between them drawn. Clicking an open block's
+  **title** closes it again, and **Collapse all** closes everything.
+- **Alt-click a block** to isolate it instead: the block becomes the root and
+  you see only its top layer, the way clicking a folder shows that folder. That
+  is the move for a graph too large to open in place.
 - The breadcrumb climbs back out a level at a time. Its first entry, **Reset**,
   returns to the whole graph and closes everything; its last carries a
   **Compute** for the block you are standing in.
-- **Alt-click a block** to expand it where it stands instead, keeping it beside
-  its neighbours with the edges between them drawn. Clicking an expanded
-  block's **title** closes it again.
 - **Edit a scalar input** directly in the detail panel. This maps to
   `comp.insert`.
 - **Compute** a node, a block, or the whole graph. This maps to `comp.compute`
@@ -181,9 +181,17 @@ Those names are only adopted once the host's declared `--background` matches the
 backdrop it actually paints; otherwise another design system owns them and the
 widget keeps its own.
 
-The graph itself stays on a light sheet in both themes, because Graphviz paints
-a white background and black labels into the SVG. The pane behind that sheet
-takes the host's colour, so the graph reads as paper on the page.
+The graph is included in that. Graphviz would paint an opaque white page and
+black ink into the SVG, so it is told `bgcolor="transparent"` and its ink —
+edges, arrowheads, block borders and block titles — is retinted to the widget's
+own, which is the host's wherever the host publishes a palette. Pass
+`graph_attr={"bgcolor": ...}` if you want a page back.
+
+Node fills are the exception: they carry state, so they stay exactly the colours
+`comp.draw()` gives them. Each node's *label* is then inked black or white
+against the fill it lands on, rather than assuming a white page — which also
+fixes `UNINITIALIZED`, whose blue reads at 2.87:1 under black and 7.31:1 under
+white.
 
 ### A bare `comp` stays a static picture
 

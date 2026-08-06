@@ -13,8 +13,9 @@ const ZOOM_STEP = 1.25;
 const PT_TO_PX = 96 / 72;
 
 // Loman's roles mapped onto the shadcn-style names marimo and others publish.
-// --loman-canvas is deliberately absent: Graphviz paints a white background and
-// black labels into the SVG itself, so that surface is not the host's to theme.
+// The graph is included: Graphviz is told to paint no background, and its ink
+// is retinted from these, so the picture sits in the host's theme rather than
+// on a white sheet laid over it.
 const HOST_TOKEN_MAP = [
   ["--loman-chrome", "var(--background)"],
   ["--loman-panel", "var(--card, var(--background))"],
@@ -313,6 +314,31 @@ function render({ model, el }) {
 
   /* ----------------------------------------------------------- the graph */
 
+  // Graphviz writes every label black, which was only ever safe because it also
+  // painted a white page. It no longer paints one, and a node's label sits on
+  // its state colour --- so each label takes whichever ink its own fill can
+  // carry. Read from the shape rather than the state map, so this holds under
+  // colours the widget does not choose, such as colors="timing".
+  //
+  // Decided by measuring both inks rather than by a luminance threshold. A
+  // threshold has to be the WCAG crossover (~0.179), and guessing it wrong is
+  // silent: at 0.4 this put white on the UPTODATE green, 2.89:1 where black
+  // would have given 7.26:1.
+  const INK_DARK = "#0b0b0b";
+  const INK_LIGHT = "#ffffff";
+  const contrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+  const inkNodeLabels = () => {
+    const onDark = relativeLuminance({ r: 11, g: 11, b: 11 });
+    const onLight = relativeLuminance({ r: 255, g: 255, b: 255 });
+    stage.querySelectorAll("g.node").forEach((node) => {
+      const fill = parseColour(node.querySelector("ellipse, polygon, path")?.getAttribute("fill"));
+      const behind = fill ? relativeLuminance(fill) : onLight;
+      const ink = contrast(behind, onDark) >= contrast(behind, onLight) ? INK_DARK : INK_LIGHT;
+      node.querySelectorAll("text").forEach((label) => label.setAttribute("fill", ink));
+    });
+  };
+
   const repaint = () => {
     if (!model.get("repaint_states")) return;
     const states = model.get("node_states");
@@ -325,6 +351,7 @@ function render({ model, el }) {
       node.classList.toggle("loman-selected", id === selected);
       if (id) node.setAttribute("aria-selected", String(id === selected));
     });
+    inkNodeLabels();
     renderLegend();
   };
 
@@ -348,16 +375,17 @@ function render({ model, el }) {
     }
   };
 
-  // Clicking a block goes into it: the block becomes the root and the view
-  // shows its top layer, exactly as clicking a folder shows that folder. The
-  // breadcrumb is how you come back out.
+  // Clicking a block opens it where it stands, so its insides appear beside
+  // its neighbours with the edges between them drawn. That keeps the block in
+  // the context it belongs to, which is the reason to look inside one at all.
   //
-  // This used to be split by where in the shape you clicked --- the interior
-  // opened the block in place, the border around it re-rooted --- which nobody
-  // guesses and nothing on screen announces. Opening in place is still worth
-  // having, because it shows a block's insides alongside its neighbours with
-  // the edges between them drawn, so it keeps a modifier rather than the
-  // primary click.
+  // Alt-click isolates it instead: the block becomes the root and the view
+  // shows only its top layer. That is the move for a graph too big to open in
+  // place, and the breadcrumb is how you come back out.
+  //
+  // Neither used to be a plain click --- both were reached by clicking a
+  // different part of the same shape, its interior versus its border, which
+  // nobody guesses and nothing on screen announces.
   const activate = (id, composite, event) => {
     if (busy) return;
     if (!composite) {
@@ -366,10 +394,10 @@ function render({ model, el }) {
       return;
     }
     if (event?.altKey) {
-      send("toggle_request", { id }, "Expanding block…");
+      send("focus_request", { id }, "Isolating block…");
       return;
     }
-    send("focus_request", { id }, "Opening block…");
+    send("toggle_request", { id }, "Opening block…");
   };
 
   // An open block is a Graphviz cluster, not a node, so there is no shape to
@@ -425,7 +453,7 @@ function render({ model, el }) {
       node.classList.toggle("loman-composite", composite);
       node.setAttribute("aria-label", composite ? "Block, activate to open it" : "Computation node");
       heading.textContent = composite
-        ? "Click to open this block · alt-click to expand it here"
+        ? "Click to open this block · alt-click to isolate it"
         : "Click to inspect this node";
       node.addEventListener("click", (event) => activate(id, composite, event), { signal });
       node.addEventListener("keydown", (event) => {
@@ -439,6 +467,9 @@ function render({ model, el }) {
     zoom = previousZoom;
     applyZoom();
     repaint();
+    // repaint() returns early unless colours come from state, and a fresh SVG
+    // always arrives with Graphviz's black labels on it.
+    inkNodeLabels();
   };
 
   /* -------------------------------------------------------- the inspector */

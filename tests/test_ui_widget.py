@@ -861,22 +861,54 @@ class TestAssetContract:
         css = (STATIC / "widget.css").read_text()
         assert "@media (prefers-color-scheme: dark)" in css
 
-    def test_the_graph_paper_surface_is_never_used_behind_text(self):
-        """``--loman-canvas`` is white in both themes, so ink vanishes on it.
+    def test_no_surface_is_pinned_white_in_both_themes(self):
+        """The graph used to sit on a sheet of paper that never changed colour.
 
-        It stays white because Graphviz paints a white background and black
-        labels into the SVG itself. Any other element that borrows it as a
-        background and then sets ``--loman-ink`` renders white on white in dark
-        mode, which is exactly what happened to the edit fields.
+        That sheet existed because Graphviz paints a white background into the
+        SVG. It is transparent now, so nothing behind the graph should be
+        hardcoded light --- and the token that was, ``--loman-canvas``, is gone
+        rather than left around to be borrowed by mistake. Borrowing it as a
+        background while setting ``--loman-ink`` is what once rendered the edit
+        fields white on white.
         """
+        css = (STATIC / "widget.css").read_text()
+        assert "--loman-canvas:" not in css
+        stage = css.split(".loman-stage {")[1].split("}")[0]
+        assert "background" not in stage, f"the graph should sit on the host's own background: {stage}"
+
+    def test_the_graphs_ink_follows_the_theme(self):
+        """Graphviz writes black, which disappears on a dark host background."""
+        css = (STATIC / "widget.css").read_text()
+        for rule in ("g.edge path", "g.edge polygon", "g.cluster > polygon", "g.cluster > text"):
+            body = css.split(f".loman-stage svg {rule} {{")[1].split("}")[0]
+            assert "var(--loman-" in body, f"{rule} keeps Graphviz's hardcoded black"
+
+    def test_node_fills_are_never_set_from_css(self):
+        """Python owns them, and a CSS fill would beat the repaint's attribute."""
         css = (STATIC / "widget.css").read_text()
         blocks = re.findall(r"([^{}]*)\{([^{}]*)\}", css)
         offenders = [
-            selector.strip()
-            for selector, body in blocks
-            if "background: var(--loman-canvas)" in body and "color:" in body
+            selector.strip() for selector, body in blocks if "g.node" in selector and re.search(r"(^|[;\s])fill:", body)
         ]
-        assert offenders == [], f"these set ink on the graph paper surface: {offenders}"
+        assert offenders == [], f"these would override the state colour: {offenders}"
+
+    def test_the_graph_is_told_to_paint_no_background(self):
+        """Otherwise the SVG carries an opaque white page of its own."""
+        comp = create_example_block_computation()
+        widget = comp.widget()
+        try:
+            assert 'fill="white"' not in widget.graph_svg
+        finally:
+            widget.close()
+
+    def test_an_explicit_background_from_the_caller_still_wins(self):
+        """``graph_attr`` is the documented way to say what you want."""
+        comp = create_example_block_computation()
+        widget = comp.widget(graph_attr={"bgcolor": "#ff00ff"})
+        try:
+            assert "#ff00ff" in widget.graph_svg
+        finally:
+            widget.close()
 
     def test_graph_is_not_scaled_to_fit_the_pane(self):
         """Sizing the SVG in percentages is what made labels shrink.
@@ -1593,27 +1625,30 @@ class TestFitOnRender:
 
 
 class TestBlockNavigation:
-    """Clicking a block goes into it, the way clicking a folder does."""
+    """A plain click opens a block in place; alt-click isolates it."""
 
-    def test_a_plain_click_on_a_block_opens_it_rather_than_expanding_it(self):
-        """The primary gesture re-roots; expanding in place keeps a modifier.
+    def test_a_plain_click_opens_the_block_and_the_modifier_isolates_it(self):
+        """A plain click opens; the modifier isolates.
 
-        Which of the two you got used to depend on whether the click landed on
-        a block's border or its interior, which nothing on screen announced.
+        Opening in place keeps the block among its neighbours, which is the
+        usual reason to look inside one. Isolating is for a graph too big for
+        that, so it takes the modifier. Which of the two you got used to depend
+        on whether the click landed on a block's border or its interior, which
+        nothing on screen announced.
         """
         javascript = (STATIC / "widget.js").read_text()
         activate = javascript.split("const activate = (id, composite, event) => {")[1].split("\n  };")[0]
         assert "const onFrame" not in javascript, "the border no longer means anything different"
         assert "event?.altKey" in activate
-        # The modifier branch expands; everything else about a block re-roots.
-        expand, focus = activate.split("event?.altKey")[1].split('send("focus_request"')
-        assert '"toggle_request"' in expand
-        assert '"toggle_request"' not in focus
+        # The modifier branch isolates; everything else about a block opens it.
+        isolate, plain = activate.split("event?.altKey")[1].split('send("toggle_request"')
+        assert '"focus_request"' in isolate
+        assert '"focus_request"' not in plain
 
     def test_the_graph_says_what_a_block_click_will_do(self):
         """The gesture has to be announced somewhere other than the docs."""
         javascript = (STATIC / "widget.js").read_text()
-        assert "Click to open this block · alt-click to expand it here" in javascript
+        assert "Click to open this block · alt-click to isolate it" in javascript
 
     def test_focusing_by_rendered_id_isolates_the_block(self):
         """That request is what a frame click sends."""
@@ -1990,5 +2025,50 @@ class TestNodeTooltips:
     def test_both_kinds_of_node_say_what_a_click_does(self):
         """Alt-click is otherwise announced nowhere on screen."""
         javascript = (STATIC / "widget.js").read_text()
-        assert "Click to open this block · alt-click to expand it here" in javascript
+        assert "Click to open this block · alt-click to isolate it" in javascript
         assert "Click to inspect this node" in javascript
+
+
+class TestGraphLabelInk:
+    """A label's legibility depends on its own fill, not on a white page."""
+
+    def test_labels_are_inked_against_the_fill_they_land_on(self):
+        """UNINITIALIZED is #0343df: black on it measures 2.87:1, white 7.31:1.
+
+        Graphviz writes every label black because it also painted a white page.
+        It paints none now, and the fill under a label is a state colour that
+        Python chooses, so the ink has to be chosen per node.
+        """
+        javascript = (STATIC / "widget.js").read_text()
+        body = javascript.split("const inkNodeLabels = () => {")[1].split("\n  };")[0]
+        assert "relativeLuminance(fill)" in body
+        # Measured both ways, not compared against a threshold. A threshold has
+        # to be the WCAG crossover and is silent when wrong: set at 0.4 this
+        # put white on the UPTODATE green, 2.89:1 where black gives 7.26:1.
+        assert "contrast(behind, onDark) >= contrast(behind, onLight)" in body
+        assert "INK_DARK" in body
+        assert "INK_LIGHT" in body
+
+    def test_labels_are_re_inked_whenever_fills_can_have_changed(self):
+        """A fresh SVG arrives black, and a repaint moves the fills."""
+        javascript = (STATIC / "widget.js").read_text()
+        render = javascript.split("const renderGraph = () => {")[1].split("\n  };")[0]
+        repaint = javascript.split("const repaint = () => {")[1].split("\n  };")[0]
+        assert "inkNodeLabels();" in render, "repaint() returns early unless colours come from state"
+        assert "inkNodeLabels();" in repaint
+
+    def test_every_state_colour_can_carry_one_ink_or_the_other(self):
+        """The rule only works if each fill has an ink that clears 4.5:1."""
+        from loman.visualization import ColorByState
+
+        def contrast(hex_colour: str, ink: float) -> float:
+            channels = [int(hex_colour.lstrip("#")[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+            linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+            lum = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+            lighter, darker = max(lum, ink), min(lum, ink)
+            return (lighter + 0.05) / (darker + 0.05)
+
+        for state, colour in ColorByState.DEFAULT_STATE_COLORS.items():
+            best = max(contrast(colour, 0.0), contrast(colour, 1.0))
+            name = "MIXED" if state is None else state.name
+            assert best >= 4.5, f"{name} ({colour}) is illegible in either ink: {best:.2f}:1"

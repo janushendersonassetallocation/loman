@@ -302,6 +302,11 @@ class ComputationWidget(anywidget.AnyWidget):
         options = dict(self._draw_options)
         graph_attr = dict(options["graph_attr"] or {})
         graph_attr["rankdir"] = self.rankdir
+        # Graphviz paints an opaque white page into the SVG by default, which
+        # is a sheet of paper dropped onto whatever the host is themed as.
+        # Left transparent, the graph sits on the host's own background.
+        # ``setdefault``, so a caller who asked for a colour still gets it.
+        graph_attr.setdefault("bgcolor", "transparent")
         options["graph_attr"] = graph_attr
         return self.computation.draw(
             self._root,
