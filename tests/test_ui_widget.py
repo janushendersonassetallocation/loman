@@ -2233,3 +2233,88 @@ class TestAssetEncoding:
             assert "—" in str(widget._css)
         finally:
             widget.close()
+
+
+class TestFullViewIdentity:
+    """Show full has to name the node it means, not a string that resembles it.
+
+    ``selected_name`` has always round-tripped non-string names --- a node
+    called ``1`` and a node called ``"1"`` stay distinct --- and the docs say
+    so. ``full_view`` is a synced Unicode trait, so it can only carry a label,
+    and fetching the value back by that label silently resolved to whichever
+    node happened to share it.
+    """
+
+    @staticmethod
+    def _ambiguous() -> tuple[Computation, ComputationWidget]:
+        """A computation with a node named 1 and another named '1'."""
+        comp = Computation()
+        comp.add_node(1, value="INTEGER node")
+        comp.add_node("1", value="STRING node")
+        comp.add_node("out", lambda: None)
+        return comp, comp.widget(collapse_all=False)
+
+    def test_the_value_comes_from_the_node_that_was_asked_for(self):
+        """The label is the same for both nodes; the value must not be."""
+        comp, widget = self._ambiguous()
+        try:
+            widget.full_view_request = {"id": node_id(widget, 1), "request_id": "f1"}
+
+            assert widget.full_view == "1", "the label is inherently ambiguous"
+            assert widget.full_view_value == "INTEGER node"
+            assert widget.full_view_value == comp.value(1)
+        finally:
+            widget.close()
+
+    def test_the_other_node_of_the_same_label_resolves_separately(self):
+        """The pair has to be distinguishable, not merely one of them right."""
+        comp, widget = self._ambiguous()
+        try:
+            widget.full_view_request = {"id": node_id(widget, "1"), "request_id": "f1"}
+
+            assert widget.full_view_value == "STRING node"
+            assert widget.full_view_value == comp.value("1")
+        finally:
+            widget.close()
+
+    def test_the_name_keeps_its_type_as_the_selection_does(self):
+        """Same guarantee as ``selected_name``, which sits two methods away."""
+        _comp, widget = self._ambiguous()
+        try:
+            widget.full_view_request = {"id": node_id(widget, 1), "request_id": "f1"}
+
+            assert widget.full_view_name == 1
+            assert isinstance(widget.full_view_name, int)
+            assert not isinstance(widget.full_view_name, str)
+        finally:
+            widget.close()
+
+    def test_closing_the_full_view_forgets_the_node(self):
+        """A stale key would keep returning a value after the panel closed."""
+        _comp, widget = self._ambiguous()
+        try:
+            widget.full_view_request = {"id": node_id(widget, 1), "request_id": "f1"}
+            assert widget.full_view_value is not None
+
+            widget.full_view_request = {"request_id": "f2"}
+
+            assert widget.full_view == ""
+            assert widget.full_view_name is None
+            assert widget.full_view_value is None
+        finally:
+            widget.close()
+
+    def test_an_ordinary_string_name_is_unaffected(self):
+        """The common case must not have changed shape."""
+        comp = Computation()
+        comp.add_node("price", value=42.0)
+        comp.add_node("total", lambda price: price)
+        widget = comp.widget(collapse_all=False)
+        try:
+            widget.full_view_request = {"id": node_id(widget, "price"), "request_id": "f1"}
+
+            assert widget.full_view == "price"
+            assert widget.full_view_name == "price"
+            assert widget.full_view_value == 42.0
+        finally:
+            widget.close()

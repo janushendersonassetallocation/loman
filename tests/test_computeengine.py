@@ -1,11 +1,13 @@
 """Tests for the core computation engine."""
 
 import gc
+import inspect
 import io
 import itertools
 import random
 import time
-from collections import namedtuple
+import weakref
+from collections import deque, namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from time import sleep
@@ -4112,3 +4114,55 @@ class TestUnsubscribedComputationsPayNothing:
         assert "x0" in changed
         # every descendant went stale and must be reported
         assert {f"x{i}" for i in range(1, 60)} <= changed
+
+
+class TestSubscriberLifetimeIsDocumentedAccurately:
+    """``inspect.ismethod`` is false for methods implemented in C.
+
+    The docstring said bound methods are held weakly. That covers Python bound
+    methods, which carry a ``__func__`` for :class:`weakref.WeakMethod` to
+    rebind against, and not C ones like ``list.append`` --- so
+    ``comp.subscribe(events.append)`` retains ``events`` for the life of the
+    subscription. That is the safer default, but callers have to be told.
+    """
+
+    def test_a_python_bound_method_does_not_keep_its_object_alive(self):
+        """The case the docstring always described correctly."""
+
+        class Watcher:
+            """Subscribes with an ordinary Python bound method."""
+
+            def on_event(self, event):
+                """Ignore it; only the reference matters."""
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+        watcher = Watcher()
+        comp.subscribe(watcher.on_event)
+        ref = weakref.ref(watcher)
+
+        del watcher
+        gc.collect()
+
+        assert ref() is None
+
+    def test_a_c_bound_method_is_held_strongly_and_keeps_delivering(self):
+        """Strong is the safe default: it cannot silently stop delivering."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        events = deque()
+        comp.subscribe(events.append)
+        ref = weakref.ref(events)
+
+        del events
+        gc.collect()
+        comp.insert("a", 2)
+
+        assert ref() is not None, "a C bound method must not be collected mid-subscription"
+        assert len(ref()) == 1, "and it must still be receiving events"
+
+    def test_the_docstring_says_which_is_which(self):
+        """The distinction is not guessable, so it has to be written down."""
+        doc = inspect.getdoc(Computation.subscribe) or ""
+        assert "inspect.ismethod" in doc
+        assert "append" in doc, "the everyday example of the strong case"

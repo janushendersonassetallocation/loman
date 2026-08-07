@@ -32,6 +32,10 @@
   entered the panning state immediately, which made the canvas inert to hit-testing before
   the button came back up; panning now waits for the pointer to actually move. The title bar
   is also the close target now, rather than the width of the word
+- BUGFIX: the widget's "Show full" resolved the node by its string label, so it returned the
+  wrong value where a node named `1` and a node named `"1"` both exist. It now carries the
+  node key, and `full_view_name` reports the name with its original type, as
+  `selected_name` does
 - Added `fit_on_render` to scale the graph to the pane on every render
 
 ## [0.5.3] (2025-06-20)

@@ -494,10 +494,19 @@ class Computation:
         causes a further event to be published once the current round finishes,
         up to a bounded number of cascades.
 
-        Bound methods are held weakly, so subscribing ``obj.handler`` does not
-        keep ``obj`` alive; callers must retain the object themselves. Plain
-        functions, lambdas and callable objects are held strongly until
-        unsubscribed, because callers commonly pass a throwaway closure.
+        Bound methods *defined in Python* are held weakly, so subscribing
+        ``obj.handler`` does not keep ``obj`` alive; callers must retain the
+        object themselves. Everything else --- plain functions, lambdas,
+        callable objects, and bound methods implemented in C such as
+        ``some_list.append`` --- is held strongly until unsubscribed, because
+        callers commonly pass a throwaway closure that nothing else references.
+
+        The distinction is :func:`inspect.ismethod`, which is false for C
+        methods: they carry no ``__func__`` for :class:`weakref.WeakMethod` to
+        rebind against. So ``comp.subscribe(events.append)`` keeps ``events``
+        alive for as long as the subscription lasts, which is the safe default
+        --- a subscription that silently stopped delivering would be worse ---
+        but it is a lifetime the caller has to end with the returned callable.
 
         Subscriptions are not copied by :meth:`copy` and are not serialized.
 

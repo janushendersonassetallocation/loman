@@ -135,13 +135,15 @@ the notebook to render:
 
 ```python
 _ = widget_ui.value            # react to the button
-name = widget.full_view        # "" when nothing is open
-mo.ui.table(widget.full_view_value) if name else None
+mo.ui.table(widget.full_view_value) if widget.full_view else None
 ```
 
-`full_view_value` is a convenience for `comp.v[widget.full_view]`, guarding the
-empty case. This is the same principle as everywhere else here: the widget
-navigates, and the real object stays in Python.
+`full_view` is a *label*, and a label is lossy — a node called `1` and a node
+called `"1"` share one. So fetch through `full_view_value`, which resolves the
+node that was actually asked for, or read `full_view_name` for the name with its
+original type. That is the same guarantee `selected_name` gives, and the same
+principle as everywhere else here: the widget navigates, and the real object
+stays in Python.
 
 ## Observing changes yourself
 
@@ -162,8 +164,12 @@ internal state transition. Subscribers run synchronously, in registration order,
 and a subscriber that raises is logged and skipped rather than breaking the
 computation.
 
-Bound methods are held weakly, so `comp.subscribe(obj.handler)` does not keep
-`obj` alive. Plain functions and lambdas are held strongly until you unsubscribe.
+Bound methods defined in Python are held weakly, so `comp.subscribe(obj.handler)`
+does not keep `obj` alive. Everything else is held strongly until you
+unsubscribe — plain functions, lambdas, callable objects, and bound methods
+implemented in C such as `some_list.append`, which have no `__func__` for a weak
+reference to rebind against. So `comp.subscribe(events.append)` keeps `events`
+alive for as long as the subscription lasts.
 
 ## Things worth knowing
 

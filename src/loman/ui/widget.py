@@ -156,8 +156,11 @@ class ComputationWidget(anywidget.AnyWidget):
     #: renders it with whatever it likes::
     #:
     #:     _ = widget_ui.value                      # react to the button
-    #:     name = widget.full_view
-    #:     mo.ui.table(comp.v[name]) if name else None
+    #:     mo.ui.table(widget.full_view_value) if widget.full_view else None
+    #:
+    #: This trait is the *label*, and a label is lossy: a node called ``1`` and
+    #: a node called ``"1"`` share one. Fetch through :attr:`full_view_value`,
+    #: or read :attr:`full_view_name` for the name with its original type.
     full_view = traitlets.Unicode("").tag(sync=True)
 
     edit_request = traitlets.Dict(default_value={}).tag(sync=True)
@@ -224,6 +227,9 @@ class ComputationWidget(anywidget.AnyWidget):
         self._canonical_severity = "idle"
         self._canonical_ack = 0
         self._canonical_full_view = ""
+        # The key behind full_view. The trait must be a string to sync, and str
+        # is lossy over node names, so the value is fetched by this instead.
+        self._full_view_key: NodeKey | None = None
         # An explicit rankdir in graph_attr wins, so a caller who set the layout
         # direction the old way still gets what they asked for; otherwise the
         # left-to-right default applies.
@@ -817,18 +823,35 @@ class ComputationWidget(anywidget.AnyWidget):
             if len(members) != 1:
                 self._fail("Show full failed: a collapsed block has no single value")
                 return
-            name = str(members[0].name)
-            self._set_full_view(name)
-            self._set_status(f"Showing {name} in full below")
+            node_key = members[0]
+            self._set_full_view(str(node_key.name), node_key)
+            self._set_status(f"Showing {node_key.name} in full below")
         except Exception as exc:
             LOG.debug("Loman widget full-view request failed", exc_info=True)
             self._fail(f"Show full failed: {type(exc).__name__}: {exc}")
 
-    def _set_full_view(self, name: str) -> None:
-        """Record the node whose full value the notebook should render."""
+    def _set_full_view(self, name: str, node_key: NodeKey | None = None) -> None:
+        """Record the node whose full value the notebook should render.
+
+        Both the label and the key are kept. The trait is what the front end
+        and the notebook react to, and it has to be a string to be synced; the
+        key is what the value is actually fetched by, because ``str`` is lossy
+        over node names --- a node called ``1`` and a node called ``"1"`` are
+        different nodes with the same label.
+        """
         self._canonical_full_view = name
+        self._full_view_key = node_key
         with self._own_write():
             self.full_view = name
+
+    @property
+    def full_view_name(self) -> Name | None:
+        """Return the real Loman name behind :attr:`full_view`, or ``None``.
+
+        :attr:`full_view` is the display label; this is the name itself, with
+        its original type, in the same way :attr:`selected_name` is.
+        """
+        return None if self._full_view_key is None else self._full_view_key.name
 
     @property
     def full_view_value(self) -> Any:
@@ -837,9 +860,9 @@ class ComputationWidget(anywidget.AnyWidget):
         Convenience for the common notebook cell, which would otherwise have to
         guard the empty case before indexing the computation.
         """
-        if not self.full_view:
+        if self._full_view_key is None:
             return None
-        return self.computation.value(self.full_view)
+        return self.computation.value(self._full_view_key)
 
     def close(self) -> None:
         """Unsubscribe from the computation and close the widget comm."""
