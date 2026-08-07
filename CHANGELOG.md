@@ -7,7 +7,11 @@
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
 - Added `Computation.subscribe` and `ComputationEvent` for observing batched changes to a
   computation. A computation with no subscribers pays no measurable cost: state propagation
-  merges keys set-to-set rather than materialising them, so hashing does not grow
+  merges keys set-to-set rather than materialising them, so hashing does not grow. A callback
+  with an object behind it is held weakly, whether the method is written in Python or in C,
+  so `comp.subscribe(events.append)` no longer retains `events` for the life of the
+  computation; owners that support no weak reference, such as `list`, still fall back to a
+  strong one
 - Added the `loman[ui]` extra, providing `Computation.widget()`: an interactive notebook graph
   that follows its computation, with node inspection, drill-down into blocks, scalar input
   editing and compute controls

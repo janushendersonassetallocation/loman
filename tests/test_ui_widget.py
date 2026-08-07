@@ -2318,3 +2318,104 @@ class TestFullViewIdentity:
             assert widget.full_view_value == 42.0
         finally:
             widget.close()
+
+
+class TestEveryNameSurfaceKeepsItsType:
+    """A sweep over the widget's name-returning API, not a test per property.
+
+    The bug this generalises: ``full_view`` is a synced ``Unicode`` trait, so it
+    can only carry a label, and ``full_view_value`` fetched the value back by
+    that label --- resolving to whichever node happened to share it.
+    ``selected_name`` had been careful about exactly this and the docs promised
+    it, so the two disagreed.
+
+    Every trait that crosses to the browser has to be JSON-safe, which means
+    every node name that crosses becomes a string. That pressure applies to any
+    such API added later, so the guard is written over the API surface rather
+    than over the two properties that exist today: a new ``*_name`` property
+    that forgets to keep the key fails here without anyone remembering to add a
+    test for it.
+    """
+
+    #: Node names that are not strings but whose ``str()`` collides with one.
+    #: Each pair is (the real name, a string node that shares its label).
+    COLLIDING_NAMES = [(1, "1"), (2.0, "2.0"), (True, "True")]
+
+    @staticmethod
+    def _name_properties() -> list[str]:
+        """Every public property whose value is meant to be a Loman name."""
+        return sorted(
+            attribute
+            for attribute, value in vars(ComputationWidget).items()
+            if isinstance(value, property)
+            and not attribute.startswith("_")
+            and (attribute.endswith("_name") or attribute.endswith("_names"))
+        )
+
+    def test_the_sweep_actually_covers_something(self):
+        """A sweep that silently matches nothing would pass for ever."""
+        found = self._name_properties()
+
+        assert "selected_name" in found
+        assert "full_view_name" in found
+        assert len(found) >= 3, f"expected the name-returning API to be wider than {found}"
+
+    @pytest.mark.parametrize(("real_name", "twin"), COLLIDING_NAMES, ids=lambda v: repr(v))
+    def test_no_name_property_returns_a_string_for_a_non_string_node(self, real_name, twin):
+        """`str(1)` and `"1"` are indistinguishable; the properties must not be."""
+        comp = Computation()
+        comp.add_node(real_name, value="REAL")
+        comp.add_node(twin, value="TWIN")
+        comp.add_node("out", lambda: None)
+        widget = comp.widget(collapse_all=False)
+        try:
+            target = node_id(widget, real_name)
+            widget.selected_id = target
+            widget.full_view_request = {"id": target, "request_id": "r1"}
+
+            for attribute in self._name_properties():
+                value = getattr(widget, attribute)
+                names = value if isinstance(value, list) else [value]
+                for name in names:
+                    if name is None:
+                        continue
+                    assert not isinstance(name, str), (
+                        f"{attribute} returned {name!r} as a str for a node named "
+                        f"{real_name!r}, which is indistinguishable from {twin!r}"
+                    )
+                    assert name == real_name
+        finally:
+            widget.close()
+
+    @pytest.mark.parametrize(("real_name", "twin"), COLLIDING_NAMES, ids=lambda v: repr(v))
+    def test_values_fetched_through_the_widget_come_from_the_right_node(self, real_name, twin):
+        """The point of keeping the type: indexing has to reach the same node."""
+        comp = Computation()
+        comp.add_node(real_name, value="REAL")
+        comp.add_node(twin, value="TWIN")
+        comp.add_node("out", lambda: None)
+        widget = comp.widget(collapse_all=False)
+        try:
+            target = node_id(widget, real_name)
+            widget.selected_id = target
+            widget.full_view_request = {"id": target, "request_id": "r1"}
+
+            assert comp.value(widget.selected_name) == "REAL"
+            assert widget.full_view_value == "REAL"
+            # And the twin is still reachable as itself.
+            assert comp.value(twin) == "TWIN"
+        finally:
+            widget.close()
+
+    def test_a_string_carrying_trait_is_never_the_route_to_a_value(self):
+        """Traits are JSON-safe, so they are labels; values need the key.
+
+        This is the invariant the bug broke. ``full_view`` may be read for
+        display or reactivity, but nothing should index the computation with it.
+        """
+        source = (Path(__file__).parents[1] / "src" / "loman" / "ui" / "widget.py").read_text(encoding="utf-8")
+
+        assert "self.computation.value(self.full_view)" not in source, (
+            "indexing the computation by a synced string trait resolves by label"
+        )
+        assert "self.computation.value(self._full_view_key)" in source

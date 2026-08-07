@@ -1,5 +1,6 @@
 """Tests for the core computation engine."""
 
+import functools
 import gc
 import inspect
 import io
@@ -4116,6 +4117,116 @@ class TestUnsubscribedComputationsPayNothing:
         assert {f"x{i}" for i in range(1, 60)} <= changed
 
 
+class TestSubscriberLifetimeAcrossEveryCallableKind:
+    """A matrix over the kinds of callable, not a test per bug found.
+
+    The bug this replaces was narrow --- ``inspect.ismethod`` is false for C
+    methods like ``deque.append``, so those were held strongly while the docs
+    promised weakly --- but the *class* of bug is wide: Python has many things
+    that are callable, they differ in whether an object stands behind them, and
+    a rule expressed in terms of one of them silently mis-handles the rest.
+
+    So the rule is asserted for every kind at once. A callable kind that nobody
+    thought about does not quietly get the wrong lifetime; it fails here until
+    someone decides which column it belongs in.
+    """
+
+    class Watcher:
+        """An ordinary object with a Python-level handler."""
+
+        def on_event(self, event):
+            """Ignore the event; only its lifetime is under test."""
+
+        def __call__(self, event):
+            """Make instances callable, for the callable-object case."""
+
+    #: (label, build an owner, take a callback from it, is it held weakly).
+    #: Weakly whenever a ``__self__`` stands behind the callback and that owner
+    #: supports weak references; strongly otherwise.
+    CALLABLE_KINDS = [
+        ("python bound method", Watcher, lambda o: o.on_event, True),
+        ("C bound method, weak-able owner", deque, lambda o: o.append, True),
+        ("C bound method on a set", set, lambda o: o.add, True),
+        ("C bound method, no weakref", list, lambda o: o.append, False),
+        ("callable object", Watcher, lambda o: o, False),
+        ("closure over the owner", Watcher, lambda o: lambda event: o, False),
+        ("partial over the owner", Watcher, lambda o: functools.partial(lambda x, event: x, o), False),
+    ]
+
+    @staticmethod
+    def _weakly_referenceable(obj) -> bool:
+        """Report whether ``obj`` supports weak references at all."""
+        try:
+            weakref.ref(obj)
+        except TypeError:
+            return False
+        return True
+
+    @pytest.mark.parametrize(
+        ("label", "make_owner", "take_callback", "expect_weak"),
+        CALLABLE_KINDS,
+        ids=[case[0] for case in CALLABLE_KINDS],
+    )
+    def test_each_callable_kind_has_the_documented_lifetime(self, label, make_owner, take_callback, expect_weak):
+        """Weak means the owner is collectable; strong means it is retained."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        owner = make_owner()
+        if not self._weakly_referenceable(owner):
+            # The owner cannot be observed, so the only claim available is that
+            # subscribing keeps working. That it is held strongly is asserted
+            # by the delivery test below.
+            comp.subscribe(take_callback(owner))
+            comp.insert("a", 2)
+            assert not expect_weak, f"{label} cannot be held weakly: its owner takes no weak reference"
+            return
+
+        comp.subscribe(take_callback(owner))
+        ref = weakref.ref(owner)
+        del owner
+        gc.collect()
+        comp.insert("a", 2)
+
+        assert (ref() is None) is expect_weak, (
+            f"{label}: owner {'should' if expect_weak else 'should not'} have been collected"
+        )
+
+    def test_a_strongly_held_subscriber_keeps_receiving_events(self):
+        """Strong is only the safe default if delivery actually continues."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        received = []
+        comp.subscribe(lambda event: received.append(event))
+        gc.collect()
+
+        comp.insert("a", 2)
+
+        assert len(received) == 1
+
+    def test_a_weakly_held_subscriber_stops_rather_than_erroring(self):
+        """A collected owner must be dropped quietly, not raise mid-mutation."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        watcher = self.Watcher()
+        comp.subscribe(watcher.on_event)
+        del watcher
+        gc.collect()
+
+        comp.insert("a", 2)  # must not raise
+
+        assert len(comp._subscriptions) == 0
+
+    def test_the_rule_is_stated_in_terms_of_self_not_of_ismethod(self):
+        """``inspect.ismethod`` was the wrong axis and produced the bug.
+
+        Anchoring the docs to ``__self__`` is what makes C methods fall on the
+        same side as Python ones.
+        """
+        doc = inspect.getdoc(Computation.subscribe) or ""
+        assert "__self__" in doc
+        assert "append" in doc, "the everyday case of an owner that takes no weak reference"
+
+
 class TestSubscriberLifetimeIsDocumentedAccurately:
     """``inspect.ismethod`` is false for methods implemented in C.
 
@@ -4146,23 +4257,14 @@ class TestSubscriberLifetimeIsDocumentedAccurately:
 
         assert ref() is None
 
-    def test_a_c_bound_method_is_held_strongly_and_keeps_delivering(self):
-        """Strong is the safe default: it cannot silently stop delivering."""
+    def test_a_c_method_on_an_unweakreferenceable_owner_keeps_delivering(self):
+        """``list`` takes no weak reference, so this one must stay strong."""
         comp = Computation()
         comp.add_node("a", value=1)
-        events = deque()
+        events = []
         comp.subscribe(events.append)
-        ref = weakref.ref(events)
 
-        del events
         gc.collect()
         comp.insert("a", 2)
 
-        assert ref() is not None, "a C bound method must not be collected mid-subscription"
-        assert len(ref()) == 1, "and it must still be receiving events"
-
-    def test_the_docstring_says_which_is_which(self):
-        """The distinction is not guessable, so it has to be written down."""
-        doc = inspect.getdoc(Computation.subscribe) or ""
-        assert "inspect.ismethod" in doc
-        assert "append" in doc, "the everyday example of the strong case"
+        assert len(events) == 1, "a strongly held subscriber must keep receiving events"

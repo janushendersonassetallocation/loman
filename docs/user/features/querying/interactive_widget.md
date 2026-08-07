@@ -164,12 +164,12 @@ internal state transition. Subscribers run synchronously, in registration order,
 and a subscriber that raises is logged and skipped rather than breaking the
 computation.
 
-Bound methods defined in Python are held weakly, so `comp.subscribe(obj.handler)`
-does not keep `obj` alive. Everything else is held strongly until you
-unsubscribe — plain functions, lambdas, callable objects, and bound methods
-implemented in C such as `some_list.append`, which have no `__func__` for a weak
-reference to rebind against. So `comp.subscribe(events.append)` keeps `events`
-alive for as long as the subscription lasts.
+Anything with an object behind it — a `__self__`, whether the method is written
+in Python or in C — is held weakly, so `comp.subscribe(obj.handler)` and
+`comp.subscribe(events.append)` do not keep the owner alive. Plain functions,
+lambdas, callable objects and `functools.partial` are held strongly until you
+unsubscribe. The exception is an owner that supports no weak reference at all,
+such as `list` and `dict`, which falls back to a strong reference.
 
 ## Things worth knowing
 

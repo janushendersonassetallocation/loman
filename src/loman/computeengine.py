@@ -115,27 +115,60 @@ _MAX_NOTIFICATION_CASCADES = 16
 class _Subscription:
     """One registered subscriber, held weakly when that is safe to do.
 
-    Bound methods are held via :class:`weakref.WeakMethod`, so subscribing a
-    widget's handler does not keep the widget alive for the lifetime of the
-    computation. Plain functions, lambdas and callable objects are held
-    strongly, because callers routinely pass a closure they retain no other
-    reference to, and holding those weakly would collect them immediately.
+    A callback bound to an object is held weakly, so subscribing a widget's
+    handler does not keep the widget alive for the lifetime of the computation.
+    Everything with no object behind it --- plain functions, lambdas, callable
+    objects, :func:`functools.partial` --- is held strongly, because callers
+    routinely pass a closure they retain no other reference to and holding
+    those weakly would collect them immediately.
+
+    "Bound to an object" means carrying a ``__self__``, which covers methods
+    written in Python and those written in C alike. The two need different
+    holders: :class:`weakref.WeakMethod` needs a ``__func__`` to rebind
+    against, and C methods have none, so those are held as a weak reference to
+    the owner plus the attribute name.
+
+    A few owners cannot be weakly referenced at all --- :class:`list`,
+    :class:`dict` and :class:`bytearray` among them --- so ``some_list.append``
+    falls back to a strong reference. That is a limitation of the type rather
+    than a decision here, and it errs towards a subscription that keeps
+    delivering rather than one that silently stops.
     """
 
-    __slots__ = ("_strong", "_weak")
+    __slots__ = ("_name", "_owner", "_strong", "_weak")
 
     def __init__(self, callback: ComputationSubscriber) -> None:
         """Wrap ``callback``, choosing weak or strong ownership."""
         self._weak: weakref.WeakMethod | None = None
+        self._owner: weakref.ref[Any] | None = None
+        self._name: str = ""
         self._strong: ComputationSubscriber | None = None
         if inspect.ismethod(callback):
             self._weak = weakref.WeakMethod(callback)
-        else:
-            self._strong = callback
+            return
+        owner = getattr(callback, "__self__", None)
+        name = getattr(callback, "__name__", None)
+        if owner is not None and name:
+            try:
+                self._owner = weakref.ref(owner)
+            except TypeError:
+                # list, dict, bytearray and friends support no weak references.
+                self._strong = callback
+            else:
+                self._name = name
+            return
+        self._strong = callback
 
     def resolve(self) -> ComputationSubscriber | None:
         """Return the callback, or ``None`` once a weakly held owner is gone."""
-        return self._strong if self._weak is None else self._weak()
+        if self._strong is not None:
+            return self._strong
+        if self._weak is not None:
+            return self._weak()
+        if self._owner is None:  # pragma: no cover - constructor covers all paths
+            return None
+        owner = self._owner()
+        return None if owner is None else getattr(owner, self._name, None)
 
 
 def _notifies_subscribers(*, graph_changed: bool = False) -> Callable[[F], F]:
@@ -494,19 +527,19 @@ class Computation:
         causes a further event to be published once the current round finishes,
         up to a bounded number of cascades.
 
-        Bound methods *defined in Python* are held weakly, so subscribing
-        ``obj.handler`` does not keep ``obj`` alive; callers must retain the
-        object themselves. Everything else --- plain functions, lambdas,
-        callable objects, and bound methods implemented in C such as
-        ``some_list.append`` --- is held strongly until unsubscribed, because
-        callers commonly pass a throwaway closure that nothing else references.
+        A callback with an object behind it --- anything carrying a
+        ``__self__``, whether written in Python or in C --- is held weakly, so
+        subscribing ``obj.handler`` or ``events.append`` does not keep the
+        owner alive; callers must retain it themselves. Everything else ---
+        plain functions, lambdas, callable objects, :func:`functools.partial`
+        --- is held strongly until unsubscribed, because callers commonly pass
+        a throwaway closure that nothing else references.
 
-        The distinction is :func:`inspect.ismethod`, which is false for C
-        methods: they carry no ``__func__`` for :class:`weakref.WeakMethod` to
-        rebind against. So ``comp.subscribe(events.append)`` keeps ``events``
-        alive for as long as the subscription lasts, which is the safe default
-        --- a subscription that silently stopped delivering would be worse ---
-        but it is a lifetime the caller has to end with the returned callable.
+        The exception is an owner that supports no weak references at all, such
+        as :class:`list`, :class:`dict` and :class:`bytearray`. There
+        ``some_list.append`` falls back to a strong reference, which is a
+        limitation of the type rather than a choice, and errs towards a
+        subscription that keeps delivering over one that silently stops.
 
         Subscriptions are not copied by :meth:`copy` and are not serialized.
 
