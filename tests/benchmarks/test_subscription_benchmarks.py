@@ -1,10 +1,13 @@
 """Benchmarks for the notification path added by the UI extra.
 
-Run with ``make benchmark``. These measure rather than assert: the guard against
-the regression they were written for is
+Run with ``make benchmark``. These measure rather than assert: what they give is
+the shape of the cost, so a change that is merely slower rather than
+asymptotically worse is still visible in the report.
+
+The thresholds that *fail* live in ``test_subscription_cost`` alongside this,
+and in ``test_subscription_scaling`` in the stress tier. The asymptotic guard is
 ``test_computation_graph_construction_stays_linear`` in ``test_computeengine``,
-which fails the ordinary test run. What these give is the shape of the cost, so
-a change that is merely slower rather than asymptotically worse is still visible.
+which runs in the ordinary test run.
 
 The regression in question: an early version of ``_notifies_subscribers``
 snapshotted the whole node set on every structural mutation whether or not
