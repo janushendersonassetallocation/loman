@@ -27,6 +27,19 @@ from tests.conftest import create_example_block_computation
 STATIC = Path(__file__).parents[1] / "src" / "loman" / "ui" / "static"
 
 
+def read_static(name: str) -> str:
+    """Read a shipped asset as UTF-8, whatever the platform's locale prefers.
+
+    ``Path.read_text()`` without an encoding uses the locale's, which is cp1252
+    on Windows. Both assets are UTF-8 and carry characters the widget puts on
+    screen --- a middle dot in its tooltips, a command key in its hint --- so
+    reading them any other way silently mangles exactly the strings these tests
+    assert on. anywidget reads them with an explicit encoding, so this only ever
+    made the tests wrong, never the widget.
+    """
+    return (STATIC / name).read_text(encoding="utf-8")
+
+
 def make_widget() -> tuple[Computation, ComputationWidget]:
     """Create a small live graph and its widget."""
     comp = Computation()
@@ -823,7 +836,7 @@ class TestAssetContract:
 
     def test_javascript_references_every_synced_trait(self):
         """A trait renamed on one side only is the realistic failure here."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         synced = [
             name
             for name, trait in ComputationWidget.class_own_traits().items()
@@ -835,7 +848,7 @@ class TestAssetContract:
 
     def test_javascript_only_writes_traits_python_owns_are_left_alone(self):
         """The frontend must not set a trait Python treats as canonical."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         for own in ("graph_svg", "node_states", "composite_ids", "detail", "status", "revision"):
             assert f'model.set("{own}"' not in javascript
 
@@ -851,14 +864,14 @@ class TestAssetContract:
 
     def test_module_uses_the_portable_anywidget_entry_point(self):
         """render({model, el}) returning a cleanup callback is valid everywhere."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "function render({ model, el })" in javascript
         assert "return cleanup" in javascript
         assert "export default { render }" in javascript
 
     def test_stylesheet_supports_both_colour_schemes(self):
         """Marimo and JupyterLab both have dark themes."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         assert "@media (prefers-color-scheme: dark)" in css
 
     def test_no_surface_is_pinned_white_in_both_themes(self):
@@ -871,21 +884,21 @@ class TestAssetContract:
         background while setting ``--loman-ink`` is what once rendered the edit
         fields white on white.
         """
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         assert "--loman-canvas:" not in css
         stage = css.split(".loman-stage {")[1].split("}")[0]
         assert "background" not in stage, f"the graph should sit on the host's own background: {stage}"
 
     def test_the_graphs_ink_follows_the_theme(self):
         """Graphviz writes black, which disappears on a dark host background."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         for rule in ("g.edge path", "g.edge polygon", "g.cluster > polygon", "g.cluster > text"):
             body = css.split(f".loman-stage svg {rule} {{")[1].split("}")[0]
             assert "var(--loman-" in body, f"{rule} keeps Graphviz's hardcoded black"
 
     def test_node_fills_are_never_set_from_css(self):
         """Python owns them, and a CSS fill would beat the repaint's attribute."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         blocks = re.findall(r"([^{}]*)\{([^{}]*)\}", css)
         offenders = [
             selector.strip() for selector, body in blocks if "g.node" in selector and re.search(r"(^|[;\s])fill:", body)
@@ -917,29 +930,29 @@ class TestAssetContract:
         scale the whole graph down as soon as a block is opened. Measured at
         5.2 px labels on a 32-node graph before this was changed.
         """
-        css = (STATIC / "widget.css").read_text()
-        javascript = (STATIC / "widget.js").read_text()
+        css = read_static("widget.css")
+        javascript = read_static("widget.js")
         stage_svg = css.split(".loman-stage svg {")[1].split("}")[0]
         assert "%" not in stage_svg
         assert "naturalSize.w * zoom" in javascript
 
     def test_hover_and_selection_are_styled_differently(self):
         """Identical styling made it impossible to see what was selected."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         hover = css.split("g.node:hover > :not(title, text) {")[1].split("}")[0]
         selected = css.split("g.node.loman-selected > :not(title, text) {")[1].split("}")[0]
         assert hover.strip() != selected.strip()
 
     def test_frontend_declares_a_busy_state(self):
         """A synchronous compute must not look like nothing happened."""
-        javascript = (STATIC / "widget.js").read_text()
-        css = (STATIC / "widget.css").read_text()
+        javascript = read_static("widget.js")
+        css = read_static("widget.css")
         assert "setBusy(true" in javascript
         assert 'data-severity="busy"' in css or '[data-severity="busy"]' in css
 
     def test_legend_names_every_state_on_screen(self):
         """State is colour-only in the graph, and the colours are not CVD-safe."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "renderLegend" in javascript
         assert "label.textContent = state" in javascript
 
@@ -1057,7 +1070,7 @@ class TestCellEditing:
 
     def test_frontend_sends_cell_edits(self):
         """The table renderer and the Python handler must agree on the payload."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "cell: { row, column }" in javascript
         assert "openCellEditor" in javascript
 
@@ -1068,7 +1081,7 @@ class TestCellEditing:
         re-enabled Compute all on a read-only widget. Python still refused the
         request, but the button looked live.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const applyEnabledState = () => {")[1].split("};")[0]
         assert 'model.get("editable")' in body
         assert "applyEnabledState();" in javascript.split("const setBusy")[1]
@@ -1162,7 +1175,7 @@ class TestAcknowledgement:
 
     def test_frontend_releases_the_busy_state_on_acknowledgement(self):
         """The Python counter is only useful if the browser listens for it."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert 'model.on("change:ack", renderStatus)' in javascript
         assert "setBusy(false)" in javascript.split("const renderStatus")[1]
 
@@ -1242,7 +1255,7 @@ class TestLayoutDirection:
 
     def test_the_toolbar_wires_the_toggle(self):
         """The button exists and drives a layout_request."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert 'data-action="layout"' in javascript
         assert '"layout_request"' in javascript
 
@@ -1373,7 +1386,7 @@ class TestFocus:
 
     def test_the_inspector_and_breadcrumb_are_wired(self):
         """The Focus control and the breadcrumb both drive a focus_request."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert '"focus_request"' in javascript
         assert "loman-breadcrumb" in javascript
         assert "renderBreadcrumb" in javascript
@@ -1466,7 +1479,7 @@ class TestFullView:
 
     def test_the_frontend_offers_the_button_for_windowed_values(self):
         """Only values the panel cannot show whole are worth opening elsewhere."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "buildShowFull" in javascript
         assert 'send(\n      "full_view_request"' in javascript or '"full_view_request"' in javascript
         assert 'value.kind === "table" || value.kind === "tree" || value.kind === "repr"' in javascript
@@ -1477,7 +1490,7 @@ class TestHostIntegration:
 
     def test_the_frontend_samples_the_host_background(self):
         """A widget that looks pasted on does not read as part of the page."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "hostBackground" in javascript
         assert "--loman-backdrop" in javascript
 
@@ -1488,7 +1501,7 @@ class TestHostIntegration:
         those names happen to mean there, so they are used only when the host's
         declared background matches the backdrop it actually paints.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "resolveHostToken" in javascript
         assert "sameColour" in javascript
         assert "dataset.hostTokens" in javascript
@@ -1509,8 +1522,8 @@ class TestHostIntegration:
         The stamped attribute has to outrank the media query, or a dark notebook
         on a light desktop would render the widget light.
         """
-        javascript = (STATIC / "widget.js").read_text()
-        css = (STATIC / "widget.css").read_text()
+        javascript = read_static("widget.js")
+        css = read_static("widget.css")
         assert "relativeLuminance" in javascript
         assert "dataset.hostTheme" in javascript
         for theme in ("light", "dark"):
@@ -1618,7 +1631,7 @@ class TestFitOnRender:
 
     def test_the_front_end_only_ever_shrinks(self):
         """Blowing a small graph up to fill the pane is not what fit means."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const fitIfRequested = () => {")[1].split("};")[0]
         assert 'model.get("fit_on_render")' in body
         assert "if (scale < 1) fitToPane();" in body
@@ -1636,7 +1649,7 @@ class TestBlockNavigation:
         on whether the click landed on a block's border or its interior, which
         nothing on screen announced.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         activate = javascript.split("const activate = (id, composite, event) => {")[1].split("\n  };")[0]
         assert "const onFrame" not in javascript, "the border no longer means anything different"
         assert "event?.altKey" in activate
@@ -1647,7 +1660,7 @@ class TestBlockNavigation:
 
     def test_the_graph_says_what_a_block_click_will_do(self):
         """The gesture has to be announced somewhere other than the docs."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "Click to open this block · alt-click to isolate it" in javascript
 
     def test_focusing_by_rendered_id_isolates_the_block(self):
@@ -1701,7 +1714,7 @@ class TestFocusFromAnExpandedView:
 
     def test_an_open_blocks_label_closes_it_and_nothing_else_is_wired(self):
         """The frame carries no meaning now, so it must not be a control."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         wiring = javascript.split("const wireOpenBlocks = () => {")[1].split("\n  };")[0]
         assert '"toggle_request"' in wiring
         assert "collapse: true" in wiring
@@ -1713,7 +1726,7 @@ class TestFocusFromAnExpandedView:
         That mistake silently took the rest of the handler with it, leaving open
         blocks with neither a close nor a focus target.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         helper = javascript.split("const svgTooltip = (element, text) => {")[1].split("};")[0]
         assert "appendChild" in helper
         assert ".append(document.createElementNS" not in javascript
@@ -1767,7 +1780,7 @@ class TestBreadcrumbVisibility:
         With blocks opened but nothing focused there was no Reset on screen, and
         no way to discover one, so a deep view had no way back to the top.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const renderBreadcrumb = () => {")[1].split("\n  };")[0]
         assert 'model.get("expanded_paths")' in body
         assert "trail.length < 2 && !opened" in body
@@ -1776,7 +1789,7 @@ class TestBreadcrumbVisibility:
 
     def test_the_bar_redraws_when_expansions_change(self):
         """Its visibility now depends on expansions, so it must follow them."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert 'model.on("change:expanded_paths", renderBreadcrumb)' in javascript
         assert 'model.off("change:expanded_paths", renderBreadcrumb)' in javascript
 
@@ -1802,14 +1815,14 @@ class TestInspectorOnDemand:
 
     def test_the_panel_starts_hidden(self):
         """Standing empty it spends a third of the width on one sentence."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert '<aside class="loman-inspector" aria-label="Node inspector" hidden>' in javascript
         body = javascript.split("const renderDetail = () => {")[1].split("\n  };")[0]
         assert "inspector.hidden = !open" in body
 
     def test_a_hidden_panel_gives_its_width_back(self):
         """A hidden grid child still holds its column open; a flex one does not."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         main = css.split(".loman-main {")[1].split("}")[0]
         assert "display: flex" in main
         assert "grid-template-columns" not in main
@@ -1817,8 +1830,8 @@ class TestInspectorOnDemand:
 
     def test_the_hint_moved_to_the_status_bar(self):
         """It used to live in the panel, which is no longer always there."""
-        javascript = (STATIC / "widget.js").read_text()
-        css = (STATIC / "widget.css").read_text()
+        javascript = read_static("widget.js")
+        css = read_static("widget.css")
         assert "IDLE_HINT" in javascript
         assert "loman-empty" not in javascript
         assert "loman-empty" not in css
@@ -1838,13 +1851,13 @@ class TestInspectorOnDemand:
 
     def test_the_front_end_closes_by_clearing_the_selection(self):
         """Hiding the panel without telling Python would desynchronise them."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         helper = javascript.split("const clearSelection = () => {")[1].split("};")[0]
         assert 'model.set("selected_id", "")' in helper
 
     def test_escape_leaves_a_field_being_edited_alone(self):
         """Escape in a field cancels that edit; it must not also close the panel."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         handler = javascript.split('if (event.key !== "Escape" || inspector.hidden) return;')[1]
         assert 'event.target?.closest?.("input")' in handler.split("clearSelection();")[0]
 
@@ -1854,14 +1867,14 @@ class TestComputingABlockYouAreInside:
 
     def test_the_breadcrumb_carries_the_action(self):
         """The block being looked inside is not a shape on screen to click."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const renderBreadcrumb = () => {")[1].split("\n  };")[0]
         assert "loman-crumb-action" in body
         assert 'send("compute_request", { path: entry.path }' in body
 
     def test_the_action_crumb_is_gated_on_editable_unlike_the_rest(self):
         """Navigating a read-only graph is fine; computing it is not."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const applyEnabledState = () => {")[1].split("\n  };")[0]
         gate = body.split("button.loman-crumb-action")[1]
         assert "!canMutate" in gate.split("\n")[0]
@@ -2015,7 +2028,7 @@ class TestNodeTooltips:
         Graphviz writes the rendered ID into ``<title>``, so hovering any node
         showed "n2". Nothing was left to say what clicking would do.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "node.dataset.lomanId = id" in javascript
         assert "node.title =" not in javascript
         repaint = javascript.split("const repaint = () => {")[1].split("\n  };")[0]
@@ -2024,7 +2037,7 @@ class TestNodeTooltips:
 
     def test_both_kinds_of_node_say_what_a_click_does(self):
         """Alt-click is otherwise announced nowhere on screen."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "Click to open this block · alt-click to isolate it" in javascript
         assert "Click to inspect this node" in javascript
 
@@ -2039,7 +2052,7 @@ class TestGraphLabelInk:
         It paints none now, and the fill under a label is a state colour that
         Python chooses, so the ink has to be chosen per node.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const inkNodeLabels = () => {")[1].split("\n  };")[0]
         assert "relativeLuminance(fill)" in body
         # Measured both ways, not compared against a threshold. A threshold has
@@ -2051,7 +2064,7 @@ class TestGraphLabelInk:
 
     def test_labels_are_re_inked_whenever_fills_can_have_changed(self):
         """A fresh SVG arrives black, and a repaint moves the fills."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         render = javascript.split("const renderGraph = () => {")[1].split("\n  };")[0]
         repaint = javascript.split("const repaint = () => {")[1].split("\n  };")[0]
         assert "inkNodeLabels();" in render, "repaint() returns early unless colours come from state"
@@ -2087,7 +2100,7 @@ class TestPanningDoesNotSwallowClicks:
 
     def test_a_press_alone_does_not_enter_the_panning_state(self):
         """The class goes on after movement, not on pointerdown."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         down = javascript.split('canvas.addEventListener("pointerdown", (event) => {')[1].split("}, { signal });")[0]
         assert 'classList.add("loman-panning")' not in down
         assert "setPointerCapture" not in down, "capture also redirects the click away"
@@ -2095,7 +2108,7 @@ class TestPanningDoesNotSwallowClicks:
 
     def test_the_drag_threshold_is_what_commits_to_panning(self):
         """Below it the press is still a click; above it, a drag."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         assert "const PAN_THRESHOLD" in javascript
         move = javascript.split('canvas.addEventListener("pointermove", (event) => {')[1].split("}, { signal });")[0]
         assert "Math.abs(dx) < PAN_THRESHOLD && Math.abs(dy) < PAN_THRESHOLD" in move
@@ -2111,14 +2124,14 @@ class TestPanningDoesNotSwallowClicks:
 
     def test_capture_is_only_released_when_it_was_taken(self):
         """A press that never became a drag never captured the pointer."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         end = javascript.split("const endPan = (event) => {")[1].split("\n  };")[0]
         assert "wasDragging" in end
         assert "releasePointerCapture" in end
 
     def test_the_pointer_events_rule_still_applies_while_dragging(self):
         """It is what stops a pan selecting text; only its timing was wrong."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         assert ".loman-canvas.loman-panning * { pointer-events: none; }" in css
 
     def test_closing_a_block_by_path_still_works_in_python(self):
@@ -2147,7 +2160,7 @@ class TestClosingAnOpenBlock:
         makes the whole title bar the target. Measured at 4.3x the area, and a
         real click 19 px clear of the word lands on it.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const closeTarget = (cluster, label) => {")[1].split("\n  };")[0]
         assert "label.getBBox()" in body
         assert 'hit.setAttribute("fill", "transparent")' in body, "an unpainted rect does not hit-test"
@@ -2158,7 +2171,7 @@ class TestClosingAnOpenBlock:
 
     def test_the_target_is_wired_to_the_same_close(self):
         """Two elements, one behaviour; the label must not be the only one."""
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         wiring = javascript.split("const wireOpenBlocks = () => {")[1].split("\n  };")[0]
         assert "const onClick = (event) => { event.stopPropagation(); close(); };" in wiring
         assert 'label.addEventListener("click", onClick' in wiring
@@ -2169,7 +2182,7 @@ class TestClosingAnOpenBlock:
 
         ``getBBox`` throws when the element is not laid out.
         """
-        javascript = (STATIC / "widget.js").read_text()
+        javascript = read_static("widget.js")
         body = javascript.split("const closeTarget = (cluster, label) => {")[1].split("\n  };")[0]
         assert "try {" in body
         assert "catch" in body
@@ -2179,6 +2192,44 @@ class TestClosingAnOpenBlock:
 
     def test_the_target_hit_tests_in_css(self):
         """`fill: transparent` alone is not enough on every engine."""
-        css = (STATIC / "widget.css").read_text()
+        css = read_static("widget.css")
         rule = css.split(".loman-canvas .loman-block-handle-hit {")[1].split("}")[0]
         assert "pointer-events: all" in rule
+
+
+class TestAssetEncoding:
+    """The assets are UTF-8, and every reader of them has to agree.
+
+    Windows CI decodes with cp1252 unless told otherwise, which turned the
+    middle dot in the widget's tooltips into two characters and failed only the
+    two tests that happened to assert a non-ASCII string. Fifty other reads of
+    the same files passed, because their assertions were pure ASCII --- so the
+    encoding was wrong everywhere and visible almost nowhere.
+    """
+
+    def test_the_assets_really_do_carry_non_ascii(self):
+        """If they were ASCII the encoding would not matter and this is moot."""
+        glyphs = {c for asset in ("widget.js", "widget.css") for c in read_static(asset) if ord(c) > 127}
+        assert glyphs, "no non-ASCII left; this guard and its helper can go"
+        # The characters the widget shows: separators, the command key, units.
+        assert "·" in glyphs
+
+    def test_decoding_as_cp1252_would_corrupt_them(self):
+        """Names what the platform default actually costs, rather than implying it."""
+        raw = (STATIC / "widget.js").read_bytes()
+        assert raw.decode("utf-8") != raw.decode("cp1252")
+
+    def test_what_anywidget_hands_the_browser_is_intact(self):
+        """The real question: the widget is fine, the tests were not.
+
+        anywidget reads ``_esm`` and ``_css`` with an explicit UTF-8 encoding,
+        so the browser gets the characters whatever the kernel's locale is.
+        """
+        _comp, widget = make_widget()
+        try:
+            for delivered in (str(widget._esm), str(widget._css)):
+                assert "�" not in delivered, "a replacement character means it was mis-decoded"
+            assert "·" in str(widget._esm)
+            assert "—" in str(widget._css)
+        finally:
+            widget.close()
