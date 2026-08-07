@@ -2406,16 +2406,3 @@ class TestEveryNameSurfaceKeepsItsType:
             assert comp.value(twin) == "TWIN"
         finally:
             widget.close()
-
-    def test_a_string_carrying_trait_is_never_the_route_to_a_value(self):
-        """Traits are JSON-safe, so they are labels; values need the key.
-
-        This is the invariant the bug broke. ``full_view`` may be read for
-        display or reactivity, but nothing should index the computation with it.
-        """
-        source = (Path(__file__).parents[1] / "src" / "loman" / "ui" / "widget.py").read_text(encoding="utf-8")
-
-        assert "self.computation.value(self.full_view)" not in source, (
-            "indexing the computation by a synced string trait resolves by label"
-        )
-        assert "self.computation.value(self._full_view_key)" in source

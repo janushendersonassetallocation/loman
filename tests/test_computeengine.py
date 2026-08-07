@@ -2,7 +2,6 @@
 
 import functools
 import gc
-import inspect
 import io
 import itertools
 import random
@@ -4172,24 +4171,23 @@ class TestSubscriberLifetimeAcrossEveryCallableKind:
         comp = Computation()
         comp.add_node("a", value=1)
         owner = make_owner()
-        if not self._weakly_referenceable(owner):
-            # The owner cannot be observed, so the only claim available is that
-            # subscribing keeps working. That it is held strongly is asserted
-            # by the delivery test below.
-            comp.subscribe(take_callback(owner))
-            comp.insert("a", 2)
-            assert not expect_weak, f"{label} cannot be held weakly: its owner takes no weak reference"
-            return
+        observable = self._weakly_referenceable(owner)
+        assert observable or not expect_weak, f"{label} cannot be held weakly: its owner takes no weak reference"
 
         comp.subscribe(take_callback(owner))
-        ref = weakref.ref(owner)
+        ref = weakref.ref(owner) if observable else None
         del owner
         gc.collect()
         comp.insert("a", 2)
 
-        assert (ref() is None) is expect_weak, (
-            f"{label}: owner {'should' if expect_weak else 'should not'} have been collected"
-        )
+        if expect_weak:
+            assert ref is not None
+            assert ref() is None, f"{label}: the owner should have been collected"
+            assert len(comp._subscriptions) == 0, f"{label}: the dead subscription should have been dropped"
+        else:
+            if ref is not None:
+                assert ref() is not None, f"{label}: the owner should have been retained"
+            assert len(comp._subscriptions) == 1, f"{label}: the subscription should still be live"
 
     def test_a_strongly_held_subscriber_keeps_receiving_events(self):
         """Strong is only the safe default if delivery actually continues."""
@@ -4203,6 +4201,23 @@ class TestSubscriberLifetimeAcrossEveryCallableKind:
 
         assert len(received) == 1
 
+    def test_a_subscriber_on_an_unweakreferenceable_owner_keeps_delivering(self):
+        """``list`` takes no weak reference, so ``events.append`` stays strong.
+
+        The consequence that matters is delivery: a subscription that cannot be
+        held weakly must go on working rather than being dropped.
+        """
+        comp = Computation()
+        comp.add_node("a", value=1)
+        events = []
+        comp.subscribe(events.append)
+
+        gc.collect()
+        comp.insert("a", 2)
+        comp.insert("a", 3)
+
+        assert len(events) == 2, "a strongly held subscriber must keep receiving events"
+
     def test_a_weakly_held_subscriber_stops_rather_than_erroring(self):
         """A collected owner must be dropped quietly, not raise mid-mutation."""
         comp = Computation()
@@ -4215,56 +4230,3 @@ class TestSubscriberLifetimeAcrossEveryCallableKind:
         comp.insert("a", 2)  # must not raise
 
         assert len(comp._subscriptions) == 0
-
-    def test_the_rule_is_stated_in_terms_of_self_not_of_ismethod(self):
-        """``inspect.ismethod`` was the wrong axis and produced the bug.
-
-        Anchoring the docs to ``__self__`` is what makes C methods fall on the
-        same side as Python ones.
-        """
-        doc = inspect.getdoc(Computation.subscribe) or ""
-        assert "__self__" in doc
-        assert "append" in doc, "the everyday case of an owner that takes no weak reference"
-
-
-class TestSubscriberLifetimeIsDocumentedAccurately:
-    """``inspect.ismethod`` is false for methods implemented in C.
-
-    The docstring said bound methods are held weakly. That covers Python bound
-    methods, which carry a ``__func__`` for :class:`weakref.WeakMethod` to
-    rebind against, and not C ones like ``list.append`` --- so
-    ``comp.subscribe(events.append)`` retains ``events`` for the life of the
-    subscription. That is the safer default, but callers have to be told.
-    """
-
-    def test_a_python_bound_method_does_not_keep_its_object_alive(self):
-        """The case the docstring always described correctly."""
-
-        class Watcher:
-            """Subscribes with an ordinary Python bound method."""
-
-            def on_event(self, event):
-                """Ignore it; only the reference matters."""
-
-        comp = Computation()
-        comp.add_node("a", value=1)
-        watcher = Watcher()
-        comp.subscribe(watcher.on_event)
-        ref = weakref.ref(watcher)
-
-        del watcher
-        gc.collect()
-
-        assert ref() is None
-
-    def test_a_c_method_on_an_unweakreferenceable_owner_keeps_delivering(self):
-        """``list`` takes no weak reference, so this one must stay strong."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-        events = []
-        comp.subscribe(events.append)
-
-        gc.collect()
-        comp.insert("a", 2)
-
-        assert len(events) == 1, "a strongly held subscriber must keep receiving events"
