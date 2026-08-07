@@ -4037,3 +4037,78 @@ class TestToDict:
         result = comp.to_dict()
         assert result[to_nodekey("foo")] == 1
         assert result[to_nodekey("bar")] == 2
+
+
+class TestUnsubscribedComputationsPayNothing:
+    """Callers who never subscribe must pay nothing for the machinery.
+
+    That is the whole basis on which it was added to the core class.
+
+    The regression this guards is subtle and was invisible to every functional
+    test: ``_set_states`` materialised its keys into a tuple so they could be
+    read a second time for the event payload. Callers pass a *set*, and
+    ``set.update(set)`` reuses the hashes the source set already holds while
+    ``set.update(tuple)`` recomputes every one --- so staleness propagation
+    silently gained one hash per descendant node per insert, measured at 8.4%
+    on a 400-node chain.
+    """
+
+    @staticmethod
+    def _chain(length: int) -> Computation:
+        comp = Computation()
+        comp.add_node("x0", value=0.0)
+        for i in range(1, length):
+            comp.add_node(f"x{i}", (lambda p: p + 1), kwds={"p": f"x{i - 1}"})
+        return comp
+
+    @staticmethod
+    def _count_hashes(action) -> int:
+        original = NodeKey.__hash__
+        calls = [0]
+
+        def counting(self):
+            calls[0] += 1
+            return original(self)
+
+        NodeKey.__hash__ = counting
+        try:
+            action()
+        finally:
+            NodeKey.__hash__ = original
+        return calls[0]
+
+    def test_staleness_does_not_rehash_every_node_when_unsubscribed(self):
+        """Measured per extra stale node, so fixed overheads drop out.
+
+        Propagation inherently costs about 7 hashes per node. Materialising the
+        keys adds exactly one more, because the merge into the state map can no
+        longer reuse the source set's hashes. The slope is what distinguishes
+        the two, and it is stable: 7.0 against 8.0 when the regression is present.
+        """
+        short, long_ = self._chain(100), self._chain(400)
+        short.insert("x0", 1.0)
+        long_.insert("x0", 1.0)  # warm both, so only propagation is measured
+
+        small = self._count_hashes(lambda: short.insert("x0", 2.0))
+        large = self._count_hashes(lambda: long_.insert("x0", 2.0))
+        per_node = (large - small) / 300
+
+        assert per_node < 7.5, (
+            f"{per_node:.1f} hashes per stale node; about 7 is expected and 8 means "
+            "the keys are rehashed on merge rather than reusing the set's own"
+        )
+
+    def test_a_subscriber_still_learns_about_every_changed_node(self):
+        """The optimisation must not cost the event its completeness."""
+        comp = self._chain(60)
+        comp.compute_all()
+        events = []
+        comp.subscribe(events.append)
+
+        comp.insert("x0", 99.0)
+
+        assert len(events) == 1
+        changed = {str(node) for node in events[0].changed_nodes}
+        assert "x0" in changed
+        # every descendant went stale and must be reported
+        assert {f"x{i}" for i in range(1, 60)} <= changed

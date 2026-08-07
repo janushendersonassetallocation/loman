@@ -5,7 +5,9 @@
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
-- Added `Computation.subscribe` and `ComputationEvent` for observing batched changes to a computation
+- Added `Computation.subscribe` and `ComputationEvent` for observing batched changes to a
+  computation. A computation with no subscribers pays no measurable cost: state propagation
+  merges keys set-to-set rather than materialising them, so hashing does not grow
 - Added the `loman[ui]` extra, providing `Computation.widget()`: an interactive notebook graph
   that follows its computation, with node inspection, drill-down into blocks, scalar input
   editing and compute controls

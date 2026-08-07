@@ -1107,15 +1107,28 @@ class Computation:
         self._mark_changed(node_key)
 
     def _set_states(self, node_keys: Iterable[NodeKey], state: States) -> None:
-        """Set the state of multiple nodes at once."""
-        node_keys = tuple(node_keys)
+        """Set the state of multiple nodes at once.
+
+        Materialising the keys is only needed when they have to be read a
+        second time, which is only when a subscriber will be told about them.
+        Doing it unconditionally turned the set that callers pass into a tuple,
+        and ``set.update(tuple)`` rehashes every element where
+        ``set.update(set)`` reuses the hashes the source set already holds ---
+        399 extra hashes per insert on a 400-node chain, and the whole of the
+        subscription API's measured cost to callers who never subscribe.
+        """
+        watched = bool(self._subscriptions)
+        if watched:
+            node_keys = tuple(node_keys)
         for name in node_keys:
             node = self.dag.nodes[name]
             old_state = node[NodeAttributes.STATE]
             self._state_map[old_state].remove(name)
             node[NodeAttributes.STATE] = state
         self._state_map[state].update(node_keys)
-        self._mark_changed(*node_keys)
+        if watched:
+            # Not via _mark_changed: its star-args would repack the keys again.
+            self._pending_changed_nodes.update(node_keys)
 
     @_notifies_subscribers()
     def set_stale(self, name: Name) -> None:
