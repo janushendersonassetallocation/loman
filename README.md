@@ -174,7 +174,7 @@ make check
 ### What's Included
 
 - 🐍 **Python 3.13** - Latest Python with all dependencies pre-installed
-- 🛠️ **Development Tools** - pytest, ruff, mypy, pre-commit hooks ready to go
+- 🛠️ **Development Tools** - pytest, ruff, ty, pre-commit hooks ready to go
 - 📓 **Interactive Notebooks** - Marimo notebooks for exploring examples
 - ⚡ **Zero Setup** - Everything configured ready to go
 - 🎯 **VS Code Extensions** - Python, testing, and productivity extensions pre-installed
