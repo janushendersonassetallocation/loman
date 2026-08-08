@@ -34,7 +34,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.12.0",
-    "mypy>=1.0",
     "marimo>=0.15",
     "scipy>=1.16.3",
 ]
@@ -55,7 +54,6 @@ pandas = "pandas"
 scipy = "scipy"
 attrs = "attrs"
 numpy = "numpy"
-mypy = "mypy"
 ruff = "ruff"
 dill = "dill"
 
