@@ -35,6 +35,7 @@ from .exception import (
 )
 from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
+from .planning import ExecutionPlan, ValidationReport, create_execution_plan, validate_graph
 from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
 
@@ -979,9 +980,32 @@ class Computation:
             for n in self.dag.predecessors(node_key):
                 if not self.dag.has_node(n):
                     return  # pragma: no cover
-                if self.dag.nodes[n][NodeAttributes.STATE] != States.UPTODATE:
+                if self.dag.nodes[n][NodeAttributes.STATE] not in (States.UPTODATE, States.PINNED):
                     return
             self._set_state(node_key, States.COMPUTABLE)
+
+    def validate(self) -> ValidationReport:
+        """Inspect the entire graph for structural and readiness problems.
+
+        Validation does not execute functions or mutate the computation.
+        """
+        return validate_graph(self.dag, self.executor_map)
+
+    def plan(self, targets: Name | Names | None = None) -> ExecutionPlan:
+        """Describe the work needed to compute one or more targets.
+
+        Passing ``None`` plans the whole graph. Planning does not execute
+        functions or mutate the computation.
+
+        :param targets: Target node, list of target nodes, or ``None`` for all nodes.
+        """
+        target_node_keys = None if targets is None else names_to_node_keys(targets)
+        if target_node_keys is not None:
+            for node_key in target_node_keys:
+                if not self.dag.has_node(node_key):
+                    msg = f"Node {node_key} does not exist"
+                    raise NonExistentNodeException(msg)
+        return create_execution_plan(self.dag, self.executor_map, target_node_keys)
 
     def _get_parameter_data(self, node_key: NodeKey) -> Iterable[_ParameterItem]:
         """Get all parameter data for a node's function call."""
@@ -1128,8 +1152,9 @@ class Computation:
                 raise ValidationError(msg)
 
         ancestors.add(node_key)
+        g = g.subgraph(ancestors).copy()
         nodes_sorted = topological_sort(g)
-        return [n for n in nodes_sorted if n in ancestors]
+        return list(nodes_sorted)
 
     def _get_calc_node_names(self, name: Name) -> Names:
         """Get node names that need to be computed for a target node."""
@@ -1137,7 +1162,7 @@ class Computation:
         return node_keys_to_names(self._get_calc_node_keys(node_key))
 
     def compute(self, name: Name | Iterable[Name], raise_exceptions: bool = False) -> None:
-        """Compute a node and all necessary predecessors.
+        """Compute a node or block and all necessary predecessors.
 
         Following the computation, if successful, the target node, and all necessary ancestors that were not already
         UPTODATE will have been calculated and set to UPTODATE. Any node that did not need to be calculated will not
@@ -1148,20 +1173,26 @@ class Computation:
         will proceed as far as it can, until no more nodes that would be required to calculate the target are
         COMPUTABLE.
 
-        :param name: Name of the node to compute
+        A block name computes every node below that path. Multiple node and block
+        names may be supplied in a list or generator.
+
+        :param name: Name of the node or block to compute
         :param raise_exceptions: Whether to pass exceptions raised by node computations back to the caller
         :type raise_exceptions: Boolean, default False
         """
-        calc_nodes: set[NodeKey] | list[NodeKey]
-        if isinstance(name, (types.GeneratorType, list)):
-            calc_nodes = set()
-            for name0 in name:
-                node_key = to_nodekey(name0)
-                for n in self._get_calc_node_keys(node_key):
-                    calc_nodes.add(n)
-        else:
-            node_key = to_nodekey(name)
-            calc_nodes = self._get_calc_node_keys(node_key)
+        calc_nodes: set[NodeKey] = set()
+        names = name if isinstance(name, (types.GeneratorType, list)) else [name]
+        for name0 in names:
+            node_key = to_nodekey(name0)
+            targets = (
+                [node_key]
+                if self.has_node(node_key)
+                else names_to_node_keys(self.get_tree_descendents(node_key, graph_nodes_only=True))
+            )
+            if not targets:
+                targets = [node_key]
+            for target in targets:
+                calc_nodes.update(self._get_calc_node_keys(target))
         self._compute_nodes(calc_nodes, raise_exceptions=raise_exceptions)
 
     def compute_all(self, raise_exceptions: bool = False) -> None:
