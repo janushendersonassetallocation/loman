@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, TextIO
 from loman.consts import EdgeAttributes, NodeAttributes, States, SystemTags
 from loman.exception import SerializationError
 from loman.nodekey import parse_nodekey
+from loman.values import Error, _ParameterType
 
 from .transformer import (
     DataFrameTransformer,
@@ -149,8 +150,6 @@ class ComputationSerializer:
         Raises :class:`~loman.exception.SerializationError` if the value cannot
         be encoded.
         """
-        from loman.computeengine import Error
-
         if state not in self._VALUE_STATES:
             return None, False
 
@@ -230,8 +229,6 @@ class ComputationSerializer:
         if param is None:
             return {"src": str(src), "dst": str(dst), "param_type": None, "param": None}
 
-        from loman.computeengine import _ParameterType
-
         param_type, param_val = param
         return {
             "src": str(src),
@@ -258,7 +255,7 @@ class ComputationSerializer:
 
     def _from_dict(self, data: dict[str, Any]) -> Any:
         """Reconstruct a Computation from a deserialized dict."""
-        from loman.computeengine import Computation, Error, _ParameterType
+        from loman.computeengine import Computation
 
         comp = Computation()
 
