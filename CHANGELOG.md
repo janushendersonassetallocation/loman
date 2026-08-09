@@ -1,6 +1,9 @@
 # Change Log
 
 ## [unreleased]
+- CI: the Graphviz install now retries transient package-feed failures, falls back between
+  Chocolatey and winget, and fails loudly when `dot` is still missing rather than letting
+  the test run report it as a hundred unrelated failures
 - Allow `Computation.compute` to compute one or more blocks
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
