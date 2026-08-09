@@ -1,43 +1,22 @@
-## .rhiza/make.d/10-custom-task.mk - Custom Repository Tasks
-# This file example shows how to add new targets.
+## .rhiza/make.d/00-additional-deps.mk - Custom Repository Tasks
+# This file is repo-owned: it is not in .rhiza/template.lock, so `make sync`
+# leaves it alone.
 
-.PHONY: pre-install
+.PHONY: pre-install install-graphviz
 
 ##@ Loman Custom Tasks
 
-install-graphviz:  ## Install graphviz if not present
-	@if ! command -v dot >/dev/null 2>&1; then \
-		echo "Graphviz not found. Attempting installation..."; \
-		if [ "$$(uname)" = "Darwin" ]; then \
-			if command -v brew >/dev/null 2>&1; then \
-				echo "Installing via Homebrew..."; \
-				brew install graphviz; \
-			else \
-				echo "Error: Homebrew not found. Please install Graphviz manually." >&2; \
-				exit 1; \
-			fi; \
-		elif command -v apt-get >/dev/null 2>&1; then \
-			echo "Installing via apt-get..."; \
-			if [ "$$(id -u)" -eq 0 ]; then \
-				apt-get update && apt-get install -y graphviz; \
-			else \
-				sudo apt-get update && sudo apt-get install -y graphviz; \
-			fi; \
-		elif command -v choco >/dev/null 2>&1; then \
-			echo "Installing via Chocolatey..."; \
-			choco install graphviz -y; \
-		elif command -v winget >/dev/null 2>&1; then \
-			echo "Installing via winget..."; \
-			winget install --id Graphviz.Graphviz -e --silent; \
-		else \
-			echo "Warning: Could not detect a supported package manager. Please install Graphviz manually." >&2; \
-			exit 1; \
-		fi; \
-	else \
-		echo "graphviz is already installed, skipping installation."; \
-	fi
+# Loman renders graphs by shelling out to Graphviz's `dot`, so the visualization
+# and widget tests cannot run without it. The installer lives in a script rather
+# than inline here because it retries, falls back between package managers and
+# verifies the result --- none of which is readable as a shell one-liner inside
+# a make recipe.
+#
+# In scripts/ and not bin/: .gitignore excludes bin, which is where uv and other
+# fetched programs land. A script placed there is silently never committed.
+install-graphviz:  ## Install graphviz if not present, retrying transient failures
+	@bash scripts/install-graphviz.sh
 
 pre-install:: ## Custom pre-install tasks for Loman
 	@printf "${BLUE}[Loman] Running custom pre-install tasks...${RESET}\n"
 	@$(MAKE) install-graphviz
-

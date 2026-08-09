@@ -1,8 +1,13 @@
 """Tests for the core computation engine."""
 
+import functools
+import gc
 import io
+import itertools
 import random
-from collections import namedtuple
+import time
+import weakref
+from collections import deque, namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from time import sleep
@@ -17,6 +22,7 @@ from loman import (
     C,
     CannotInsertToPlaceholderNodeError,
     Computation,
+    ComputationEvent,
     ComputationFactory,
     FanIn,
     FanOut,
@@ -47,6 +53,260 @@ from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
 from loman.nodekey import to_nodekey
 from loman.visualization import GraphView
 from tests.conftest import BasicFourNodeComputation
+
+
+def test_computation_subscription_batches_public_mutations():
+    """Subscribers receive one useful event per outermost mutation."""
+    comp = Computation()
+    events: list[ComputationEvent] = []
+    unsubscribe = comp.subscribe(events.append)
+
+    comp.add_node("a", value=1)
+    assert len(events) == 1
+    assert events[0].revision == 1
+    assert events[0].graph_changed
+    assert events[0].states[to_nodekey("a")] == States.UPTODATE
+
+    comp.add_node("b", lambda a: a + 1)
+    events.clear()
+    comp.insert("a", 2)
+    assert len(events) == 1
+    assert not events[0].graph_changed
+    assert events[0].changed_nodes == {to_nodekey("a"), to_nodekey("b")}
+    assert events[0].states[to_nodekey("b")] == States.COMPUTABLE
+
+    events.clear()
+    comp.compute_all()
+    assert len(events) == 1
+    assert events[0].states[to_nodekey("b")] == States.UPTODATE
+
+    unsubscribe()
+    comp.insert("a", 3)
+    assert len(events) == 1
+
+
+def test_computation_subscription_nested_mutation_emits_once():
+    """Nested public mutations, such as pin calling insert, stay batched."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+
+    comp.pin("a", 2)
+
+    assert len(events) == 1
+    assert events[0].states[to_nodekey("a")] == States.PINNED
+
+
+def test_computation_subscriber_failure_does_not_break_mutation(caplog):
+    """A broken observer cannot break the computation it observes."""
+    comp = Computation()
+
+    def broken(_event):
+        raise RuntimeError
+
+    comp.subscribe(broken)
+    comp.add_node("a", value=1)
+
+    assert comp.value("a") == 1
+    assert "RuntimeError" in caplog.text
+
+
+def test_computation_subscribe_rejects_non_callable():
+    """Subscription failures are reported at registration time."""
+    comp = Computation()
+    with pytest.raises(TypeError, match="callback must be callable"):
+        comp.subscribe(None)  # type: ignore[arg-type]
+
+
+def test_computation_without_subscribers_does_not_track_changes():
+    """The notification machinery costs nothing when nobody is listening.
+
+    Building a graph node by node is the hot path here: snapshotting the node
+    set on every structural call once made construction quadratic.
+    """
+    comp = Computation()
+    comp.add_node("a", value=1)
+    comp.compute_all()
+
+    assert comp._pending_changed_nodes == set()
+    assert comp._pending_graph_changed is False
+    assert comp.revision == 0
+
+
+def test_computation_graph_construction_stays_linear():
+    """Adding N nodes must not cost O(N^2), with or without a subscriber."""
+    small, large = 200, 800
+
+    def build(n: int) -> float:
+        comp = Computation()
+        comp.subscribe(lambda _event: None)
+        comp.add_node("x", value=1)
+        start = time.perf_counter()
+        for i in range(n):
+            comp.add_node(f"n{i}", lambda x: x, kwds={"x": "x"})
+        return time.perf_counter() - start
+
+    ratio = build(large) / max(build(small), 1e-6)
+
+    # Linear work would give a ratio near 4 for a 4x larger graph; the old
+    # quadratic implementation gave roughly 16. Allow generous headroom for a
+    # loaded CI machine while still failing if the quadratic term returns.
+    assert ratio < 10, f"graph construction scaled {ratio:.1f}x for a 4x larger graph"
+
+
+def test_computation_subscribers_are_notified_in_registration_order():
+    """Ordering is part of the contract, so the store cannot be a set."""
+    comp = Computation()
+    order: list[int] = []
+    for index in range(5):
+        comp.subscribe(lambda _event, index=index: order.append(index))
+
+    comp.add_node("a", value=1)
+
+    assert order == [0, 1, 2, 3, 4]
+
+
+def test_computation_unsubscribe_is_idempotent():
+    """Calling the returned function twice removes one subscription, not two."""
+    comp = Computation()
+    seen: list[int] = []
+    unsubscribe_first = comp.subscribe(lambda _event: seen.append(1))
+    comp.subscribe(lambda _event: seen.append(2))
+
+    unsubscribe_first()
+    unsubscribe_first()
+    comp.add_node("a", value=1)
+
+    assert seen == [2]
+
+
+def test_computation_holds_bound_methods_weakly():
+    """Subscribing obj.handler must not keep obj alive for ever."""
+
+    class Watcher:
+        """Records the events it is sent."""
+
+        def __init__(self):
+            """Start with nothing seen."""
+            self.seen = 0
+
+        def on_event(self, _event):
+            """Count one event."""
+            self.seen += 1
+
+    comp = Computation()
+    watcher = Watcher()
+    comp.subscribe(watcher.on_event)
+    comp.add_node("a", value=1)
+    assert watcher.seen == 1
+
+    del watcher
+    gc.collect()
+    comp.add_node("b", value=2)
+
+    assert comp._subscriptions == []
+
+
+def test_computation_holds_plain_functions_strongly():
+    """A caller who keeps no reference to their lambda still gets events."""
+    comp = Computation()
+    seen: list[int] = []
+    comp.subscribe(lambda event: seen.append(event.revision))
+
+    gc.collect()
+    comp.add_node("a", value=1)
+
+    assert seen == [1]
+
+
+def test_computation_event_is_immutable():
+    """Consumers cannot corrupt an event and affect anyone else's copy."""
+    comp = Computation()
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+    comp.add_node("a", value=1)
+
+    event = events[0]
+    with pytest.raises(TypeError):
+        event.states[to_nodekey("a")] = States.ERROR  # type: ignore[index]
+    with pytest.raises(AttributeError):
+        event.revision = 99  # type: ignore[misc]
+    assert isinstance(event.changed_nodes, frozenset)
+
+
+def test_computation_subscriber_mutation_publishes_a_further_event():
+    """A subscriber that reacts by mutating still produces an observable event."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    comp.add_node("b", lambda a: a + 1)
+    revisions: list[int] = []
+    computed_once = []
+
+    def compute_on_change(event):
+        """Compute the graph the first time an input changes."""
+        revisions.append(event.revision)
+        if not computed_once:
+            computed_once.append(True)
+            comp.compute_all()
+
+    comp.subscribe(compute_on_change)
+    comp.insert("a", 2)
+
+    assert len(revisions) == 2
+    assert revisions == [comp.revision - 1, comp.revision]
+    assert comp.value("b") == 3
+
+
+def test_computation_runaway_subscriber_is_stopped(caplog):
+    """A subscriber that always mutates must not recurse or spin for ever."""
+    comp = Computation()
+    comp.add_node("a", value=0)
+    counter = itertools.count(1)
+
+    def always_mutates(_event):
+        """Insert a genuinely new value on every notification."""
+        comp.insert("a", next(counter) + 100)
+
+    comp.subscribe(always_mutates)
+    comp.insert("a", 1)
+
+    assert "discarding further notifications" in caplog.text
+    assert comp._pending_changed_nodes == set()
+
+
+def test_computation_structural_events_report_the_nodes_they_touch():
+    """Deleting and renaming name the nodes involved, not the whole graph."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    comp.add_node("b", value=2)
+    comp.add_node("c", value=3)
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+
+    comp.delete_node("c")
+    assert events[-1].graph_changed
+    assert events[-1].changed_nodes == {to_nodekey("c")}
+    assert to_nodekey("c") not in events[-1].states
+
+    comp.rename_node("a", "z")
+    assert events[-1].changed_nodes == {to_nodekey("a"), to_nodekey("z")}
+    assert events[-1].states[to_nodekey("z")] == States.UPTODATE
+
+
+def test_computation_copy_does_not_carry_subscriptions():
+    """A copy is a new object; observers of the original must not follow it."""
+    comp = Computation()
+    comp.add_node("a", value=1)
+    events: list[ComputationEvent] = []
+    comp.subscribe(events.append)
+    events.clear()
+
+    duplicate = comp.copy()
+    duplicate.insert("a", 2)
+
+    assert events == []
+    assert duplicate._subscriptions == []
 
 
 def test_basic():
@@ -3975,3 +4235,194 @@ class TestToDict:
         result = comp.to_dict()
         assert result[to_nodekey("foo")] == 1
         assert result[to_nodekey("bar")] == 2
+
+
+class TestUnsubscribedComputationsPayNothing:
+    """Callers who never subscribe must pay nothing for the machinery.
+
+    That is the whole basis on which it was added to the core class.
+
+    The regression this guards is subtle and was invisible to every functional
+    test: ``_set_states`` materialised its keys into a tuple so they could be
+    read a second time for the event payload. Callers pass a *set*, and
+    ``set.update(set)`` reuses the hashes the source set already holds while
+    ``set.update(tuple)`` recomputes every one --- so staleness propagation
+    silently gained one hash per descendant node per insert, measured at 8.4%
+    on a 400-node chain.
+    """
+
+    @staticmethod
+    def _chain(length: int) -> Computation:
+        comp = Computation()
+        comp.add_node("x0", value=0.0)
+        for i in range(1, length):
+            comp.add_node(f"x{i}", (lambda p: p + 1), kwds={"p": f"x{i - 1}"})
+        return comp
+
+    @staticmethod
+    def _count_hashes(action) -> int:
+        original = NodeKey.__hash__
+        calls = [0]
+
+        def counting(self):
+            calls[0] += 1
+            return original(self)
+
+        NodeKey.__hash__ = counting
+        try:
+            action()
+        finally:
+            NodeKey.__hash__ = original
+        return calls[0]
+
+    def test_staleness_does_not_rehash_every_node_when_unsubscribed(self):
+        """Measured per extra stale node, so fixed overheads drop out.
+
+        Propagation inherently costs about 7 hashes per node. Materialising the
+        keys adds exactly one more, because the merge into the state map can no
+        longer reuse the source set's hashes. The slope is what distinguishes
+        the two, and it is stable: 7.0 against 8.0 when the regression is present.
+        """
+        short, long_ = self._chain(100), self._chain(400)
+        short.insert("x0", 1.0)
+        long_.insert("x0", 1.0)  # warm both, so only propagation is measured
+
+        small = self._count_hashes(lambda: short.insert("x0", 2.0))
+        large = self._count_hashes(lambda: long_.insert("x0", 2.0))
+        per_node = (large - small) / 300
+
+        assert per_node < 7.5, (
+            f"{per_node:.1f} hashes per stale node; about 7 is expected and 8 means "
+            "the keys are rehashed on merge rather than reusing the set's own"
+        )
+
+    def test_a_subscriber_still_learns_about_every_changed_node(self):
+        """The optimisation must not cost the event its completeness."""
+        comp = self._chain(60)
+        comp.compute_all()
+        events = []
+        comp.subscribe(events.append)
+
+        comp.insert("x0", 99.0)
+
+        assert len(events) == 1
+        changed = {str(node) for node in events[0].changed_nodes}
+        assert "x0" in changed
+        # every descendant went stale and must be reported
+        assert {f"x{i}" for i in range(1, 60)} <= changed
+
+
+class TestSubscriberLifetimeAcrossEveryCallableKind:
+    """A matrix over the kinds of callable, not a test per bug found.
+
+    The bug this replaces was narrow --- ``inspect.ismethod`` is false for C
+    methods like ``deque.append``, so those were held strongly while the docs
+    promised weakly --- but the *class* of bug is wide: Python has many things
+    that are callable, they differ in whether an object stands behind them, and
+    a rule expressed in terms of one of them silently mis-handles the rest.
+
+    So the rule is asserted for every kind at once. A callable kind that nobody
+    thought about does not quietly get the wrong lifetime; it fails here until
+    someone decides which column it belongs in.
+    """
+
+    class Watcher:
+        """An ordinary object with a Python-level handler."""
+
+        def on_event(self, event):
+            """Ignore the event; only its lifetime is under test."""
+
+        def __call__(self, event):
+            """Make instances callable, for the callable-object case."""
+
+    #: (label, build an owner, take a callback from it, is it held weakly).
+    #: Weakly whenever a ``__self__`` stands behind the callback and that owner
+    #: supports weak references; strongly otherwise.
+    CALLABLE_KINDS = [
+        ("python bound method", Watcher, lambda o: o.on_event, True),
+        ("C bound method, weak-able owner", deque, lambda o: o.append, True),
+        ("C bound method on a set", set, lambda o: o.add, True),
+        ("C bound method, no weakref", list, lambda o: o.append, False),
+        ("callable object", Watcher, lambda o: o, False),
+        ("closure over the owner", Watcher, lambda o: lambda event: o, False),
+        ("partial over the owner", Watcher, lambda o: functools.partial(lambda x, event: x, o), False),
+    ]
+
+    @staticmethod
+    def _weakly_referenceable(obj) -> bool:
+        """Report whether ``obj`` supports weak references at all."""
+        try:
+            weakref.ref(obj)
+        except TypeError:
+            return False
+        return True
+
+    @pytest.mark.parametrize(
+        ("label", "make_owner", "take_callback", "expect_weak"),
+        CALLABLE_KINDS,
+        ids=[case[0] for case in CALLABLE_KINDS],
+    )
+    def test_each_callable_kind_has_the_documented_lifetime(self, label, make_owner, take_callback, expect_weak):
+        """Weak means the owner is collectable; strong means it is retained."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        owner = make_owner()
+        observable = self._weakly_referenceable(owner)
+        assert observable or not expect_weak, f"{label} cannot be held weakly: its owner takes no weak reference"
+
+        comp.subscribe(take_callback(owner))
+        ref = weakref.ref(owner) if observable else None
+        del owner
+        gc.collect()
+        comp.insert("a", 2)
+
+        if expect_weak:
+            assert ref is not None
+            assert ref() is None, f"{label}: the owner should have been collected"
+            assert len(comp._subscriptions) == 0, f"{label}: the dead subscription should have been dropped"
+        else:
+            if ref is not None:
+                assert ref() is not None, f"{label}: the owner should have been retained"
+            assert len(comp._subscriptions) == 1, f"{label}: the subscription should still be live"
+
+    def test_a_strongly_held_subscriber_keeps_receiving_events(self):
+        """Strong is only the safe default if delivery actually continues."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        received = []
+        comp.subscribe(lambda event: received.append(event))
+        gc.collect()
+
+        comp.insert("a", 2)
+
+        assert len(received) == 1
+
+    def test_a_subscriber_on_an_unweakreferenceable_owner_keeps_delivering(self):
+        """``list`` takes no weak reference, so ``events.append`` stays strong.
+
+        The consequence that matters is delivery: a subscription that cannot be
+        held weakly must go on working rather than being dropped.
+        """
+        comp = Computation()
+        comp.add_node("a", value=1)
+        events = []
+        comp.subscribe(events.append)
+
+        gc.collect()
+        comp.insert("a", 2)
+        comp.insert("a", 3)
+
+        assert len(events) == 2, "a strongly held subscriber must keep receiving events"
+
+    def test_a_weakly_held_subscriber_stops_rather_than_erroring(self):
+        """A collected owner must be dropped quietly, not raise mid-mutation."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        watcher = self.Watcher()
+        comp.subscribe(watcher.on_event)
+        del watcher
+        gc.collect()
+
+        comp.insert("a", 2)  # must not raise
+
+        assert len(comp._subscriptions) == 0

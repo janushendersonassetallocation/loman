@@ -9,6 +9,7 @@ import loman.visualization as viz
 from loman.computeengine import (
     C,
     Computation,
+    ComputationEvent,
     block,
     calc_node,
     computation_factory,
@@ -42,6 +43,7 @@ __all__ = [
     "C",
     "CannotInsertToPlaceholderNodeError",
     "Computation",
+    "ComputationEvent",
     "ComputationFactory",  # Backward compatibility
     "ComputationSerializer",
     "ExecutionPlan",

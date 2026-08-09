@@ -9,3 +9,4 @@ practice. Each notebook is exported as a self-contained HTML page.
 - [Large Repeated Blocks](notebooks/pipeline_example.html)
 - [Serialization](notebooks/serialization.html)
 - [Validation and Planning](notebooks/validation_and_planning.html)
+- [Live Computation Widget](notebooks/ui_widget.html)
