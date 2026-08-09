@@ -6,7 +6,16 @@ where nodes represent data or calculations, and edges represent dependencies.
 
 import loman.util as util
 import loman.visualization as viz
-from loman.computeengine import C, Computation, block, calc_node, computation_factory, input_node, node
+from loman.computeengine import (
+    C,
+    Computation,
+    ComputationEvent,
+    block,
+    calc_node,
+    computation_factory,
+    input_node,
+    node,
+)
 from loman.consts import NodeTransformations, States
 from loman.exception import (
     CannotInsertToPlaceholderNodeError,
@@ -30,6 +39,7 @@ __all__ = [
     "C",
     "CannotInsertToPlaceholderNodeError",
     "Computation",
+    "ComputationEvent",
     "ComputationFactory",  # Backward compatibility
     "ComputationSerializer",
     "ExecutionPlan",

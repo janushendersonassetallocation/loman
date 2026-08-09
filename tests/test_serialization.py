@@ -1541,6 +1541,51 @@ class TestJsonRoundtrip:
         assert ("a", "b") in edges
 
 
+class TestJsonFileEncoding:
+    """Tests that JSON files are always read and written as UTF-8, not the locale default."""
+
+    def test_json_file_roundtrip_non_ascii(self, tmp_path):
+        """A non-ASCII node name and value roundtrip through a file path, and the file is UTF-8."""
+        comp = Computation()
+        comp.add_node("π_estimate")
+        comp.insert("π_estimate", "café ☕ 日本語")
+
+        path = str(tmp_path / "comp.json")
+        comp.write_json(path)
+
+        # The file must be decodable as UTF-8 and parse as JSON.
+        raw = (tmp_path / "comp.json").read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+        assert "version" in data
+
+        comp2 = Computation.read_json(path)
+        assert comp2.state("π_estimate") == States.UPTODATE
+        assert comp2.value("π_estimate") == "café ☕ 日本語"
+
+    def test_json_file_open_uses_explicit_utf8(self, tmp_path, monkeypatch):
+        """write_json and read_json pass encoding='utf-8' rather than relying on the locale default."""
+        import builtins
+
+        real_open = builtins.open
+        encodings = []
+
+        def recording_open(file, mode="r", *args, **kwargs):
+            if "b" not in mode:
+                encodings.append(kwargs.get("encoding"))
+            return real_open(file, mode, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", recording_open)
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        path = str(tmp_path / "comp.json")
+        comp.write_json(path)
+        Computation.read_json(path)
+
+        assert encodings == ["utf-8", "utf-8"]
+
+
 def _coverage_module_level_function():
     """Module-level function used to force an import round-trip mismatch."""
     return None
