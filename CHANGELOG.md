@@ -1,10 +1,49 @@
 # Change Log
 
 ## [unreleased]
+- CI: the Graphviz install now retries transient package-feed failures, falls back between
+  Chocolatey and winget, and fails loudly when `dot` is still missing rather than letting
+  the test run report it as a hundred unrelated failures
 - Allow `Computation.compute` to compute one or more blocks
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
+- Added `Computation.subscribe` and `ComputationEvent` for observing batched changes to a
+  computation. A computation with no subscribers pays no measurable cost: state propagation
+  merges keys set-to-set rather than materialising them, so hashing does not grow. A callback
+  with an object behind it is held weakly, whether the method is written in Python or in C,
+  so `comp.subscribe(events.append)` no longer retains `events` for the life of the
+  computation; owners that support no weak reference, such as `list`, still fall back to a
+  strong one
+- Added the `loman[ui]` extra, providing `Computation.widget()`: an interactive notebook graph
+  that follows its computation, with node inspection, drill-down into blocks, scalar input
+  editing and compute controls
+- `GraphView` now exposes `original_nodes`, `composite_nodes` and `node_index_map`, so callers
+  can map rendered nodes back to computation nodes
+- The widget's detail panel renders DataFrames, Series, arrays and nested data, with editable
+  cells on tabular input nodes, a tail window onto long frames, and a "Show full" button that
+  hands the node to the notebook to render with its own tools
+- The widget matches the background of the page it is embedded in, and takes its light or dark
+  theme from that rather than from the operating system setting. Where the host publishes a
+  shadcn-style palette, as marimo does, the widget wears that palette directly
+- Clicking a block in the widget opens it where it stands; alt-clicking isolates it, so the
+  view shows only that block's top layer and the breadcrumb leads back out
+- The widget's graph has no background of its own, so it sits on the host's and follows its
+  theme: Graphviz is told `bgcolor="transparent"` and its ink is retinted, while node fills
+  keep the state colours and node labels are inked against the fill they land on
+- The widget's detail panel opens on a click and closes on Escape, so the graph has the
+  full width whenever nothing is being inspected
+- The widget keeps its recent layouts, so navigating back out of a block does not re-run
+  Graphviz over a picture it has already drawn
+- BUGFIX: clicking an open block's title did not close it. Pressing anywhere in the graph
+  entered the panning state immediately, which made the canvas inert to hit-testing before
+  the button came back up; panning now waits for the pointer to actually move. The title bar
+  is also the close target now, rather than the width of the word
+- BUGFIX: the widget's "Show full" resolved the node by its string label, so it returned the
+  wrong value where a node named `1` and a node named `"1"` both exist. It now carries the
+  node key, and `full_view_name` reports the name with its original type, as
+  `selected_name` does
+- Added `fit_on_render` to scale the graph to the pane on every render
 
 ## [0.5.3] (2025-06-20)
 
