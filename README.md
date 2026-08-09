@@ -5,7 +5,7 @@
 
 ### Manage complex calculation flow via robust DAG-based dependency logic in Python
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-green.svg)](LICENSE)
 [![Python versions](https://img.shields.io/badge/Python-3.11%20•%203.12%20•%203.13%20•%203.14-blue?logo=python)](https://www.python.org/)
 [![PyPI - Version](https://img.shields.io/pypi/v/loman.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Wheel](https://img.shields.io/pypi/wheel/loman.svg)](https://pypi.python.org/pypi/loman)
