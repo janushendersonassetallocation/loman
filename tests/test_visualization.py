@@ -14,6 +14,8 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 import loman.computeengine
 import loman.visualization
@@ -32,8 +34,10 @@ from loman.visualization import (
     ShapeByType,
     StandardGroup,
     StandardStylingOverrides,
+    aggregate_states,
     create_root_graph,
     create_subgraph,
+    create_viz_dag,
 )
 from tests.conftest import (
     BasicFourNodeComputation,
@@ -174,6 +178,34 @@ def test_simple():
         node["d"]["attributes"]["fillcolor"] == loman.visualization.ColorByState.DEFAULT_STATE_COLORS[States.UPTODATE]
     )
     assert node["d"]["attributes"]["style"] == "filled"
+
+
+def test_graph_view_exposes_lossless_widget_identity_maps():
+    """Rendered IDs remain distinct for node names with identical labels."""
+    comp = Computation()
+    comp.add_node(1, value="integer")
+    comp.add_node("1", value="string")
+
+    view = comp.draw(collapse_all=False)
+
+    integer_key = to_nodekey(1)
+    string_key = to_nodekey("1")
+    assert view.node_index_map[integer_key] != view.node_index_map[string_key]
+    assert view.original_nodes[integer_key] == [integer_key]
+    assert view.original_nodes[string_key] == [string_key]
+    assert view.composite_nodes == set()
+
+
+def test_graph_view_exposes_collapsed_composite_members():
+    """A composite rendered node maps back to every original member."""
+    comp = create_example_block_computation()
+
+    view = comp.draw()
+
+    foo = to_nodekey("foo")
+    assert foo in view.composite_nodes
+    assert {str(node) for node in view.original_nodes[foo]} == {"foo/a", "foo/b", "foo/c", "foo/d"}
+    assert view.node_index_map[foo].startswith("n")
 
 
 def test_with_groups():
@@ -1292,3 +1324,65 @@ class TestVisualizationVizDagFormatterNone:
         # Should still produce valid SVG
         svg = v.svg()
         assert svg is not None
+
+    def test_create_viz_dag_without_an_index_map(self):
+        """Callers that do not need node identity may omit the out-parameter."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", lambda a: a + 1)
+        view = comp.draw(collapse_all=False)
+
+        viz_dag = create_viz_dag(
+            view.struct_dag,
+            comp.dag,
+            NodeFormatter.create(),
+            view.original_nodes,
+            view.composite_nodes,
+        )
+
+        assert set(viz_dag.nodes) == {"n0", "n1"}
+
+
+class TestAggregateStatesProperties:
+    """Properties of the state ladder shared by the renderer and the widget.
+
+    ``aggregate_states`` decides both what colour a rendered node is painted and
+    what state the widget reports for it, so its behaviour is a contract rather
+    than an implementation detail.
+    """
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1), st.data())
+    def test_member_order_does_not_change_the_result(self, states, data):
+        """A block's members have no meaningful order, so neither can its state."""
+        shuffled = data.draw(st.permutations(states))
+
+        assert aggregate_states(states) == aggregate_states(shuffled)
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1))
+    def test_one_failed_member_makes_the_block_an_error(self, states):
+        """An error anywhere in a block must never be hidden by its siblings."""
+        assert aggregate_states([*states, States.ERROR]) == States.ERROR
+
+    @pytest.mark.property
+    @given(st.sampled_from(list(States)), st.integers(min_value=1, max_value=12))
+    def test_unanimous_members_report_that_state(self, state, count):
+        """A block where everything agrees has no ambiguity to report."""
+        assert aggregate_states([state] * count) == state
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1))
+    def test_result_is_either_a_member_state_or_mixed(self, states):
+        """The ladder can only ever pick a real member state, or give up."""
+        result = aggregate_states(states)
+
+        assert result is None or result in states
+
+    @pytest.mark.property
+    @given(st.lists(st.sampled_from(list(States)), min_size=1))
+    def test_every_outcome_has_a_colour_to_paint(self, states):
+        """No combination of member states can render a node unstyled."""
+        formatter = ColorByState()
+
+        assert aggregate_states(states) in formatter.state_colors
