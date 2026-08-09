@@ -363,7 +363,7 @@ class NdArrayTransformer(CustomTransformer):
         return {
             "shape": list(o.shape),
             "dtype": o.dtype.str,
-            "values": encode_1d(transformer, o.ravel()),
+            "values": encode_1d(transformer, np.ravel(o)),
         }
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:

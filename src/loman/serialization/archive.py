@@ -27,7 +27,6 @@ failing somewhere deep in a decoder.
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import io
 import json
 import zipfile
@@ -79,8 +78,16 @@ _SERIES_COLUMN = "__loman_series__"
 
 
 def has_parquet_support() -> bool:
-    """True when pyarrow is importable, so parquet payloads can be used."""
-    return importlib.util.find_spec("pyarrow") is not None
+    """True when pyarrow is importable, so parquet payloads can be used.
+
+    A real import rather than :func:`importlib.util.find_spec`, so that
+    dependency tooling can see that the ``archive`` extra is actually used.
+    """
+    try:
+        import pyarrow as pa  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def is_archive_path(path: str) -> bool:
