@@ -8,7 +8,7 @@ command-execution policy: always prefer `make <target>`; never invoke
 failures surface before the slow test suite — and collect results:
 
 1. `make fmt` — pre-commit hooks + linting (ruff format/check, markdownlint, bandit, actionlint, …)
-2. `make typecheck` — static type checking (`ty`, and `mypy --strict` if configured) over `src/`
+2. `make typecheck` — static type checking over `src/`; this repo uses `ty` (mypy is not a dependency and not configured)
 3. `make docs-coverage` — docstring coverage (interrogate) over `src/`
 4. `make deptry` — unused/missing/misplaced dependency analysis
 5. `make security` — pip-audit + bandit scans
