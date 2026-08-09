@@ -39,9 +39,32 @@ replaced by payload references, alongside the payload entries. Because there is
 one schema there is one version counter, one compatibility policy, and one
 golden corpus.
 
-`ComputationSerializer` exposes `_encode_value` / `_decode_value` as the single
-hook the archive overrides. Anything that needs to intercept values should go
-through those rather than duplicating the node walk.
+## Payload references live in the transformer
+
+Bulky values are redirected out of the document by a `PayloadSink` attached to
+the `Transformer`, not by anything in `ComputationSerializer`. That placement is
+the whole point: `Transformer.to_dict` is the one function every value passes
+through, at every depth, so a sink catches a frame nested inside a dict, a list
+element, or a dataclass field just as readily as a node's whole value.
+
+An earlier arrangement hooked the node value instead. It looked equivalent and
+was not: a 20k-row frame one level inside a dict produced a 417KB manifest,
+because the size estimate for a `dict` is zero and the frame never got its own
+entry. Anything that needs to intercept values must attach a sink rather than
+wrap the node walk, or it will reintroduce that hole.
+
+`Transformer.with_payloads(sink=..., source=...)` returns a shallow copy sharing
+the type registries. Copying rather than mutating is what lets one
+`ArchiveSerializer` serve several concurrent reads and writes.
+
+Two things to be careful of when touching this:
+
+- **Recursion.** The sink's JSON fallback must encode through a transformer with
+  *no* sink (`_PayloadWriter._plain`). Encoding through the sink-carrying one
+  would offload the value currently being written, forever.
+- **Cost.** `to_dict` runs the sink check once per element of every container,
+  so it tests `self._payload_sink is not None` before anything else. Keep that
+  ordering; `should_offload` itself must stay cheap.
 
 ## Format versioning
 

@@ -216,23 +216,10 @@ class ComputationSerializer:
             )
 
         try:
-            return self._encode_value(node_key, raw_value), True
+            return self._t.to_dict(raw_value), True
         except (UntransformableTypeError, ValueError) as exc:
             msg = f"Cannot serialize value of node {node_key!r}: {exc}"
             raise SerializationError(msg) from exc
-
-    def _encode_value(self, node_key: Any, value: Any) -> Any:
-        """Encode a single node value.
-
-        Subclasses override this to redirect large values elsewhere — see
-        :mod:`loman.serialization.archive`, which writes them to separate
-        entries in a zip and leaves a reference in their place.
-        """
-        return self._t.to_dict(value)
-
-    def _decode_value(self, encoded: Any) -> Any:
-        """Decode a single node value, inverting :meth:`_encode_value`."""
-        return self._t.from_dict(encoded)
 
     def _serialize_node_func(self, node_key: Any, raw_func: Any) -> Any:
         """Return the encoded function for a node, or ``None`` if it cannot be serialized.
@@ -364,7 +351,7 @@ class ComputationSerializer:
                         traceback=encoded_value["traceback"],
                     )
                 else:
-                    value = self._decode_value(encoded_value)
+                    value = self._t.from_dict(encoded_value)
             else:
                 value = None
 

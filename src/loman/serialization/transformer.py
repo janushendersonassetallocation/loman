@@ -1,6 +1,7 @@
 """Object serialization and transformation framework."""
 
 import contextlib
+import copy
 import dataclasses
 import datetime
 import graphlib
@@ -23,6 +24,10 @@ except ImportError:  # pragma: no cover
     HAS_ATTRS = False
 
 KEY_TYPE = "type"
+# Marks a reference standing in for a value stored outside the document.
+# Deliberately not a "type" discriminator: it is resolved before type dispatch,
+# so it can never collide with a registered transformer name.
+PAYLOAD_MARKER = "__loman_payload__"
 KEY_CLASS = "class"
 KEY_VALUES = "values"
 KEY_DATA = "data"
@@ -110,6 +115,36 @@ class Transformable(ABC):
         pass  # pragma: no cover
 
 
+class PayloadSink(ABC):
+    """Somewhere bulky values can be stored outside the document.
+
+    A transformer with a sink attached replaces every value the sink accepts
+    with a small reference, wherever that value appears — a node's value, an
+    element of a list, a field of a dataclass, a value in a dict.  Deciding
+    this at the transformer rather than at the node keeps a frame buried
+    three levels down from being inlined as JSON.
+    """
+
+    @abstractmethod
+    def should_offload(self, o: object) -> bool:
+        """True when *o* is worth storing outside the document."""
+        pass  # pragma: no cover
+
+    @abstractmethod
+    def write(self, o: object) -> dict[str, Any]:
+        """Store *o* and return the reference that stands in for it."""
+        pass  # pragma: no cover
+
+
+class PayloadSource(ABC):
+    """The read side of a :class:`PayloadSink`."""
+
+    @abstractmethod
+    def read(self, ref: dict[str, Any]) -> object:
+        """Materialise the value *ref* points at."""
+        pass  # pragma: no cover
+
+
 class Transformer:
     """Main transformer class for object serialization and deserialization."""
 
@@ -124,6 +159,27 @@ class Transformer:
         self._transformable_types: dict[str, type[Transformable]] = {}
         self._attrs_types: dict[str, type] = {}
         self._dataclass_types: dict[str, type] = {}
+
+        self._payload_sink: PayloadSink | None = None
+        self._payload_source: PayloadSource | None = None
+
+    def with_payloads(
+        self,
+        *,
+        sink: PayloadSink | None = None,
+        source: PayloadSource | None = None,
+    ) -> "Transformer":
+        """Return a view of this transformer that redirects bulky values.
+
+        A shallow copy, so the type registries are shared rather than rebuilt —
+        they are only read during an operation.  Returning a copy instead of
+        mutating in place is what lets one serializer serve several concurrent
+        reads and writes without them treading on each other.
+        """
+        clone = copy.copy(self)
+        clone._payload_sink = sink
+        clone._payload_source = source
+        return clone
 
     def register(self, t: CustomTransformer | type[Transformable] | type) -> None:
         """Register a transformer, transformable type, or regular type."""
@@ -194,6 +250,13 @@ class Transformer:
 
     def to_dict(self, o: object) -> Any:
         """Convert an object to a serializable dictionary representation."""
+        # Checked before anything else so a bulky value is redirected wherever
+        # it appears, not merely when it happens to be a whole node's value.
+        # The attribute test is what keeps this free for the common case of no
+        # sink at all, since this runs once per element of every container.
+        if self._payload_sink is not None and self._payload_sink.should_offload(o):
+            return self._payload_sink.write(o)
+
         if isinstance(o, str) or o is None or o is True or o is False or isinstance(o, (int, float)):
             return o
         elif isinstance(o, tuple):
@@ -263,6 +326,18 @@ class Transformer:
         elif isinstance(d, list):
             return [self.from_dict(x) for x in d]
         elif isinstance(d, dict):
+            # A payload reference carries no "type", so it has to be recognised
+            # before the plain-dict branch would recurse into its fields.
+            if d.get(PAYLOAD_MARKER):
+                if self._payload_source is None:
+                    msg = (
+                        "This document stores values outside itself, but no payload source "
+                        "was supplied to read them. Use Computation.read_archive rather than "
+                        "read_json."
+                    )
+                    raise UnrecognizedTypeError(msg)
+                return self._payload_source.read(d)
+
             type_ = d.get(KEY_TYPE)
             if type_ is None:
                 return {k: self.from_dict(v) for k, v in d.items()}

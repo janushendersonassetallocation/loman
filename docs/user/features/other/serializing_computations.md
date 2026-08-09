@@ -249,6 +249,31 @@ several times smaller than the equivalent JSON and considerably faster to read.
 Purely random float64 is the worst case for any encoding and still comes out
 ahead, just less dramatically.
 
+### Bulky values are found at any depth
+
+A frame does not have to be a node's whole value to get its own payload. Any
+DataFrame, Series or array above the size threshold is stored out of line
+wherever it appears — inside a dict, a list, a tuple, a dataclass, an attrs
+object, or several levels down:
+
+```pycon
+>>> import numpy as np
+>>> prices = pd.DataFrame({'px': np.arange(50000, dtype='float64')})
+>>> weights = np.arange(50000, dtype='float64')
+>>> comp = Computation()
+>>> comp.add_node('bundle', value={'prices': prices, 'weights': weights})
+>>> comp.write_archive('run.loman')
+```
+
+That writes two payloads and a manifest holding two small references, rather
+than inlining both values as JSON. Each frame in a collection gets its own
+entry, so a list of ten frames becomes ten payloads and can be read back
+selectively.
+
+Values below the threshold stay inline regardless of depth — a two-row frame is
+not worth a zip entry. Set `inline_threshold=0` to force everything out of line,
+or a large value to keep everything in.
+
 ### Reading part of a computation
 
 Because each large value is a separate zip entry, an archive can be read
@@ -423,6 +448,11 @@ identity.
   "kind": "dataframe"
 }
 ```
+
+A reference can appear anywhere a value can, at any depth — a node's value, an
+element of a list, a value in a dict, a field of a dataclass. A JSON document
+has nowhere to put the payloads, so it always inlines; only archives use
+references.
 
 **ERROR node value** (exception preserved as strings for post-mortem)
 

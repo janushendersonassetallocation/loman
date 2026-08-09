@@ -38,6 +38,7 @@ import pandas as pd
 from loman.exception import SerializationError
 
 from .computation import ComputationSerializer
+from .transformer import PAYLOAD_MARKER, PayloadSink, PayloadSource, Transformer
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Iterable
@@ -51,8 +52,6 @@ PAYLOAD_DIR = "payloads"
 # Values estimated smaller than this stay inline in the manifest.  A graph of
 # scalars should not produce a directory full of tiny zip entries.
 DEFAULT_INLINE_THRESHOLD = 8192
-
-PAYLOAD_MARKER = "__loman_payload__"
 
 ENCODING_PARQUET = "parquet"
 ENCODING_NPY = "npy"
@@ -110,12 +109,22 @@ def _estimated_size(value: Any) -> int:
     return 0
 
 
-class _PayloadWriter:
-    """Accumulates out-of-line payloads while a manifest is being built."""
+class _PayloadWriter(PayloadSink):
+    """Accumulates out-of-line payloads while a manifest is being built.
 
-    def __init__(self, *, inline_threshold: int, use_parquet: bool) -> None:
+    Attached to a transformer, so it sees every frame, Series and array in the
+    computation — including those nested inside dicts, lists, tuples,
+    dataclasses and attrs objects — not merely those that happen to be a whole
+    node's value.
+    """
+
+    def __init__(self, *, inline_threshold: int, use_parquet: bool, plain: Transformer) -> None:
         self._inline_threshold = inline_threshold
         self._use_parquet = use_parquet
+        # A transformer with no sink of its own, used for the JSON fallback.
+        # Encoding through the sink-carrying transformer would re-offload the
+        # very value being written and recurse without end.
+        self._plain = plain
         self._next_id = 0
         # id -> (encoding, bytes)
         self.payloads: dict[str, tuple[str, bytes]] = {}
@@ -125,20 +134,20 @@ class _PayloadWriter:
         self._next_id += 1
         return payload_id
 
-    def should_offload(self, value: Any) -> bool:
-        """True when *value* is big enough to be worth its own zip entry."""
-        return _estimated_size(value) >= self._inline_threshold
+    def should_offload(self, o: object) -> bool:
+        """True when *o* is big enough to be worth its own zip entry."""
+        return _estimated_size(o) >= self._inline_threshold
 
-    def write(self, value: Any, transformer_encode: Any) -> dict[str, Any]:
-        """Store *value* as a payload and return the manifest reference for it."""
-        encoding, blob, extra = self._encode(value, transformer_encode)
+    def write(self, o: object) -> dict[str, Any]:
+        """Store *o* as a payload and return the manifest reference for it."""
+        encoding, blob, extra = self._encode(o)
         payload_id = self._new_id()
         self.payloads[payload_id] = (encoding, blob)
         ref: dict[str, Any] = {PAYLOAD_MARKER: True, "id": payload_id, "encoding": encoding}
         ref.update(extra)
         return ref
 
-    def _encode(self, value: Any, transformer_encode: Any) -> tuple[str, bytes, dict[str, Any]]:
+    def _encode(self, value: Any) -> tuple[str, bytes, dict[str, Any]]:
         """Pick the best available encoding for *value* and apply it."""
         if self._use_parquet and isinstance(value, pd.DataFrame):
             blob = _try_dataframe_to_parquet(value)
@@ -153,7 +162,7 @@ class _PayloadWriter:
                     blob,
                     {
                         "kind": "series",
-                        "name": transformer_encode(value.name),
+                        "name": self._plain.to_dict(value.name),
                         **_index_extras(value.index),
                     },
                 )
@@ -166,7 +175,7 @@ class _PayloadWriter:
             return ENCODING_NPY, buf.getvalue(), {}
 
         # Everything else, including frames when pyarrow is unavailable.
-        encoded = transformer_encode(value)
+        encoded = self._plain.to_dict(value)
         return ENCODING_JSON, json.dumps(encoded).encode("utf-8"), {}
 
 
@@ -208,12 +217,18 @@ def _restore_index_freq(obj: Any, ref: dict[str, Any]) -> Any:
     return obj
 
 
-class _PayloadReader:
-    """Reads payloads out of an open archive, on demand."""
+class _PayloadReader(PayloadSource):
+    """Reads payloads out of an open archive, on demand.
 
-    def __init__(self, zf: zipfile.ZipFile, transformer_decode: Any) -> None:
+    Attached to a transformer, so a reference is resolved wherever it appears
+    in a value, at any depth.
+    """
+
+    def __init__(self, zf: zipfile.ZipFile, plain: Transformer) -> None:
         self._zf = zf
-        self._decode = transformer_decode
+        # Decoding a JSON payload through the source-carrying transformer would
+        # be harmless but pointless; the plain one makes the intent explicit.
+        self._decode = plain.from_dict
 
     def read(self, ref: dict[str, Any]) -> Any:
         """Materialise the value a manifest reference points at."""
@@ -250,46 +265,6 @@ class _PayloadReader:
         return _restore_index_freq(frame, ref)
 
 
-class _ArchiveComputationSerializer(ComputationSerializer):
-    """A ComputationSerializer that offloads large values to archive payloads.
-
-    Constructed fresh for each dump or load by :class:`ArchiveSerializer`, and
-    bound to that operation's writer or reader.  Binding at construction rather
-    than stashing state on a long-lived object is what lets one
-    :class:`ArchiveSerializer` be reused, and used concurrently, without two
-    operations treading on each other.
-
-    It borrows the transformer of the serializer it wraps — shared by reference
-    and only read during an operation — so custom transformers keep working
-    inside an archive.
-    """
-
-    def __init__(
-        self,
-        base: ComputationSerializer,
-        *,
-        writer: _PayloadWriter | None = None,
-        reader: _PayloadReader | None = None,
-    ) -> None:
-        super().__init__(base._t, use_dill_for_functions=base._use_dill_for_functions)
-        self._writer = writer
-        self._reader = reader
-
-    def _encode_value(self, node_key: Any, value: Any) -> Any:
-        writer = self._writer
-        if writer is not None and writer.should_offload(value):
-            return writer.write(value, self._t.to_dict)
-        return self._t.to_dict(value)
-
-    def _decode_value(self, encoded: Any) -> Any:
-        if isinstance(encoded, dict) and encoded.get(PAYLOAD_MARKER):
-            if self._reader is None:  # pragma: no cover - guarded by callers
-                msg = "Cannot decode an archive payload reference outside an archive."
-                raise SerializationError(msg)
-            return self._reader.read(encoded)
-        return self._t.from_dict(encoded)
-
-
 class ArchiveSerializer:
     """Read and write ``.loman`` / ``.lm`` archives.
 
@@ -320,10 +295,23 @@ class ArchiveSerializer:
             raise SerializationError(msg)
         self._use_parquet = use_parquet
 
+    def _serializer_with(self, transformer: Transformer) -> ComputationSerializer:
+        """A serializer over *transformer*, built fresh for a single operation.
+
+        Nothing about an in-flight read or write is stored on ``self``, so one
+        ArchiveSerializer can serve several operations at once.
+        """
+        return ComputationSerializer(transformer, use_dill_for_functions=self._base._use_dill_for_functions)
+
     def dump(self, comp: Any, fp: BinaryIO) -> None:
         """Write *comp* to *fp* as an archive."""
-        writer = _PayloadWriter(inline_threshold=self._inline_threshold, use_parquet=self._use_parquet)
-        manifest = _ArchiveComputationSerializer(self._base, writer=writer)._to_dict(comp)
+        writer = _PayloadWriter(
+            inline_threshold=self._inline_threshold,
+            use_parquet=self._use_parquet,
+            plain=self._base._t,
+        )
+        serializer = self._serializer_with(self._base._t.with_payloads(sink=writer))
+        manifest = serializer._to_dict(comp)
 
         with zipfile.ZipFile(fp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr(MANIFEST_NAME, json.dumps(manifest))
@@ -351,9 +339,9 @@ class ArchiveSerializer:
                 raise SerializationError(msg) from exc
 
             manifest = json.loads(manifest_bytes.decode("utf-8"))
-            reader = _PayloadReader(zf, self._base._t.from_dict)
-            inner = _ArchiveComputationSerializer(self._base, reader=reader)
-            return inner._from_dict(manifest, only_nodes=None if nodes is None else set(nodes))
+            reader = _PayloadReader(zf, self._base._t)
+            serializer = self._serializer_with(self._base._t.with_payloads(source=reader))
+            return serializer._from_dict(manifest, only_nodes=None if nodes is None else set(nodes))
 
     def payload_summary(self, fp: BinaryIO) -> pd.DataFrame:
         """Describe an archive's contents without decoding any values.

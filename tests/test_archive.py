@@ -25,6 +25,7 @@ from loman.serialization.archive import (
     has_parquet_support,
     is_archive_path,
 )
+from loman.serialization.transformer import UnrecognizedTypeError
 from tests.format_fixtures import add_one, double
 
 requires_parquet = pytest.mark.skipif(not has_parquet_support(), reason="pyarrow is not installed")
@@ -251,6 +252,139 @@ def test_excluded_nodes_are_not_written():
     got = _roundtrip(comp)
     assert got.state("secret") == States.UNINITIALIZED
     assert got.v.kept == 1
+
+
+# ---------------------------------------------------------------------------
+# Payload references reach every depth
+#
+# Offloading used to happen per node value, so a frame nested inside a dict was
+# inlined as JSON — a 20k-row frame produced a 417KB manifest instead of a
+# payload. The decision now lives in the transformer, so it applies wherever a
+# bulky value appears.
+# ---------------------------------------------------------------------------
+
+
+def _payload_names(buf: io.BytesIO) -> list[str]:
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as zf:
+        return sorted(n for n in zf.namelist() if n.startswith("payloads/"))
+
+
+def _manifest_size(buf: io.BytesIO) -> int:
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as zf:
+        return zf.getinfo(MANIFEST_NAME).file_size
+
+
+@pytest.mark.parametrize(
+    ("label", "wrap", "unwrap"),
+    [
+        ("bare", lambda f: f, lambda v: v),
+        ("in a dict", lambda f: {"prices": f}, lambda v: v["prices"]),
+        ("in a list", lambda f: [f], lambda v: v[0]),
+        ("in a tuple", lambda f: (f,), lambda v: v[0]),
+        ("nested twice", lambda f: {"outer": [f]}, lambda v: v["outer"][0]),
+    ],
+)
+def test_frames_become_payloads_at_any_depth(label, wrap, unwrap):
+    """A frame is offloaded wherever it sits, not only as a whole node value."""
+    frame = _big_frame()
+    comp = Computation()
+    comp.add_node("x", value=wrap(frame))
+
+    buf = io.BytesIO()
+    comp.write_archive(buf)
+
+    assert len(_payload_names(buf)) == 1, f"{label}: expected exactly one payload"
+    # The manifest holds a reference, not the data.
+    assert _manifest_size(buf) < 2000, f"{label}: frame leaked into the manifest"
+
+    buf.seek(0)
+    pd.testing.assert_frame_equal(unwrap(Computation.read_archive(buf).v.x), frame)
+
+
+def test_each_frame_in_a_collection_gets_its_own_payload():
+    """Several frames in one value are stored separately, not as one blob."""
+    frames = [_big_frame(), _big_frame(), _big_frame()]
+    comp = Computation()
+    comp.add_node("x", value=frames)
+
+    buf = io.BytesIO()
+    comp.write_archive(buf)
+    assert len(_payload_names(buf)) == 3
+
+    buf.seek(0)
+    got = Computation.read_archive(buf).v.x
+    for expected, actual in zip(frames, got, strict=True):
+        pd.testing.assert_frame_equal(actual, expected)
+
+
+def test_arrays_and_series_also_offload_when_nested():
+    """The rule is about bulk, not about being a DataFrame."""
+    comp = Computation()
+    comp.add_node(
+        "x",
+        value={
+            "arr": np.random.default_rng(0).standard_normal((BIG, 4)),
+            "series": pd.Series(np.random.default_rng(1).standard_normal(BIG), name="s"),
+            "scalar": 42,
+        },
+    )
+    buf = io.BytesIO()
+    comp.write_archive(buf)
+
+    names = _payload_names(buf)
+    assert len(names) == 2, f"expected the array and the Series to offload, got {names}"
+
+    buf.seek(0)
+    got = Computation.read_archive(buf).v.x
+    assert got["scalar"] == 42
+    assert got["arr"].shape == (BIG, 4)
+    assert got["series"].name == "s"
+
+
+def test_nested_frame_falls_back_to_json_without_recursing():
+    """The JSON fallback must not re-enter the sink that invoked it.
+
+    Encoding a payload through the sink-carrying transformer would offload the
+    very value being written, forever.
+    """
+    comp = Computation()
+    comp.add_node("x", value={"k": _big_frame()})
+
+    buf = io.BytesIO()
+    ArchiveSerializer(use_parquet=False).dump(comp, buf)
+    assert _payload_names(buf) == ["payloads/p0.json"]
+
+    buf.seek(0)
+    got = ArchiveSerializer(use_parquet=False).load(buf).v.x
+    pd.testing.assert_frame_equal(got["k"], comp.v.x["k"])
+
+
+def test_small_nested_frames_stay_inline():
+    """Depth does not override the size threshold."""
+    comp = Computation()
+    comp.add_node("x", value={"tiny": pd.DataFrame({"a": [1, 2]})})
+    buf = io.BytesIO()
+    comp.write_archive(buf)
+    assert _payload_names(buf) == []
+
+    buf.seek(0)
+    assert Computation.read_archive(buf).v.x["tiny"].shape == (2, 1)
+
+
+def test_a_manifest_read_as_plain_json_explains_the_missing_payloads():
+    """Extracting manifest.json and using read_json cannot silently half-work."""
+    comp = Computation()
+    comp.add_node("frame", value=_big_frame())
+    buf = io.BytesIO()
+    comp.write_archive(buf)
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as zf:
+        manifest = zf.read(MANIFEST_NAME).decode()
+
+    with pytest.raises(UnrecognizedTypeError, match="read_archive"):
+        Computation.read_json(io.StringIO(manifest))
 
 
 # ---------------------------------------------------------------------------

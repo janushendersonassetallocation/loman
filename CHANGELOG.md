@@ -7,6 +7,13 @@
   archive is several times smaller than the equivalent JSON document and faster to read.
   `Computation.write` and `Computation.read` pick the format from the path's extension; both
   extensions name the same format
+- Bulky values are stored out of line wherever they appear, not only when they are a whole node's
+  value. A DataFrame, Series or array above the size threshold gets its own payload even when it
+  sits inside a dict, list, tuple, dataclass or attrs object, at any depth, and each one in a
+  collection gets its own entry. The decision lives in the `Transformer`, which every value passes
+  through, rather than in the node walk, which sees only top-level values — under the latter a
+  20k-row frame one level inside a dict was inlined as JSON, giving a 417KB manifest instead of a
+  243-byte one plus a parquet payload
 - `read_archive(nodes=[...])` materialises only the named nodes, leaving the rest of the
   payloads undecompressed. The whole graph — nodes, edges and functions — is still rebuilt, so
   a partially-loaded computation keeps its shape and can be recomputed; skipped nodes come back
