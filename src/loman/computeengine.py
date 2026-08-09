@@ -2063,7 +2063,7 @@ class Computation:
 
         s = serializer if serializer is not None else ComputationSerializer()
         if isinstance(file_, str):
-            with open(file_, "w") as f:
+            with open(file_, "w", encoding="utf-8") as f:
                 s.dump(self, f)
         else:
             s.dump(self, file_)
@@ -2081,7 +2081,7 @@ class Computation:
 
         s = serializer if serializer is not None else ComputationSerializer()
         if isinstance(file_, str):
-            with open(file_) as f:
+            with open(file_, encoding="utf-8") as f:
                 return s.load(f)
         else:
             return s.load(file_)
