@@ -29,13 +29,14 @@ from loman.exception import (
 )
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.planning import ExecutionPlan, ValidationReport
-from loman.serialization import ComputationSerializer
+from loman.serialization import ArchiveSerializer, ComputationSerializer
 from loman.visualization import GraphView
 
 # Backward compatibility alias
 ComputationFactory = computation_factory
 
 __all__ = [
+    "ArchiveSerializer",
     "C",
     "CannotInsertToPlaceholderNodeError",
     "Computation",

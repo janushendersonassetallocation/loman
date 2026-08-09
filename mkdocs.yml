@@ -100,6 +100,7 @@ nav:
       - DevContainer: development/DEVCONTAINER.md
       - Marimo: development/MARIMO.md
       - Testing: development/TESTS.md
+      - Serialization Design: development/SERIALIZATION.md
       - UI Extra Design: development/UI_EXTRA_PLAN.md
       - UI Extra As Built: development/UI_EXTRA_AS_BUILT.md
       - UI Extra UX Review: development/UI_EXTRA_UX_REVIEW.md

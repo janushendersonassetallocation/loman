@@ -36,6 +36,12 @@ ui = [
     "anywidget>=0.9",
     "traitlets>=5.14",
 ]
+# Parquet payloads for .loman/.lm archives.  Optional because pyarrow is a
+# large dependency; without it archives still work, using JSON payloads for
+# frames instead — correct, just larger.
+archive = [
+    "pyarrow>=14",
+]
 
 [dependency-groups]
 dev = [
@@ -62,6 +68,7 @@ scipy = "scipy"
 attrs = "attrs"
 anywidget = "anywidget"
 traitlets = "traitlets"
+pyarrow = "pyarrow"
 numpy = "numpy"
 mypy = "mypy"
 ruff = "ruff"

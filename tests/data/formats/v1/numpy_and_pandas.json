@@ -1,0 +1,125 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "arr_f8",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "data": [
+          1.0,
+          2.0,
+          3.0
+        ],
+        "dtype": "<f8",
+        "shape": [
+          3
+        ],
+        "type": "ndarray"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "arr_2d",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "data": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "dtype": "<i8",
+        "shape": [
+          2,
+          3
+        ],
+        "type": "ndarray"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "arr_f4",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "data": [
+          1.5,
+          2.5
+        ],
+        "dtype": "<f4",
+        "shape": [
+          2
+        ],
+        "type": "ndarray"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "df",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "columns": [
+          "x",
+          "y"
+        ],
+        "data": [
+          [
+            1.0,
+            3.5
+          ],
+          [
+            2.0,
+            4.5
+          ]
+        ],
+        "dtypes": {
+          "x": "int64",
+          "y": "float64"
+        },
+        "index": [
+          0,
+          1
+        ],
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "series",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "data": [
+          1,
+          2,
+          3
+        ],
+        "dtype": "int64",
+        "index": [
+          0,
+          1,
+          2
+        ],
+        "name": "s",
+        "type": "series"
+      }
+    }
+  ],
+  "version": 1
+}

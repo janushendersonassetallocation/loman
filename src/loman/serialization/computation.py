@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, ClassVar, TextIO
 
 from loman.consts import EdgeAttributes, NodeAttributes, States, SystemTags
@@ -11,6 +12,7 @@ from loman.nodekey import parse_nodekey
 
 from .transformer import (
     DataFrameTransformer,
+    DateTimeTransformer,
     DillFunctionTransformer,
     EnumTransformer,
     FunctionRefTransformer,
@@ -24,8 +26,51 @@ from .transformer import (
 if TYPE_CHECKING:
     pass
 
-# Serialization format version — bump when the schema changes.
-FORMAT_VERSION = 1
+# Serialization format version — bump when the schema changes, and capture a
+# golden corpus for the new version with scripts/generate_format_goldens.py.
+FORMAT_VERSION = 2
+
+# Oldest format version this build can still read.  Loman's compatibility
+# promise is that a reader accepts every version from here up to
+# FORMAT_VERSION, so raising this is a breaking change requiring a major
+# release.  See docs/user/features/other/serializing_computations.md.
+MIN_SUPPORTED_VERSION = 1
+
+
+def _check_format_version(data: dict[str, Any]) -> int:
+    """Validate the ``version`` field of a serialized document and return it.
+
+    A document from a newer loman must fail loudly rather than be parsed on a
+    best-effort basis: the fields a future version adds are exactly the ones
+    whose absence would silently corrupt the result.
+    """
+    if "version" not in data:
+        msg = (
+            "Serialized computation has no 'version' field, so its format cannot be "
+            "identified. It may be truncated, or not a loman document at all."
+        )
+        raise SerializationError(msg)
+
+    version = data["version"]
+    if not isinstance(version, int) or isinstance(version, bool):
+        msg = f"Serialized computation has a non-integer format version {version!r}."
+        raise SerializationError(msg)
+
+    if version > FORMAT_VERSION:
+        msg = (
+            f"Serialized computation uses format version {version}, but this build of "
+            f"loman reads up to version {FORMAT_VERSION}. Upgrade loman to read this file."
+        )
+        raise SerializationError(msg)
+
+    if version < MIN_SUPPORTED_VERSION:
+        msg = (
+            f"Serialized computation uses format version {version}, which this build of "
+            f"loman no longer reads (oldest supported is {MIN_SUPPORTED_VERSION})."
+        )
+        raise SerializationError(msg)
+
+    return version
 
 
 def default_computation_transformer() -> Transformer:
@@ -46,6 +91,9 @@ def default_computation_transformer() -> Transformer:
     # Pandas
     t.register(DataFrameTransformer())
     t.register(SeriesTransformer())
+
+    # Temporal scalars (datetime, date, time, timedelta, Timestamp)
+    t.register(DateTimeTransformer())
 
     # NodeKey (hierarchical node names)
     t.register(NodeKeyTransformer())
@@ -75,6 +123,7 @@ def dill_computation_transformer() -> Transformer:
 
     t.register(DataFrameTransformer())
     t.register(SeriesTransformer())
+    t.register(DateTimeTransformer())
     t.register(NodeKeyTransformer())
 
     return t
@@ -167,10 +216,23 @@ class ComputationSerializer:
             )
 
         try:
-            return self._t.to_dict(raw_value), True
+            return self._encode_value(node_key, raw_value), True
         except (UntransformableTypeError, ValueError) as exc:
             msg = f"Cannot serialize value of node {node_key!r}: {exc}"
             raise SerializationError(msg) from exc
+
+    def _encode_value(self, node_key: Any, value: Any) -> Any:
+        """Encode a single node value.
+
+        Subclasses override this to redirect large values elsewhere — see
+        :mod:`loman.serialization.archive`, which writes them to separate
+        entries in a zip and leaves a reference in their place.
+        """
+        return self._t.to_dict(value)
+
+    def _decode_value(self, encoded: Any) -> Any:
+        """Decode a single node value, inverting :meth:`_encode_value`."""
+        return self._t.from_dict(encoded)
 
     def _serialize_node_func(self, node_key: Any, raw_func: Any) -> Any:
         """Return the encoded function for a node, or ``None`` if it cannot be serialized.
@@ -246,21 +308,33 @@ class ComputationSerializer:
         edges_out = [self._serialize_edge(src, dst, data) for src, dst, data in comp.dag.edges(data=True)]
         return {"version": FORMAT_VERSION, "nodes": nodes_out, "edges": edges_out}
 
-    def load(self, fp: TextIO) -> Any:
-        """Deserialize a Computation from *fp* (a text-mode file-like object)."""
-        data = json.load(fp)
-        return self._from_dict(data)
+    def load(self, fp: TextIO, *, nodes: Iterable[str] | None = None) -> Any:
+        """Deserialize a Computation from *fp* (a text-mode file-like object).
 
-    def loads(self, s: str) -> Any:
+        *nodes* restricts which node values are materialised; see
+        :meth:`~loman.Computation.read_json`.
+        """
+        data = json.load(fp)
+        return self._from_dict(data, only_nodes=None if nodes is None else set(nodes))
+
+    def loads(self, s: str, *, nodes: Iterable[str] | None = None) -> Any:
         """Deserialize a Computation from a JSON string."""
         data = json.loads(s)
-        return self._from_dict(data)
+        return self._from_dict(data, only_nodes=None if nodes is None else set(nodes))
 
-    def _from_dict(self, data: dict[str, Any]) -> Any:
-        """Reconstruct a Computation from a deserialized dict."""
+    def _from_dict(self, data: dict[str, Any], *, only_nodes: set[str] | None = None) -> Any:
+        """Reconstruct a Computation from a deserialized dict.
+
+        When *only_nodes* is given, the full graph shape is rebuilt but values
+        are materialised only for the named keys; every other node that had a
+        value is left UNINITIALIZED.
+        """
         from loman.computeengine import Computation, Error, _ParameterType
 
+        _check_format_version(data)
+
         comp = Computation()
+        blanked: list[Any] = []
 
         for node_info in data["nodes"]:
             raw_key = node_info["key"]
@@ -270,6 +344,14 @@ class ComputationSerializer:
             serialize_flag: bool = node_info.get("serialize", True)
             has_value: bool = node_info.get("has_value", False)
             user_tags: list[str] = node_info.get("tags", [])
+
+            if only_nodes is not None and raw_key not in only_nodes and has_value:
+                # Not requested: keep the node and its wiring, drop the payload.
+                # Reporting UNINITIALIZED rather than the recorded state avoids
+                # claiming UPTODATE for a node we deliberately did not load.
+                has_value = False
+                state = States.UNINITIALIZED
+                blanked.append(node_key)
 
             encoded_func = node_info.get("func")
             func = self._t.from_dict(encoded_func) if encoded_func is not None else None
@@ -282,7 +364,7 @@ class ComputationSerializer:
                         traceback=encoded_value["traceback"],
                     )
                 else:
-                    value = self._t.from_dict(encoded_value)
+                    value = self._decode_value(encoded_value)
             else:
                 value = None
 
@@ -317,5 +399,17 @@ class ComputationSerializer:
                 comp.dag.add_edge(src_key, dst_key)
 
         comp._refresh_maps()
+
+        if blanked:
+            # A node whose value we skipped is not really "uninitialized" — it has
+            # a function and, quite possibly, all the inputs it needs.  Re-derive
+            # that in topological order so a chain of skipped nodes settles in one
+            # pass and the partially-loaded graph can simply be recomputed.
+            import networkx as nx
+
+            blanked_set = set(blanked)
+            for node_key in nx.topological_sort(comp.dag):
+                if node_key in blanked_set:
+                    comp._try_set_computable(node_key)
 
         return comp

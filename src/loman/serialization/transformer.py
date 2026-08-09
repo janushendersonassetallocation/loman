@@ -2,6 +2,7 @@
 
 import contextlib
 import dataclasses
+import datetime
 import graphlib
 import importlib
 from abc import ABC, abstractmethod
@@ -11,6 +12,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from .arraycodec import decode_1d, decode_index, encode_1d, encode_index
 
 try:
     import attrs
@@ -350,13 +353,26 @@ class NdArrayTransformer(CustomTransformer):
         return "ndarray"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
-        """Convert numpy array to dictionary with shape, dtype, and data."""
+        """Convert a numpy array to a dict with shape, dtype and encoded data.
+
+        The data goes through the shared codec, so ``datetime64`` and
+        ``timedelta64`` arrays encode as integers rather than failing on the
+        ``Timestamp`` objects ``tolist()`` would produce.
+        """
         assert isinstance(o, np.ndarray)  # noqa: S101
-        return {"shape": list(o.shape), "dtype": o.dtype.str, "data": transformer.to_dict(o.ravel().tolist())}  # type: ignore[arg-type]
+        return {
+            "shape": list(o.shape),
+            "dtype": o.dtype.str,
+            "values": encode_1d(transformer, o.ravel()),
+        }
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
-        """Reconstruct numpy array from dictionary."""
-        return np.array(transformer.from_dict(d["data"]), d["dtype"]).reshape(d["shape"])
+        """Reconstruct a numpy array from either the v1 or the codec form."""
+        if "values" not in d:
+            # Format version 1: a flat JSON list, reshaped and cast.
+            return np.array(transformer.from_dict(d["data"]), d["dtype"]).reshape(d["shape"])
+        flat = np.asarray(decode_1d(transformer, d["values"]))
+        return flat.reshape(d["shape"])
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
@@ -540,17 +556,32 @@ class DataFrameTransformer(CustomTransformer):
         return "dataframe"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
-        """Serialize a DataFrame using split orientation."""
+        """Serialize a DataFrame column by column, preserving each column's dtype."""
         assert isinstance(o, pd.DataFrame)  # noqa: S101
         return {
-            "columns": list(o.columns),
-            "index": transformer.to_dict(list(o.index)),
-            "data": transformer.to_dict(o.values.tolist()),
-            "dtypes": {col: str(dtype) for col, dtype in o.dtypes.items()},
+            "columns": encode_index(transformer, o.columns),
+            "index": encode_index(transformer, o.index),
+            "cols": [encode_1d(transformer, o.iloc[:, i]) for i in range(o.shape[1])],
         }
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
-        """Reconstruct a DataFrame from its serialized form."""
+        """Reconstruct a DataFrame from either the v1 or the column-wise form."""
+        if "cols" not in d:
+            return self._from_dict_v1(transformer, d)
+
+        columns = decode_index(transformer, d["columns"])
+        index = decode_index(transformer, d["index"])
+        data = {i: decode_1d(transformer, col) for i, col in enumerate(d["cols"])}
+        df = pd.DataFrame(data, index=index, copy=False)
+        df.columns = columns
+        return df
+
+    def _from_dict_v1(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Decode the format-version-1 split-orientation encoding.
+
+        Retained so files written before the column-wise encoding keep loading.
+        Do not extend this; new dtype support belongs in the codec.
+        """
         data = transformer.from_dict(d["data"])
         columns = d["columns"]
         index = transformer.from_dict(d["index"])
@@ -576,17 +607,29 @@ class SeriesTransformer(CustomTransformer):
         return "series"
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
-        """Serialize a Series with its name, dtype, index, and data."""
+        """Serialize a Series with its name, index, and dtype-faithful values."""
         assert isinstance(o, pd.Series)  # noqa: S101
         return {
-            "name": o.name,
-            "dtype": str(o.dtype),
-            "index": transformer.to_dict(list(o.index)),
-            "data": transformer.to_dict(o.tolist()),
+            "name": transformer.to_dict(o.name),
+            "index": encode_index(transformer, o.index),
+            "values": encode_1d(transformer, o),
         }
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
-        """Reconstruct a Series from its serialized form."""
+        """Reconstruct a Series from either the v1 or the codec form."""
+        if "values" not in d:
+            return self._from_dict_v1(transformer, d)
+
+        values = decode_1d(transformer, d["values"])
+        index = decode_index(transformer, d["index"])
+        return pd.Series(values, index=index, name=transformer.from_dict(d["name"]), copy=False)
+
+    def _from_dict_v1(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Decode the format-version-1 Series encoding.
+
+        Retained so files written before the codec keep loading.  Do not extend
+        this; new dtype support belongs in the codec.
+        """
         data = transformer.from_dict(d["data"])
         index = transformer.from_dict(d["index"])
         s = pd.Series(data, index=index, name=d.get("name"))
@@ -598,6 +641,80 @@ class SeriesTransformer(CustomTransformer):
     def supported_direct_types(self) -> Iterable[type]:
         """Return supported pandas Series type."""
         return [pd.Series]
+
+
+class DateTimeTransformer(CustomTransformer):
+    """Transformer for scalar date, time and datetime values.
+
+    Covers :class:`datetime.datetime`, :class:`datetime.date`,
+    :class:`datetime.time`, :class:`datetime.timedelta` and their pandas
+    counterparts.  Without this, a lone timestamp — as a node value, or nested
+    inside a list or dict — has no encoding at all.
+
+    Values are stored as ISO 8601 strings, which stay readable in the JSON and
+    are unambiguous about timezone offset.
+    """
+
+    _KIND_DATETIME = "datetime"
+    _KIND_DATE = "date"
+    _KIND_TIME = "time"
+    _KIND_TIMEDELTA = "timedelta"
+    _KIND_PD_TIMEDELTA = "pd_timedelta"
+    _KIND_TIMESTAMP = "timestamp"
+
+    @property
+    def name(self) -> str:
+        """Return transformer name."""
+        return "datetime"
+
+    def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
+        """Serialize a temporal scalar as an ISO 8601 string."""
+        # pandas types first: Timestamp subclasses datetime, Timedelta
+        # subclasses timedelta, and both round-trip better through pandas.
+        if isinstance(o, pd.Timestamp):
+            return {"kind": self._KIND_TIMESTAMP, "value": o.isoformat()}
+        if isinstance(o, pd.Timedelta):
+            return {"kind": self._KIND_PD_TIMEDELTA, "value": o.isoformat()}
+        if isinstance(o, datetime.datetime):
+            return {"kind": self._KIND_DATETIME, "value": o.isoformat()}
+        if isinstance(o, datetime.date):
+            return {"kind": self._KIND_DATE, "value": o.isoformat()}
+        if isinstance(o, datetime.time):
+            return {"kind": self._KIND_TIME, "value": o.isoformat()}
+        if isinstance(o, datetime.timedelta):
+            # Kept distinct from pd.Timedelta so the original type comes back.
+            return {"kind": self._KIND_TIMEDELTA, "value": o.total_seconds()}
+        msg = f"Cannot serialize temporal value {o!r} of type {type(o).__name__}"
+        raise ValueError(msg)
+
+    def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
+        """Reconstruct a temporal scalar from its ISO 8601 string."""
+        kind = d["kind"]
+        raw = d["value"]
+        if kind == self._KIND_TIMESTAMP:
+            return pd.Timestamp(raw)
+        if kind == self._KIND_PD_TIMEDELTA:
+            return pd.Timedelta(raw)
+        if kind == self._KIND_TIMEDELTA:
+            return datetime.timedelta(seconds=raw)
+        if kind == self._KIND_DATETIME:
+            return datetime.datetime.fromisoformat(raw)
+        if kind == self._KIND_DATE:
+            return datetime.date.fromisoformat(raw)
+        if kind == self._KIND_TIME:
+            return datetime.time.fromisoformat(raw)
+        msg = f"Unknown temporal kind {kind!r}"
+        raise UnrecognizedTypeError(msg)
+
+    @property
+    def supported_subtypes(self) -> Iterable[Any]:
+        """Match all datetime-module and pandas temporal scalars.
+
+        ``datetime`` is listed alongside ``date`` even though it is a subclass,
+        because subtype dispatch is ordered most-derived-first and both need to
+        reach this transformer.
+        """
+        return [datetime.datetime, datetime.date, datetime.time, datetime.timedelta]
 
 
 class NodeKeyTransformer(CustomTransformer):

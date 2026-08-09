@@ -1,6 +1,39 @@
 # Change Log
 
 ## [unreleased]
+- Added the `.loman` / `.lm` archive: a zip holding a readable `manifest.json` for the graph's
+  structure alongside one entry per large value, each in a format suited to its type — parquet
+  for frames and Series, `.npy` for arrays, JSON for everything else. On realistic data an
+  archive is several times smaller than the equivalent JSON document and faster to read.
+  `Computation.write` and `Computation.read` pick the format from the path's extension; both
+  extensions name the same format
+- `read_archive(nodes=[...])` materialises only the named nodes, leaving the rest of the
+  payloads undecompressed. The whole graph — nodes, edges and functions — is still rebuilt, so
+  a partially-loaded computation keeps its shape and can be recomputed; skipped nodes come back
+  UNINITIALIZED, or COMPUTABLE where their own inputs were loaded. `read_json` accepts `nodes=`
+  too, though a JSON document must be parsed in full regardless, so there the saving is only in
+  decoding
+- Added the `loman[archive]` extra, providing parquet payloads through pyarrow. Without it
+  archives still work, falling back to JSON payloads for frames; the manifest records which
+  encoding each payload used, so a reader missing a codec says so rather than failing inside a
+  decoder
+- BUGFIX: a DataFrame with a datetime column could not be serialized at all. Frames encoded
+  through `DataFrame.values.tolist()`, which yields `Timestamp` objects no transformer handled.
+  Frames and Series are now encoded column by column, dispatching on dtype
+- Datetimes, timezone-aware datetimes, timedeltas, categoricals, nullable extension dtypes and
+  MultiIndexes now round-trip as themselves rather than being flattened through `object` and
+  guessed back with `astype`. Index frequency, which pandas treats as part of an index's
+  identity, is preserved. Bare `datetime`, `date`, `time` and `timedelta` values are also
+  serializable now, whether as a node's value or nested inside a list or dict
+- The serialized format now carries a compatibility guarantee: a reader accepts every version
+  from 1 up to the one it writes, and a file from a newer loman is refused with an actionable
+  message rather than parsed on a best-effort basis. Previously the `version` field was written
+  but never read. The guarantee is enforced by a corpus under `tests/data/formats/vN/` captured
+  when each version was current, which CI reads on every commit. It does not extend to
+  `use_dill_for_functions=True`, whose embedded blobs are not portable across Python versions
+- Format version bumped to 2. Files written by earlier releases continue to load
+- DOCS: corrected two `States` enum values in the serialization guide that had drifted from the
+  code (`PINNED` is 6, not 5; `ERROR` is 5, not 4)
 - CI: the Graphviz install now retries transient package-feed failures, falls back between
   Chocolatey and winget, and fails loudly when `dot` is still missing rather than letting
   the test run report it as a hundred unrelated failures

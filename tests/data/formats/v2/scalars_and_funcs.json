@@ -1,0 +1,79 @@
+{
+  "edges": [
+    {
+      "dst": "b",
+      "param": "x",
+      "param_type": "kwd",
+      "src": "a"
+    },
+    {
+      "dst": "c",
+      "param": "x",
+      "param_type": "kwd",
+      "src": "a"
+    },
+    {
+      "dst": "d",
+      "param": "x",
+      "param_type": "kwd",
+      "src": "b"
+    },
+    {
+      "dst": "d",
+      "param": "y",
+      "param_type": "kwd",
+      "src": "c"
+    }
+  ],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "a",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 3
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "add_one",
+        "type": "func_ref"
+      },
+      "has_value": true,
+      "key": "b",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 4
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "double",
+        "type": "func_ref"
+      },
+      "has_value": true,
+      "key": "c",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 6
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "add",
+        "type": "func_ref"
+      },
+      "has_value": true,
+      "key": "d",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 10
+    }
+  ],
+  "version": 2
+}

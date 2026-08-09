@@ -1,0 +1,99 @@
+{
+  "edges": [
+    {
+      "dst": "computable",
+      "param": "x",
+      "param_type": "kwd",
+      "src": "root"
+    },
+    {
+      "dst": "stale",
+      "param": "x",
+      "param_type": "kwd",
+      "src": "computable"
+    }
+  ],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "uptodate",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 1
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "pinned",
+      "serialize": true,
+      "state": "PINNED",
+      "tags": [],
+      "value": 2
+    },
+    {
+      "func": null,
+      "has_value": false,
+      "key": "uninitialized",
+      "serialize": true,
+      "state": "UNINITIALIZED",
+      "tags": [],
+      "value": null
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "raise_value_error",
+        "type": "func_ref"
+      },
+      "has_value": true,
+      "key": "errored",
+      "serialize": true,
+      "state": "ERROR",
+      "tags": [],
+      "value": {
+        "__loman_error__": true,
+        "exception_str": "deliberate golden-file error",
+        "exception_type": "ValueError",
+        "traceback": "Traceback (most recent call last):\n  File \"/Users/HarryCampion/dev/repos/loman/.claude/worktrees/strange-bouman-fc50dd/src/loman/computeengine.py\", line 397, in _eval_node\n    value = f(*args, **kwds)\n            ^^^^^^^^^^^^^^^^\n  File \"/Users/HarryCampion/dev/repos/loman/.claude/worktrees/strange-bouman-fc50dd/tests/format_fixtures.py\", line 33, in raise_value_error\n    raise ValueError(msg)\nValueError: deliberate golden-file error\n"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "root",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 11
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "add_one",
+        "type": "func_ref"
+      },
+      "has_value": false,
+      "key": "computable",
+      "serialize": true,
+      "state": "COMPUTABLE",
+      "tags": [],
+      "value": null
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "double",
+        "type": "func_ref"
+      },
+      "has_value": false,
+      "key": "stale",
+      "serialize": true,
+      "state": "STALE",
+      "tags": [],
+      "value": null
+    }
+  ],
+  "version": 2
+}

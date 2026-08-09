@@ -1,0 +1,61 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "lst",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": [
+        1,
+        "two",
+        3.0,
+        null,
+        true
+      ]
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "tup",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "type": "tuple",
+        "values": [
+          1,
+          {
+            "type": "tuple",
+            "values": [
+              2,
+              3
+            ]
+          },
+          "four"
+        ]
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "dct",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "a": 1,
+        "b": [
+          2,
+          3
+        ],
+        "c": {
+          "d": 4
+        }
+      }
+    }
+  ],
+  "version": 2
+}

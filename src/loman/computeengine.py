@@ -2069,12 +2069,24 @@ class Computation:
             s.dump(self, file_)
 
     @staticmethod
-    def read_json(file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> "Computation":
+    def read_json(
+        file_: str | TextIO,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        nodes: Iterable[str] | None = None,
+    ) -> "Computation":
         """Deserialize a computation from a JSON file or file-like object.
 
         :param file_: Source file path (str) or text-mode file-like object.
         :param serializer: Optional custom serializer.  If ``None`` the default
             :class:`~loman.serialization.computation.ComputationSerializer` is used.
+        :param nodes: Optional node keys to materialise.  When given, the whole
+            graph — nodes, edges and functions — is rebuilt, but values are
+            decoded only for the named nodes; every other node that had a value
+            is left ``UNINITIALIZED``.  Use it to inspect part of a large
+            computation without paying to decode all of it.  Note that a JSON
+            document must still be parsed in full, so the saving is in decoding
+            rather than I/O; :meth:`read_archive` skips the bytes outright.
         :rtype: Computation
         """
         from .serialization.computation import ComputationSerializer
@@ -2082,9 +2094,102 @@ class Computation:
         s = serializer if serializer is not None else ComputationSerializer()
         if isinstance(file_, str):
             with open(file_, encoding="utf-8") as f:
-                return s.load(f)
+                return s.load(f, nodes=nodes)
         else:
-            return s.load(file_)
+            return s.load(file_, nodes=nodes)
+
+    def write_archive(
+        self,
+        file_: str | BinaryIO,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        inline_threshold: int = 8192,
+    ) -> None:
+        """Serialize a computation to a ``.loman`` / ``.lm`` archive.
+
+        An archive is a zip holding a readable ``manifest.json`` for the graph's
+        structure plus one entry per large value, each in a format suited to its
+        type — parquet for frames and Series, ``.npy`` for arrays.  On realistic
+        data this is around ten times smaller and faster than
+        :meth:`write_json`, and it lets :meth:`read_archive` load part of a
+        computation without touching the rest.
+
+        Parquet requires pyarrow (``pip install 'loman[archive]'``).  Without it
+        frames fall back to JSON payloads — still correct, just larger.
+
+        :param file_: Destination path (str) or binary-mode file-like object.
+        :param serializer: Optional serializer supplying transformer
+            configuration, exactly as for :meth:`write_json`.
+        :param inline_threshold: Values smaller than this many bytes stay inline
+            in the manifest instead of becoming separate payloads.
+        """
+        from .serialization.archive import ArchiveSerializer
+
+        s = ArchiveSerializer(serializer, inline_threshold=inline_threshold)
+        if isinstance(file_, str):
+            with open(file_, "wb") as f:
+                s.dump(self, f)
+        else:
+            s.dump(self, file_)
+
+    @staticmethod
+    def read_archive(
+        file_: str | BinaryIO,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        nodes: Iterable[str] | None = None,
+    ) -> "Computation":
+        """Deserialize a computation from a ``.loman`` / ``.lm`` archive.
+
+        :param file_: Source path (str) or binary-mode file-like object.
+        :param serializer: Optional serializer supplying transformer
+            configuration, exactly as for :meth:`read_json`.
+        :param nodes: Optional node keys to materialise.  The whole graph —
+            nodes, edges and functions — is always rebuilt, but only the named
+            nodes' payloads are read out of the archive; the rest are never
+            decompressed.  Unloaded nodes come back ``UNINITIALIZED``, or
+            ``COMPUTABLE`` where their own inputs were loaded.
+        :rtype: Computation
+        """
+        from .serialization.archive import ArchiveSerializer
+
+        s = ArchiveSerializer(serializer)
+        if isinstance(file_, str):
+            with open(file_, "rb") as f:
+                return s.load(f, nodes=nodes)
+        else:
+            return s.load(file_, nodes=nodes)
+
+    def write(self, path: str, *, serializer: "ComputationSerializer | None" = None) -> None:
+        """Serialize to *path*, choosing the format from its extension.
+
+        A ``.loman`` or ``.lm`` path writes an archive; anything else writes
+        JSON.  Use :meth:`write_archive` or :meth:`write_json` directly when the
+        format matters more than the filename.
+        """
+        from .serialization.archive import is_archive_path
+
+        if is_archive_path(path):
+            self.write_archive(path, serializer=serializer)
+        else:
+            self.write_json(path, serializer=serializer)
+
+    @staticmethod
+    def read(
+        path: str,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        nodes: Iterable[str] | None = None,
+    ) -> "Computation":
+        """Deserialize from *path*, choosing the format from its extension.
+
+        A ``.loman`` or ``.lm`` path reads an archive; anything else reads JSON.
+        """
+        from .serialization.archive import is_archive_path
+
+        if is_archive_path(path):
+            return Computation.read_archive(path, serializer=serializer, nodes=nodes)
+        return Computation.read_json(path, serializer=serializer, nodes=nodes)
 
     def copy(self) -> "Computation":
         """Create a copy of a computation.

@@ -1,0 +1,267 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "categorical",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "categories": {
+              "data": [
+                "b",
+                "a"
+              ],
+              "dtype": "|O",
+              "kind": "object"
+            },
+            "codes": [
+              1,
+              0,
+              1
+            ],
+            "kind": "category",
+            "ordered": true
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "c"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "nullable",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1,
+              null,
+              3
+            ],
+            "dtype": "Int64",
+            "kind": "masked"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "n"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "multiindex",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "v"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "codes": [
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ],
+          "kind": "multiindex",
+          "levels": [
+            {
+              "data": [
+                "a",
+                "b"
+              ],
+              "dtype": "|O",
+              "kind": "object"
+            },
+            {
+              "data": [
+                1,
+                2
+              ],
+              "dtype": "<i8",
+              "kind": "plain"
+            }
+          ],
+          "names": [
+            "k",
+            "n"
+          ]
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "mixed",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          {
+            "data": [
+              1.5,
+              2.5
+            ],
+            "dtype": "<f8",
+            "kind": "plain"
+          },
+          {
+            "data": [
+              "a",
+              "b"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          {
+            "data": [
+              true,
+              false
+            ],
+            "dtype": "|b1",
+            "kind": "plain"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "i",
+              "f",
+              "s",
+              "b"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "str_array",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "dtype": "<U5",
+        "shape": [
+          2
+        ],
+        "type": "ndarray",
+        "values": {
+          "data": [
+            "alpha",
+            "beta"
+          ],
+          "dtype": "<U5",
+          "kind": "object"
+        }
+      }
+    }
+  ],
+  "version": 2
+}

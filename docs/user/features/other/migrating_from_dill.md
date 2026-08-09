@@ -18,14 +18,22 @@ comp2 = Computation.read_json('comp.json')
 
 ## Key differences
 
-| | `write_dill` / `read_dill` | `write_json` / `read_json` |
-|---|---|---|
-| Format | Binary (dill/pickle) | Text (JSON) |
-| File mode | Binary (`'wb'` / `'rb'`) | Text (`'w'` / `'r'`) |
-| Human-readable | No | Yes |
-| Lambdas | Serialized | Raises `SerializationError` |
-| Custom types | Any picklable type | Requires a custom `ComputationSerializer` |
-| Long-term storage | Not recommended | Not recommended |
+| | `write_dill` / `read_dill` | `write_json` / `read_json` | `write_archive` / `read_archive` |
+|---|---|---|---|
+| Format | Binary (dill/pickle) | Text (JSON) | Zip (JSON manifest + payloads) |
+| File mode | Binary (`'wb'` / `'rb'`) | Text (`'w'` / `'r'`) | Binary (`'wb'` / `'rb'`) |
+| Human-readable | No | Yes | Structure yes, values no |
+| Lambdas | Serialized | Raises `SerializationError` | Raises `SerializationError` |
+| Custom types | Any picklable type | Requires a custom `ComputationSerializer` | Requires a custom `ComputationSerializer` |
+| Size on large data | Compact | ~2.7x in-memory | Smallest |
+| Partial reads | No | Decode only (`nodes=`) | Yes (`nodes=`) |
+| Long-term storage | Not recommended | Supported | Supported |
+| Safe to load untrusted | **No** — executes code | Yes | Yes |
+
+Both JSON documents and archives carry a format version and are covered by
+loman's [compatibility guarantee](serializing_computations.md#format-compatibility).
+`write_dill` never was: a pickle is tied to the Python and library versions that
+produced it, which is why it is deprecated.
 
 ## Lambdas must be replaced (or opt in to dill)
 

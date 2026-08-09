@@ -1,0 +1,307 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "dt_col",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1704067200000000,
+              1704153600000000,
+              1704240000000000
+            ],
+            "dtype": "datetime64[us]",
+            "kind": "datetime"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "t"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "dt_nat",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1704067200000000,
+              null
+            ],
+            "dtype": "datetime64[us]",
+            "kind": "datetime"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "t"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "dt_tz",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1704067200000000,
+              1704153600000000
+            ],
+            "dtype": "datetime64[us]",
+            "kind": "datetime",
+            "tz": "Europe/London"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "t"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "timedelta_col",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              86400,
+              172800,
+              259200
+            ],
+            "dtype": "timedelta64[s]",
+            "kind": "timedelta"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "d"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "dt_index",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "v"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              1704067200000000,
+              1704153600000000
+            ],
+            "dtype": "datetime64[us]",
+            "kind": "datetime"
+          },
+          "freq": "D",
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "dt_array",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "dtype": "<M8[ns]",
+        "shape": [
+          2
+        ],
+        "type": "ndarray",
+        "values": {
+          "data": [
+            1704067200000000000,
+            1717200000000000000
+          ],
+          "dtype": "datetime64[ns]",
+          "kind": "datetime"
+        }
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "scalar_timestamp",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "kind": "timestamp",
+        "type": "datetime",
+        "value": "2024-05-05T13:00:00"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "scalar_date",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "kind": "date",
+        "type": "datetime",
+        "value": "2024-05-05"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "scalar_time",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "kind": "time",
+        "type": "datetime",
+        "value": "13:30:00"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "scalar_timedelta",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "kind": "timedelta",
+        "type": "datetime",
+        "value": 183600.0
+      }
+    }
+  ],
+  "version": 2
+}

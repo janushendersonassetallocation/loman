@@ -1,0 +1,36 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "kept",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [
+        "alpha",
+        "beta"
+      ],
+      "value": 1
+    },
+    {
+      "func": null,
+      "has_value": false,
+      "key": "excluded",
+      "serialize": false,
+      "state": "UNINITIALIZED",
+      "tags": [],
+      "value": null
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "plain",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": "hello"
+    }
+  ],
+  "version": 2
+}

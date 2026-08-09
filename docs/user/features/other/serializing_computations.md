@@ -125,7 +125,7 @@ Pinned nodes round-trip correctly — their `PINNED` state and value are preserv
 >>> comp.write_json('comp.json')
 >>> comp2 = Computation.read_json('comp.json')
 >>> comp2.state('a')
-<States.PINNED: 5>
+<States.PINNED: 6>
 >>> comp2.v.a
 10
 ```
@@ -141,11 +141,11 @@ If a node is in `ERROR` state, its exception type, message, and traceback are pr
 >>> comp.add_node('result', bad_func)
 >>> comp.compute_all()
 >>> comp.state('result')
-<States.ERROR: 4>
+<States.ERROR: 5>
 >>> comp.write_json('comp.json')
 >>> comp2 = Computation.read_json('comp.json')
 >>> comp2.state('result')
-<States.ERROR: 4>
+<States.ERROR: 5>
 >>> comp2['result'].value.exception
 Exception('something went wrong')
 ```
@@ -194,13 +194,145 @@ DataFrames and Series are serialized automatically:
 (2, 2)
 ```
 
+Columns are encoded individually, so each keeps its own dtype rather than being
+flattened through `object`. Datetimes, timezone-aware datetimes, timedeltas,
+categoricals, nullable extension dtypes such as `Int64`, and MultiIndexes all
+round-trip as themselves:
+
+```pycon
+>>> df = pd.DataFrame({
+...     't': pd.date_range('2024-01-01', periods=3, freq='D'),
+...     'c': pd.Categorical(['a', 'b', 'a']),
+...     'n': pd.array([1, None, 3], dtype='Int64'),
+... })
+>>> comp = Computation()
+>>> comp.add_node('df', value=df)
+>>> buf = io.StringIO()
+>>> comp.write_json(buf)
+>>> _ = buf.seek(0)
+>>> Computation.read_json(buf).v.df.dtypes.to_dict() == df.dtypes.to_dict()
+True
+```
+
+Bare temporal values work too — `datetime`, `date`, `time`, `timedelta` and
+their pandas counterparts — whether they are a node's value or nested inside a
+list or dict.
+
+## Archives: `.loman` and `.lm`
+
+A JSON document holds every value inline. That is ideal for a small graph and
+increasingly wasteful for a large one — numbers written as text cost around
+2.7x their in-memory size, and the whole file has to be parsed before any of it
+can be read.
+
+An **archive** is a zip holding the same graph structure in a readable
+`manifest.json`, plus one entry per large value in a format suited to its type:
+parquet for DataFrames and Series, `.npy` for arrays.
+
+```pycon
+>>> comp.write_archive('run.loman')
+>>> comp2 = Computation.read_archive('run.loman')
+```
+
+`.loman` and `.lm` are the same format; use whichever you prefer. `write` and
+`read` pick the format from the extension, so a `.loman` or `.lm` path gets an
+archive and anything else gets JSON:
+
+```pycon
+>>> comp.write('run.lm')            # archive
+>>> comp.write('run.json')          # JSON document
+>>> comp2 = Computation.read('run.lm')
+```
+
+On realistic data — repeated strings, bounded-precision floats — an archive is
+several times smaller than the equivalent JSON and considerably faster to read.
+Purely random float64 is the worst case for any encoding and still comes out
+ahead, just less dramatically.
+
+### Reading part of a computation
+
+Because each large value is a separate zip entry, an archive can be read
+partially. Name the nodes you want and the rest are never decompressed:
+
+```pycon
+>>> comp2 = Computation.read_archive('run.loman', nodes=['summary'])
+>>> comp2.v.summary
+...
+```
+
+Every node, edge and function is still restored, so the graph keeps its shape
+and can simply be recomputed. Nodes whose values were skipped come back
+`UNINITIALIZED`, or `COMPUTABLE` where their own inputs happen to have been
+loaded.
+
+`read_json` accepts `nodes=` too, but a JSON document must be parsed in full
+regardless, so there the saving is only in decoding — not in I/O.
+
+### Inspecting an archive
+
+An archive is an ordinary zip, so `unzip -l` works. To attribute a large file to
+a particular node from Python:
+
+```pycon
+>>> from loman import ArchiveSerializer
+>>> with open('run.loman', 'rb') as f:
+...     print(ArchiveSerializer().payload_summary(f).to_string())
+                  name    size  compressed
+0        manifest.json     596         226
+1  payloads/p0.parquet  217283      217283
+2      payloads/p1.npy  160128      153754
+```
+
+Parquet entries show equal `size` and `compressed` because parquet compresses
+internally; deflating them again inside the zip would cost time and save
+nothing.
+
+### Parquet is optional
+
+Parquet payloads need [pyarrow](https://arrow.apache.org/docs/python/), which is
+an optional dependency:
+
+```bash
+pip install 'loman[archive]'
+```
+
+Without it, archives still work — DataFrames fall back to JSON payloads, which
+are larger but correct. Arrays use `.npy` either way, which needs only numpy.
+The manifest always records which encoding each payload used, so an archive
+written with parquet and read without pyarrow says exactly that rather than
+failing somewhere deep in a decoder.
+
+## Format compatibility
+
+Every serialized computation carries an integer `version`. Loman's commitment
+is:
+
+- A reader accepts **every format version from 1 up to the one it writes**.
+  Files written by an older loman keep loading.
+- The version increments whenever the schema changes.
+- A file from a *newer* loman is refused with a clear message rather than
+  parsed on a best-effort basis — the fields a future version adds are exactly
+  the ones whose absence would corrupt the result silently.
+- Dropping support for an old version is a breaking change, reserved for a
+  major release.
+
+This is enforced, not merely intended: `tests/data/formats/vN/` holds a corpus
+of files captured when each version was current, and CI reads all of them on
+every commit.
+
+!!! warning
+    One exception: `use_dill_for_functions=True` embeds dill blobs, and those
+    are not portable across Python versions whatever loman promises. The
+    guarantee above covers the document structure and all built-in value
+    encodings; it cannot cover a pickled function object.
+
 ## JSON format reference
 
 The file is a single JSON object with three top-level keys:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "nodes": [ ... ],
   "edges": [ ... ]
 }
@@ -234,7 +366,23 @@ Each entry in `edges` has:
 ### Value encoding
 
 Plain Python scalars (`int`, `float`, `str`, `bool`, `None`) are stored as-is.
-Compound types use a tagged object with a `"type"` discriminator:
+Compound types use a tagged object with a `"type"` discriminator.
+
+Arrays and frames are encoded **column-wise**, dispatching on dtype. Each column
+carries a `"kind"` saying how to read it, which is why a decoder never needs to
+know which format version produced a value.
+
+| `kind` | Used for | Shape |
+|---|---|---|
+| `plain` | int, float, bool | `{"dtype": "<f8", "data": [1.0, 2.0]}` |
+| `datetime` | `datetime64`, optionally with `tz` | `{"dtype": "datetime64[ns]", "data": [1704067200000000000, null]}` |
+| `timedelta` | `timedelta64` | as `datetime` |
+| `category` | pandas Categorical | `{"categories": {...}, "ordered": false, "codes": [0, 1]}` |
+| `masked` | nullable `Int64`, `boolean`, `string` | `{"dtype": "Int64", "data": [1, null]}` |
+| `object` | strings, custom types | `{"dtype": "|O", "data": [...]}` |
+
+`NaT` is written as JSON `null` rather than numpy's internal sentinel, so the
+file stays legible and survives a trip through other tools.
 
 **NumPy array**
 
@@ -243,19 +391,36 @@ Compound types use a tagged object with a `"type"` discriminator:
   "type": "ndarray",
   "shape": [3],
   "dtype": "<f8",
-  "data": [1.0, 2.0, 3.0]
+  "values": {"kind": "plain", "dtype": "<f8", "data": [1.0, 2.0, 3.0]}
 }
 ```
 
-**Pandas DataFrame** (split orientation, column dtypes preserved)
+**Pandas DataFrame**
 
 ```json
 {
   "type": "dataframe",
-  "columns": ["x", "y"],
-  "index": [0, 1],
-  "data": [[1.0, 3.0], [2.0, 4.0]],
-  "dtypes": {"x": "int64", "y": "float64"}
+  "columns": {"kind": "index", "name": null, "data": {...}},
+  "index":   {"kind": "index", "name": null, "data": {...}},
+  "cols": [
+    {"kind": "plain", "dtype": "<i8", "data": [1, 2]},
+    {"kind": "datetime", "dtype": "datetime64[ns]", "data": [1704067200000000000, null]}
+  ]
+}
+```
+
+Indexes use `kind: "index"`, or `kind: "multiindex"` with `levels` and `codes`.
+A regular index carries its `freq`, which pandas treats as part of the index's
+identity.
+
+**Archive payload reference** (archives only — the value lives in a zip entry)
+
+```json
+{
+  "__loman_payload__": true,
+  "id": "p0",
+  "encoding": "parquet",
+  "kind": "dataframe"
 }
 ```
 
@@ -294,5 +459,7 @@ Compound types use a tagged object with a `"type"` discriminator:
 The `blob` field is a base64-encoded [dill](https://github.com/uqfoundation/dill) byte string. It is not portable across Python versions.
 
 !!! note
-    The JSON serialization format is not intended for long-term storage. It is designed for short-term inspection and post-mortem debugging. The format may change between releases.
+    The format may gain fields between releases, but older files keep loading —
+    see [Format compatibility](#format-compatibility) above for the guarantee
+    and its one exception.
 

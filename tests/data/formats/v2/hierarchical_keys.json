@@ -1,0 +1,44 @@
+{
+  "edges": [
+    {
+      "dst": "blk/b",
+      "param": "x",
+      "param_type": "kwd",
+      "src": "blk/a"
+    }
+  ],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "blk/a",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 7
+    },
+    {
+      "func": {
+        "module": "tests.format_fixtures",
+        "qualname": "add_one",
+        "type": "func_ref"
+      },
+      "has_value": true,
+      "key": "blk/b",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 8
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "top",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": 1
+    }
+  ],
+  "version": 2
+}

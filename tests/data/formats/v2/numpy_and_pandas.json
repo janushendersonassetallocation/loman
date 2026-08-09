@@ -1,0 +1,168 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "func": null,
+      "has_value": true,
+      "key": "arr_f8",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "dtype": "<f8",
+        "shape": [
+          3
+        ],
+        "type": "ndarray",
+        "values": {
+          "data": [
+            1.0,
+            2.0,
+            3.0
+          ],
+          "dtype": "<f8",
+          "kind": "plain"
+        }
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "arr_2d",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "dtype": "<i8",
+        "shape": [
+          2,
+          3
+        ],
+        "type": "ndarray",
+        "values": {
+          "data": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "dtype": "<i8",
+          "kind": "plain"
+        }
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "arr_f4",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "dtype": "<f4",
+        "shape": [
+          2
+        ],
+        "type": "ndarray",
+        "values": {
+          "data": [
+            1.5,
+            2.5
+          ],
+          "dtype": "<f4",
+          "kind": "plain"
+        }
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "df",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "cols": [
+          {
+            "data": [
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          {
+            "data": [
+              3.5,
+              4.5
+            ],
+            "dtype": "<f8",
+            "kind": "plain"
+          }
+        ],
+        "columns": {
+          "data": {
+            "data": [
+              "x",
+              "y"
+            ],
+            "dtype": "str",
+            "kind": "masked"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "type": "dataframe"
+      }
+    },
+    {
+      "func": null,
+      "has_value": true,
+      "key": "series",
+      "serialize": true,
+      "state": "UPTODATE",
+      "tags": [],
+      "value": {
+        "index": {
+          "data": {
+            "data": [
+              0,
+              1,
+              2
+            ],
+            "dtype": "<i8",
+            "kind": "plain"
+          },
+          "kind": "index",
+          "name": null
+        },
+        "name": "s",
+        "type": "series",
+        "values": {
+          "data": [
+            1,
+            2,
+            3
+          ],
+          "dtype": "<i8",
+          "kind": "plain"
+        }
+      }
+    }
+  ],
+  "version": 2
+}
