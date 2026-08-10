@@ -36,6 +36,7 @@ from loman.serialization import (
     UnrecognizedTypeException,
     UntransformableTypeException,
 )
+from loman.serialization.computation import UnserializableConstantWarning
 from loman.serialization.default import default_transformer
 from loman.serialization.transformer import (
     DillFunctionTransformer,
@@ -619,6 +620,11 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     assert outer2.v.out == outer.v.out
 
 
+def _three_args(x, n, f):
+    """Take one node argument and two constants."""
+    return f(x + n)
+
+
 def _apply_it(x, f):
     """Apply a constant callable to a node value."""
     return f(x)
@@ -753,6 +759,40 @@ class TestConstantArguments:
         node = next(n for n in payload["nodes"] if n["key"] == "y")
         assert node["args"] == {}
         assert node["func"] is None
+
+    def test_drop_policy_restores_the_old_lenient_behaviour(self):
+        """Let an existing codebase keep writing files, loudly, while it is fixed."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(lambda v: v * 3)], inspect=False)
+        comp.compute_all()
+        serializer = ComputationSerializer(on_unserializable_constant="drop")
+
+        with pytest.warns(UnserializableConstantWarning, match="Dropping it"):
+            payload = json.loads(serializer.dumps(comp))
+
+        node = next(n for n in payload["nodes"] if n["key"] == "y")
+        assert node["args"] == {}, "the dropped constant should be absent, not null"
+        restored = serializer.loads(json.dumps(payload))
+        assert restored.v.y == 3, "the stored value still round-trips"
+
+    def test_drop_policy_keeps_the_constants_it_can_encode(self):
+        """Drop only what cannot be encoded, not every constant on the node."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _three_args, args=["x", C(5), C(lambda v: v)], inspect=False)
+        serializer = ComputationSerializer(on_unserializable_constant="drop")
+
+        with pytest.warns(UnserializableConstantWarning):
+            payload = json.loads(serializer.dumps(comp))
+
+        node = next(n for n in payload["nodes"] if n["key"] == "y")
+        assert set(node["args"]) == {"1"}, "the encodable constant survives, the lambda does not"
+
+    def test_unknown_constant_policy_is_rejected(self):
+        """Reject a misspelled policy at construction, not at save time."""
+        with pytest.raises(ValueError, match="on_unserializable_constant must be one of"):
+            ComputationSerializer(on_unserializable_constant="warn")
 
     def test_version_one_files_without_constants_still_load(self):
         """Read a file written before constants were recorded."""

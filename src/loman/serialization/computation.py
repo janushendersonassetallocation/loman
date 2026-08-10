@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from typing import TYPE_CHECKING, Any, ClassVar, TextIO
 
 from loman.consts import EdgeAttributes, NodeAttributes, States, SystemTags
@@ -28,6 +29,15 @@ if TYPE_CHECKING:
 # 2 added the node "args" and "kwds" constant-argument maps. Files written by
 # version 1 still load: their absence is read as "no constant arguments".
 FORMAT_VERSION = 2
+
+# Sentinel for a constant the policy dropped, distinct from a legitimate None.
+_DROPPED = object()
+
+_CONSTANT_POLICIES = frozenset({"raise", "drop"})
+
+
+class UnserializableConstantWarning(UserWarning):
+    """A constant argument was dropped, so the saved graph cannot be recalculated."""
 
 
 def default_computation_transformer() -> Transformer:
@@ -126,6 +136,15 @@ class ComputationSerializer:
         When ``True``, lambdas and closures are serialized as base64-encoded dill
         blobs rather than raising :class:`~loman.exception.SerializationError`.
         Has no effect when a custom *transformer* is supplied.  Defaults to ``False``.
+    on_unserializable_constant:
+        What to do when a constant argument cannot be encoded. ``"raise"``, the
+        default, refuses to write a graph that could not be recalculated.
+        ``"drop"`` omits the constant and emits
+        :class:`UnserializableConstantWarning`, restoring the behaviour of
+        releases before constants were recorded — where such a graph saved
+        silently and then raised :class:`TypeError` from the missing argument on
+        the first recalculation. It exists so an existing codebase can keep
+        writing files while it is fixed, not as a setting to leave in place.
     """
 
     # States whose nodes carry a meaningful value that should be preserved.
@@ -136,14 +155,22 @@ class ComputationSerializer:
         transformer: Transformer | None = None,
         *,
         use_dill_for_functions: bool = False,
+        on_unserializable_constant: str = "raise",
     ) -> None:
         """Initialise with an optional custom transformer."""
+        if on_unserializable_constant not in _CONSTANT_POLICIES:
+            msg = (
+                f"on_unserializable_constant must be one of {sorted(_CONSTANT_POLICIES)}, "
+                f"got {on_unserializable_constant!r}"
+            )
+            raise ValueError(msg)
         if transformer is None:
             transformer = (
                 dill_computation_transformer() if use_dill_for_functions else default_computation_transformer()
             )
         self._t = transformer
         self._use_dill_for_functions = use_dill_for_functions
+        self._on_unserializable_constant = on_unserializable_constant
 
     def dump(self, comp: Any, fp: TextIO) -> None:
         """Serialize *comp* to *fp* (a text-mode file-like object)."""
@@ -220,19 +247,34 @@ class ComputationSerializer:
                 "be skipped: register a transformer for the type, set serialize=False on the "
                 "node, or use ComputationSerializer(use_dill_for_functions=True) for callables."
             )
-            raise SerializationError(msg) from e
+            if self._on_unserializable_constant == "raise":
+                raise SerializationError(msg) from e
+            warnings.warn(
+                f"{msg} Dropping it, because on_unserializable_constant='drop'. The saved "
+                "graph will raise TypeError from the missing argument when this node is "
+                "recalculated.",
+                UnserializableConstantWarning,
+                stacklevel=2,
+            )
+            return _DROPPED
 
     def _serialize_node_constants(
         self, node_key: Any, node_data: dict[str, Any]
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Return the encoded constant positional and keyword arguments for a node."""
+        """Return the encoded constant positional and keyword arguments for a node.
+
+        A constant the policy drops is omitted from the mapping entirely, so the
+        reloaded node looks exactly as it did before constants were recorded.
+        """
         encoded_args = {
-            str(index): self._serialize_constant(node_key, index, value)
+            str(index): encoded
             for index, value in node_data.get(NodeAttributes.ARGS, {}).items()
+            if (encoded := self._serialize_constant(node_key, index, value)) is not _DROPPED
         }
         encoded_kwds = {
-            name: self._serialize_constant(node_key, name, value)
+            name: encoded
             for name, value in node_data.get(NodeAttributes.KWDS, {}).items()
+            if (encoded := self._serialize_constant(node_key, name, value)) is not _DROPPED
         }
         return encoded_args, encoded_kwds
 
