@@ -31,7 +31,7 @@ from loman.exception import (
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.planning import ExecutionPlan, ValidationReport
 from loman.serialization import ComputationSerializer
-from loman.util import BlockContext, BlockFeature, FanIn, FanOut, IdNode, InputValue, PlannedNode
+from loman.util import BlockContext, BlockFeature, FanIn, FanOut, IdNode, InputValue, PlannedNode, Positional
 from loman.visualization import GraphView
 
 # Backward compatibility alias
@@ -62,6 +62,7 @@ __all__ = [
     "NodeTransformations",
     "NonExistentNodeError",
     "PlannedNode",
+    "Positional",
     "SerializationError",
     "States",
     "ValidationError",

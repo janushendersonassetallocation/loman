@@ -80,10 +80,53 @@ Four are built in:
 | `IdNode(name)` | one node per block holding that block's key |
 | `InputValue(name, value)` | one shared outer node, linked into every block |
 
+`Positional(fn)` wraps an aggregator that takes its values positionally, so a
+`combine` written before the keyed mapping existed does not need a lambda at
+every call site: `FanIn("value", "total", combine=Positional(df_hconcat))`.
+It discards the keys, so prefer a keyed aggregator where one exists.
+
 Features are planned in the order given, and a later feature may read a node an
 earlier one created. Nothing is applied until all of them have been planned and
 checked together, so a definition that fails validation leaves the computation
 completely untouched — no partially built blocks.
+
+### Which names are relative to `base_path`
+
+This differs by feature, and it is worth knowing before you go looking for a node
+that is not where you expected:
+
+| name | resolves to |
+| --- | --- |
+| `FanOut.target`, `FanIn.source`, `IdNode.name` | inside each block, `<base_path>/<key>/<name>` |
+| `InputValue.name` | beside the blocks, `<base_path>/<name>` |
+| `FanOut.source` | the outer computation, **verbatim** |
+| `FanIn.result` | the outer computation, **verbatim** |
+
+So with `base_path="instruments"`, `FanIn("value", "portfolio_values")` creates a
+top-level `portfolio_values`, not `instruments/portfolio_values`. That is
+deliberate — an aggregate usually belongs wherever the rest of the model expects
+it, rather than being forced under the blocks it happens to be computed from — but
+it is the opposite of `InputValue`, whose shared node is placed under `base_path`
+so that two definitions cannot collide. `built.named` always reports the key that
+was actually created.
+
+### Feeding a node the template does not declare
+
+`FanOut.target` must be a name the block template declares or refers to. A name
+it never mentions is rejected, because that is usually a typo which would
+otherwise add a dead node to every block. Where it is deliberate — injecting a
+node the template itself has no use for — pass `create=True`:
+
+```python
+util.FanOut("leverage_source", "leverage", create=True)
+```
+
+The guard that matters still applies: a fan-out will not replace a calculation,
+with or without `create`.
+
+Note that the low-level `add_fan_out` is more permissive, because it takes target
+node names directly and has no template to check them against. If you are
+comparing the two, that is the difference.
 
 ## Reading a different node per key
 

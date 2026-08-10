@@ -104,18 +104,36 @@ class BlockContext(Generic[K]):
         are planned in the order they are declared.
         """
         node_key = _to_node_name(name, description)
-        if not self.block.has_node(node_key) and not all(
-            block_path.join(node_key) in self.planned for block_path in self.blocks.values()
-        ):
+        if not self.block.has_node(node_key) and not self._is_planned_in_every_block(node_key):
             msg = f"{description} does not exist in the block: {node_key!r}"
             raise ValueError(msg)
         return node_key
 
-    def require_block_input(self, name: Name, description: str) -> NodeKey:
-        """Resolve a relative name that must be an input node of the template."""
+    def _is_planned_in_every_block(self, node_key: NodeKey) -> bool:
+        """Return whether an earlier feature planned this node in every block."""
+        return all(block_path.join(node_key) in self.planned for block_path in self.blocks.values())
+
+    def require_block_input(self, name: Name, description: str, *, create: bool = False) -> NodeKey:
+        """Resolve a relative name that must be an input node inside every block.
+
+        A node the template declares must be an input: replacing a calculation
+        would silently discard it. A node an earlier feature planned is accepted
+        as-is, since the template has nothing to say about it. A name the template
+        never mentions is rejected, because it is usually a typo that would
+        otherwise add a dead node to every block — pass ``create=True`` to allow
+        it deliberately.
+        """
         from loman.consts import NodeAttributes
 
-        node_key = self.require_block_node(name, description)
+        node_key = _to_node_name(name, description)
+        if not self.block.has_node(node_key):
+            if self._is_planned_in_every_block(node_key) or create:
+                return node_key
+            msg = (
+                f"{description} does not exist in the block: {node_key!r}. "
+                "Pass create=True to add it to every block anyway."
+            )
+            raise ValueError(msg)
         node = self.block.dag.nodes[node_key]
         if node.get(NodeAttributes.FUNC) is not None or next(self.block.dag.predecessors(node_key), None) is not None:
             msg = f"{description} must be an input node: {node_key!r}"
@@ -155,17 +173,22 @@ class FanOut(Generic[K]):
     callable instead resolves a source node per key, as ``source(key)``, so each
     block can read from a different outer node. With a ``transform``, each target
     is calculated as ``transform(value, key)``.
+
+    ``target`` is a name inside each block. It must be something the template
+    declares or refers to, so a typo does not quietly add a dead node to every
+    block; set ``create=True`` to feed a name the template never mentions.
     """
 
     source: Name | Callable[[K], Name]
     target: Name
     transform: Callable[[Any, K], Any] | None = None
+    create: bool = False
 
     def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
         """Plan one target node per key, linked or transformed from its source."""
         from loman.computeengine import C
 
-        target = ctx.require_block_input(self.target, "Fan-out target")
+        target = ctx.require_block_input(self.target, "Fan-out target", create=self.create)
         sources = _resolve_fan_out_sources(ctx.bind(self.source), ctx.blocks)
         transform = ctx.bind(self.transform)
         for key, block_path in ctx.blocks.items():
@@ -177,8 +200,37 @@ class FanOut(Generic[K]):
 
 
 @dataclass(frozen=True)
+class Positional:
+    """Adapt an aggregator that takes positional arguments to a keyed ``combine``.
+
+    ``combine`` receives an ordered mapping so keys stay attached to values, which
+    is usually what you want. Where an existing function takes the values
+    positionally, wrap it rather than repeating ``lambda m: fn(*m.values())``::
+
+        FanIn("value", "total", combine=Positional(df_hconcat))
+
+    Keys are discarded, so prefer a keyed aggregator where one exists — for
+    dataframes, ``lambda m: pd.concat(m, axis=1)`` keeps the keys as column
+    labels. Like any callable that is not an importable module-level function,
+    this needs ``use_dill_for_functions=True`` to serialize.
+    """
+
+    func: Callable[..., Any]
+
+    def __call__(self, values: Mapping[Any, Any]) -> Any:
+        """Call the wrapped function with the mapping's values, in order."""
+        return self.func(*values.values())
+
+
+@dataclass(frozen=True)
 class FanIn(Generic[K]):
-    """Collect one relative output from every repeated block into a result node."""
+    """Collect one relative output from every repeated block into a result node.
+
+    ``source`` is a name inside each block. ``result`` is **not** relative to the
+    definition's ``base_path``: it names a node in the outer computation, so the
+    aggregate can live wherever it belongs rather than being forced under the
+    blocks. ``BuiltRepeatedBlocks.named`` reports the key that was created.
+    """
 
     source: Name
     result: Name
@@ -220,7 +272,12 @@ class IdNode:
 
 @dataclass(frozen=True)
 class InputValue:
-    """Give every block the same constant value for one relative input."""
+    """Give every block the same constant value for one relative input.
+
+    Unlike :class:`FanIn`'s ``result``, the shared node this creates **is**
+    relative to the definition's ``base_path``, landing at ``<base_path>/<name>``
+    so that two definitions with different base paths do not collide.
+    """
 
     name: Name
     value: Any

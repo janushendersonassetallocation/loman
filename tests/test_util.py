@@ -26,6 +26,7 @@ from loman.util import (
     IdNode,
     InputValue,
     PlannedNode,
+    Positional,
     RepeatedBlocks,
     add_fan_in,
     add_fan_out,
@@ -41,6 +42,11 @@ from loman.util import (
 def _select_key(values, key):
     """Pick one keyed value; module-level so the key type is visible in tests."""
     return values[key]
+
+
+def _sum_positional(*values):
+    """Sum values passed positionally, as a pre-mapping aggregator would."""
+    return sum(values)
 
 
 def _double_block() -> Computation:
@@ -464,6 +470,123 @@ class TestComputationUtilities:
         comp.compute("totals")
 
         assert comp.v.totals == {"a": 12}
+
+    def test_fan_out_accepts_a_target_the_template_only_refers_to(self):
+        """Accept a placeholder: a name the template mentions but does not define."""
+        block = Computation()
+        block.add_node("data")
+        block.add_node("result", lambda data, ref: data * ref)
+        comp = Computation()
+        comp.add_node("data_src", value=2)
+        comp.add_node("ref_src", value=5)
+
+        RepeatedBlocks(block, ("a",), "blocks", features=[FanOut("data_src", "data"), FanOut("ref_src", "ref")]).add_to(
+            comp
+        )
+        comp.compute_all()
+
+        assert comp.v["blocks/a/result"] == 10
+
+    def test_fan_out_rejects_a_target_the_template_never_mentions(self):
+        """Reject a likely typo, and say how to do it deliberately."""
+        comp = Computation()
+        comp.add_node("source", value=1)
+
+        with pytest.raises(ValueError, match="Pass create=True to add it to every block anyway"):
+            RepeatedBlocks(_double_block(), ("a",), "blocks", features=[FanOut("source", "typo")]).add_to(comp)
+
+        assert comp.nodes() == ["source"]
+
+    def test_fan_out_create_adds_a_node_the_template_never_mentions(self):
+        """Let a caller deliberately feed a node the block template does not declare."""
+        comp = Computation()
+        comp.add_node("source", value=7)
+
+        RepeatedBlocks(_double_block(), ("a", "b"), "blocks", features=[FanOut("source", "extra", create=True)]).add_to(
+            comp
+        )
+        comp.compute_all()
+
+        assert comp.v[["blocks/a/extra", "blocks/b/extra"]] == [7, 7]
+
+    def test_fan_out_create_still_refuses_to_replace_a_calculation(self):
+        """Keep the guard that matters even when create is set."""
+        comp = Computation()
+
+        with pytest.raises(ValueError, match="Fan-out target must be an input node"):
+            RepeatedBlocks(
+                _double_block(), ("a",), "blocks", features=[FanOut("source", "result", create=True)]
+            ).add_to(comp)
+
+        assert comp.nodes() == []
+
+    def test_fan_out_onto_a_planned_node_reports_the_real_conflict(self):
+        """Report the duplicate write, rather than crashing on the template lookup.
+
+        A fan-out targeting a node an earlier feature planned is always a conflict,
+        because both would write it. Before the template lookup handled planned
+        nodes, this surfaced as a bare KeyError from inside the builder.
+        """
+        comp = Computation()
+        comp.add_node("source", value=3)
+
+        class Injects:
+            """Test feature that adds a node no template declares."""
+
+            def plan(self, ctx):
+                """Plan one placeholder input per block."""
+                for block_path in ctx.blocks.values():
+                    yield PlannedNode.input_node(block_path.join("injected"), None)
+
+        definition = RepeatedBlocks(
+            _double_block(), ("a",), "blocks", features=[Injects(), FanOut("source", "injected")]
+        )
+
+        with pytest.raises(ValueError, match="would write the same node twice"):
+            definition.add_to(comp)
+
+        assert comp.nodes() == ["source"]
+
+    def test_fan_in_result_is_not_relative_to_base_path(self):
+        """Pin the documented asymmetry: fan-in results are outer, input values are not."""
+        comp = Computation()
+        comp.add_node("source", value=2)
+
+        built = RepeatedBlocks(
+            _double_block(),
+            ("a",),
+            "blocks",
+            features=[FanOut("source", "data"), FanIn("result", "total")],
+        ).add_to(comp)
+
+        assert built.named == {"total": NodeKey(("total",))}, "fan-in result is verbatim, not under base_path"
+
+        other = Computation()
+        RepeatedBlocks(_double_block(), ("a",), "blocks", features=[InputValue("data", 1)]).add_to(other)
+        assert "blocks/data" in other.nodes(), "input value is under base_path"
+
+    def test_positional_adapts_a_positional_aggregator(self):
+        """Remove the lambda boilerplate for an aggregator that takes values positionally."""
+        comp = Computation()
+        comp.add_node("source", value={"a": 1, "b": 2})
+
+        RepeatedBlocks(
+            _double_block(),
+            ("a", "b"),
+            "blocks",
+            features=[
+                FanOut("source", "data", transform=_select_key),
+                FanIn("result", "total", combine=Positional(_sum_positional)),
+            ],
+        ).add_to(comp)
+        comp.compute("total")
+
+        assert comp.v.total == 6
+
+    def test_positional_is_comparable_and_reprs_usefully(self):
+        """Keep it a value, so two definitions built the same way compare equal."""
+        assert Positional(_sum_positional) == Positional(_sum_positional)
+        assert "_sum_positional" in repr(Positional(_sum_positional))
 
     def test_repeated_blocks_reject_a_fan_in_before_its_source_exists(self):
         """Reject a feature that reads a node no earlier feature planned."""
