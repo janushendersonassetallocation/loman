@@ -5,9 +5,34 @@ has been written on this branch.
 
 ## Recommendation
 
-Add `loman.ComputationBase`, a `Computation` subclass that populates itself from
-its own class body, so a computation is **declared by inheritance rather than by
-decoration**:
+Two independent things are being asked for, and separating them is the main
+decision in this document.
+
+**The interface — "this computation is a Signal" — should be defined over
+`Computation`, not over how the computation was built.** A contract is a
+statement about a graph: these nodes exist, this one is an input, that one is a
+calculation. Nothing about that depends on whether the graph came from a
+decorator, from inheritance, or from `add_node` calls in a loop. Defining it that
+way means the existing `@ComputationFactory` gets interfaces on day one, with no
+migration:
+
+```python
+class Signal(ComputationInterface):
+    prices = required_input()
+    df_signals = required_calc()
+
+Signal.check(comp)      # -> report, over any Computation
+sig = Signal.view(comp) # -> typed facade; sig.df_signals is statically typed
+```
+
+This was prototyped against real loman and the same contract accepted
+decorator-built, inheritance-built and imperatively-built computations
+identically, rejecting a non-conforming one with reasons
+(`"missing node 'df_signals'"`, `"'prices' should be an input"`).
+
+**Separately**, `loman.ComputationBase` lets a computation be declared by
+inheriting rather than decorating, which is the only way to give the computation
+*object itself* a usable static type:
 
 ```python
 class Signal(ComputationBase):
@@ -18,12 +43,12 @@ class Signal(ComputationBase):
         return prices * 2
 ```
 
-`@ComputationFactory` keeps working unchanged; this is additive.
+`@ComputationFactory` keeps working unchanged; both are additive.
 
-The reason is narrow and measurable. A class decorator that returns something
-other than the class **cannot be typed**, in any current checker, by design. The
-consequence today is that every legitimate use of a factory-built computation is
-a false positive:
+The reason the second one is needed at all is narrow and measurable. A class
+decorator that returns something other than the class **cannot be typed**, in any
+current checker, by design. The consequence today is that every legitimate use of
+a factory-built computation is a false positive:
 
 ```text
 error[unresolved-attribute]: Object of type `Signal` has no attribute `compute_all`
@@ -34,12 +59,14 @@ error[unresolved-attribute]: Object of type `Signal` has no attribute `v`
 Inheritance produces none of those, while still catching real mistakes, because
 the declared class genuinely *is* the type of the object you get back.
 
-As a second-order effect it also gives abstract computations essentially for
-free, which is the other thing being asked for.
+The order matters for delivery: the interface layer is worth more, is not
+blocked on anything, and helps every existing user. `ComputationBase` is worth
+having, but only decorator users who also want the computation object typed have
+to adopt it.
 
 ## Evidence
 
-Five shapes were measured under `ty`, each with a deliberate nonsense call to
+Six shapes were measured under `ty`, each with a deliberate nonsense call to
 confirm the checker was really looking.
 
 | shape | inferred type | legitimate calls | nonsense caught |
@@ -47,10 +74,11 @@ confirm the checker was really looking.
 | class decorator returning a factory function (today) | the class | **all error** | yes, for the wrong reason |
 | the same decorator applied by assignment | `Computation` | pass | yes |
 | class decorator returning `type[Computation]` | the class | error | — |
+| a class declaring `__new__` returning `Computation` | the class | error | — |
 | **inheritance** | the subclass | pass | yes |
-| typed facade over a computation | the facade | pass | yes, and node values are typed |
+| **typed facade over a computation** | the facade | pass | yes, and node values are typed |
 
-Two findings matter more than the table.
+Three findings matter more than the table.
 
 **Class-decorator return types are ignored regardless of what they are.** The
 third row is the control: annotating the decorator as returning
@@ -58,6 +86,17 @@ third row is the control: annotating the decorator as returning
 so no annotation, overload or stub can fix the current shape. An earlier
 suggestion to add `@overload` to `computation_factory` was tested and does not
 work.
+
+**Nor does `__new__`.** The fourth row is the last mechanism that could have
+rescued the decorator form: a class whose `__new__` is declared to return
+`Computation`. `ty` ignores that too. There is no way to make the decorated
+symbol itself type as a computation, so anything that needs the decorator to keep
+working must go through the facade rather than through the decorated name.
+
+**The facade works over anything.** It is an ordinary class, so its attributes
+type normally, and it takes a `Computation` rather than caring where the
+computation came from. That is what lets the interface layer serve decorator
+users without asking them to change how they build computations.
 
 **The assignment form does type correctly.** `Signal = computation_factory(Spec)`
 infers `Computation`, because it is an ordinary call rather than a class
@@ -113,7 +152,59 @@ What inheritance does **not** cover, and still needs machinery:
 
 ## Proposed API
 
-### Layer 1: `ComputationBase`
+The first two layers work over any `Computation`, whatever built it. Only the
+third asks a user to change how they declare one.
+
+### Layer 1: structural contracts
+
+```python
+class Signal(ComputationInterface):
+    prices = required_input()
+    df_signals = required_calc()
+
+Signal.check(comp)      # -> report, in the idiom of validate() and to_df()
+```
+
+Two independent kinds of assertion — node presence and kind, and dependency shape
+— usable separately or together, because an interface that pins wiring is
+sometimes what you want and usually is not:
+
+```python
+class Signal(ComputationInterface):
+    df_signals = required_calc(depends_on=["prices"])   # opt-in, not the default
+```
+
+The prototype's report is a list of reasons rather than a bare boolean, which is
+what makes it useful at a boundary: `"missing node 'df_signals'"`,
+`"'prices' should be an input"`.
+
+### Layer 2: typed node access
+
+```python
+sig = Signal.view(comp)     # facade; sig.df_signals is statically a DataFrame
+```
+
+Only the facade can type node values, since attribute access on a real class is
+checkable where string-keyed access is not. `view` checks conformance first and
+refuses a computation that does not satisfy the contract, so a typed handle
+cannot be obtained for a graph that would not support it.
+
+Together these two layers give a decorator user everything except a static type
+for the computation object:
+
+```python
+@ComputationFactory
+class MySignal:
+    prices = input_node()
+
+    @calc_node
+    def df_signals(self, prices): ...
+
+
+sig = Signal.view(MySignal())   # typed, conformance-checked, no migration
+```
+
+### Layer 3: `ComputationBase`
 
 ```python
 class ComputationBase(Computation):
@@ -127,28 +218,25 @@ class ComputationBase(Computation):
 `_ignore_self` stays a class attribute so the per-class opt-out that
 `@ComputationFactory(ignore_self=False)` provides has an equivalent.
 
-### Layer 2: structural contracts
+This is the layer that types the computation object itself, and the one that
+requires adopting a new declaration style. Worth having, and worth being last.
 
-For computations not built by inheritance:
+### Declaring conformance at construction
 
-```python
-Signal.check(comp)          # -> report, in the idiom of validate() and to_df()
-Signal.requires(depends_on={"df_signals": ["prices"]})   # dependency shape, opt-in
-```
-
-Two independent checks — node presence and kind, and dependency shape — usable
-separately or together, because an interface that pins wiring is sometimes what
-you want and usually is not.
-
-### Layer 3: typed node access
+A factory can name the interfaces it claims, so a broken implementation fails
+where it is defined rather than at the call site that needed it:
 
 ```python
-sig = Signal.view(comp)     # facade; sig.df_signals is statically a DataFrame
+@ComputationFactory(implements=Signal)
+class MySignal: ...
+
+
+class MySignal(ComputationBase, implements=Signal): ...
 ```
 
-Only the facade can type node values, since attribute access on a real class is
-checkable where string-keyed access is not. Worth designing now, but shippable
-last.
+Both are runtime checks — the static type of the decorator form is unaffected,
+for the reasons in the evidence section. The value is that the error arrives at
+construction with the contract's reasons attached.
 
 ## What this makes redundant downstream
 
@@ -171,28 +259,38 @@ decorator is kept as-is, the annotations should be set rather than inherited.
   be, since silently downgrading the type is worse than not having it.
 - **Deserialization loses the subclass.** Unavoidable: the deserializer has no
   way to know which class produced the graph. Must be documented, and it argues
-  for the structural `check()` in layer 2 as the way to re-establish an interface
-  after a roundtrip.
+  for the structural `check()` in layer 1 as the way to re-establish an interface
+  after a roundtrip — which works precisely because the contract is defined over
+  `Computation` rather than over the class that built it.
 - **Two ways to define a computation.** The decorator and the base class would
   coexist indefinitely. That is a genuine cost in documentation and in answering
-  "which should I use". The docs should recommend one — the base class — and
-  explain that the decorator remains supported.
+  "which should I use". Splitting the interface layer out of the base class
+  softens it considerably: the answer becomes "either, and interfaces work with
+  both", rather than "switch". The docs should still say which is recommended for
+  new code.
 
 ## Delivery phases
 
 Each phase leaves the branch green and is independently reviewable.
 
-- **Phase 1 — `ComputationBase`.** The class, tests covering equivalence with the
+- **Phase 1 — structural contracts.** `ComputationInterface` and `check()`,
+  returning a report in the existing `ValidationReport` idiom, with node presence
+  and kind. Dependency shape as an opt-in second assertion. Works over any
+  `Computation`, so it lands value for existing `@ComputationFactory` users
+  without asking them to change anything, and it does not depend on any of the
+  phases below.
+- **Phase 2 — the typed facade.** `view()`, checking conformance before handing
+  back a typed handle. This is what gives decorator users typed node access.
+- **Phase 3 — `ComputationBase`.** The class, tests covering equivalence with the
   decorator, `self`-binding, and subclass composition. Docs page and a changelog
   entry. No change to existing behaviour.
-- **Phase 2 — `copy()` preserves the subclass**, plus a test. Small and separable.
-- **Phase 3 — structural contracts.** `check()` returning a report in the
-  existing `ValidationReport` idiom, with node presence and kind. Dependency
-  shape as an opt-in second check.
-- **Phase 4 — typed node access.** The facade, and whatever generation or
-  declaration it needs to stay in step with the interface.
-- **Phase 5 — documentation.** Recommend the base class, document the decorator
-  as supported, and state the copy and serialization caveats plainly.
+- **Phase 4 — `copy()` preserves the subclass**, plus a test. Small and separable,
+  and only meaningful once phase 3 exists.
+- **Phase 5 — conformance at construction.** `implements=` on both the decorator
+  and the base class, as a runtime check reporting the contract's reasons.
+- **Phase 6 — documentation.** Show interfaces working with both declaration
+  styles, say which is recommended for new code, and state the copy and
+  serialization caveats plainly.
 
 ## Testing approach
 
