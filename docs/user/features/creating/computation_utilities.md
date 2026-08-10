@@ -83,7 +83,10 @@ Four are built in:
 `Positional(fn)` wraps an aggregator that takes its values positionally, so a
 `combine` written before the keyed mapping existed does not need a lambda at
 every call site: `FanIn("value", "total", combine=Positional(df_hconcat))`.
-It discards the keys, so prefer a keyed aggregator where one exists.
+It discards the keys. A keyed aggregator can use them instead — for dataframes,
+`lambda m: pd.concat(m, axis=1)` turns them into column labels — but that is a
+different result, not a drop-in replacement: it adds an outer level to the column
+index where a flat positional concatenation does not.
 
 Features are planned in the order given, and a later feature may read a node an
 earlier one created. Nothing is applied until all of them have been planned and
@@ -124,9 +127,32 @@ util.FanOut("leverage_source", "leverage", create=True)
 The guard that matters still applies: a fan-out will not replace a calculation,
 with or without `create`.
 
+`InputValue` takes the same `create` flag, and defaults the same way. `IdNode`
+defaults to `create=True` instead, because creating the node is its whole job — a
+template that never mentions the name is the ordinary case there, not a mistake.
+The cost is that a misspelled `IdNode("labl")` adds a node nothing reads and
+leaves the real `label` unfilled; `validate()` reports that as an uninitialized
+input, but only once the graph is built. Pass `create=False` where the template
+does declare the node, to have the misspelling rejected at definition time.
+
 Note that the low-level `add_fan_out` is more permissive, because it takes target
 node names directly and has no template to check them against. If you are
 comparing the two, that is the difference.
+
+### Templates built by a computation factory
+
+A `@ComputationFactory` class makes a perfectly good template — build it, then
+pass the computation:
+
+```python
+util.RepeatedBlocks(PositionsComputation(), keys, "positions", features=[...])
+```
+
+One thing to watch: a factory commonly gives inputs a default with
+`input_node(value=2)`. Because `keep_values` is `False`, those defaults are **not**
+carried into the copies, so the blocks stay uninitialized until the input is
+supplied. Pass `keep_values=True` to keep them, or feed the input with an
+`InputValue` or a `FanOut`.
 
 ## Reading a different node per key
 

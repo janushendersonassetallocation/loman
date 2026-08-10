@@ -2,6 +2,7 @@
 
 ## [unreleased]
 - `FanOut` rejects a target the block template never mentions, since that is usually a typo that would add a dead node to every block; pass `create=True` to feed such a node deliberately. The low-level `add_fan_out` stays permissive, having no template to check against
+- `InputValue` takes the same `create` flag as `FanOut`, and `IdNode` takes it with a default of `True`, since creating the node is its purpose; pass `create=False` there to have a misspelled name rejected at definition time rather than surfacing later as an uninitialized input
 - Added `Positional`, wrapping an aggregator that takes its values positionally so a `combine` does not need a lambda at every call site
 - Documented which repeated-block names are relative to `base_path`: a fan-in `result` is a verbatim outer node, while an `InputValue` is placed under `base_path`
 - BUGFIX: a fan-out targeting a node an earlier feature planned raised a bare `KeyError` from inside the builder; it now reports the duplicate write

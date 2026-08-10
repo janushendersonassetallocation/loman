@@ -37,6 +37,7 @@ from loman import (
     input_node,
     node,
     repeated_blocks,
+    util,
 )
 from loman.computeengine import (
     Block,
@@ -2156,6 +2157,79 @@ def test_computation_factory_repeated_blocks_keeps_a_plain_string_source():
     comp.compute("total")
 
     assert comp.v.total == {"a": 25}
+
+
+def test_factory_built_computation_works_as_a_repeated_block_template():
+    """Use a @ComputationFactory computation as the template for repeated blocks.
+
+    This is the shape a consumer reaches for first — define the per-instance model
+    as a factory class, then stamp it out — and it goes through util rather than
+    the repeated_blocks class-body form, so it was otherwise untested.
+    """
+
+    @ComputationFactory
+    class PositionsComputation:
+        quantity = input_node()
+        price = input_node(value=2)
+
+        @calc_node
+        def value(self, quantity, price):
+            return quantity * price
+
+    comp = Computation()
+    comp.add_node("quantities", value={"AAPL": 10, "MSFT": 5})
+
+    features = [
+        IdNode("label"),
+        FanOut("quantities", "quantity", transform=_select_instrument),
+        FanIn("value", "total", combine=lambda values: sum(values.values())),
+    ]
+    built = util.RepeatedBlocks(PositionsComputation(), ("AAPL", "MSFT"), "positions", features=features).add_to(comp)
+    comp.compute_all()
+
+    assert built.blocks == {"AAPL": NodeKey(("positions", "AAPL")), "MSFT": NodeKey(("positions", "MSFT"))}
+    assert comp.v["positions/AAPL/label"] == "AAPL"
+
+    # A factory class commonly gives inputs a default with input_node(value=...).
+    # keep_values is False by default, so those defaults are NOT carried into the
+    # copies, and the blocks cannot compute until the input is supplied.
+    assert comp.state("positions/AAPL/price") == States.UNINITIALIZED
+    assert comp.v.total is None
+    assert [str(n) for n in comp.validate().uninitialized_inputs] == [
+        "positions/AAPL/price",
+        "positions/MSFT/price",
+    ]
+
+
+def test_factory_template_defaults_survive_with_keep_values():
+    """Carry a factory's input defaults into every copy when asked to."""
+
+    @ComputationFactory
+    class PositionsComputation:
+        quantity = input_node()
+        price = input_node(value=2)
+
+        @calc_node
+        def value(self, quantity, price):
+            return quantity * price
+
+    comp = Computation()
+    comp.add_node("quantities", value={"AAPL": 10, "MSFT": 5})
+
+    util.RepeatedBlocks(
+        PositionsComputation(),
+        ("AAPL", "MSFT"),
+        "positions",
+        features=[
+            FanOut("quantities", "quantity", transform=_select_instrument),
+            FanIn("value", "total", combine=lambda values: sum(values.values())),
+        ],
+        keep_values=True,
+    ).add_to(comp)
+    comp.compute_all()
+
+    assert comp.v["positions/AAPL/price"] == 2
+    assert comp.v.total == 30
 
 
 def test_computation_factory_repeated_blocks_from_computation_keeping_values():

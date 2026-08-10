@@ -49,6 +49,16 @@ def _sum_positional(*values):
     return sum(values)
 
 
+def _hconcat(*frames):
+    """Concatenate frames passed positionally, giving flat columns."""
+    return pd.concat(frames, axis=1)
+
+
+def _keyed_concat(frames):
+    """Concatenate a keyed mapping, giving a MultiIndex column level."""
+    return pd.concat(frames, axis=1)
+
+
 def _double_block() -> Computation:
     """Create a reusable block that doubles its input."""
     block = Computation()
@@ -564,6 +574,77 @@ class TestComputationUtilities:
         other = Computation()
         RepeatedBlocks(_double_block(), ("a",), "blocks", features=[InputValue("data", 1)]).add_to(other)
         assert "blocks/data" in other.nodes(), "input value is under base_path"
+
+    def test_id_node_creates_by_default_because_that_is_its_job(self):
+        """Add the identifier node even when the template never mentions it."""
+        comp = Computation()
+
+        RepeatedBlocks(_double_block(), ("a",), "blocks", features=[IdNode("label")]).add_to(comp)
+
+        assert comp.v["blocks/a/label"] == "a"
+
+    def test_id_node_can_be_made_strict(self):
+        """Reject a misspelled identifier name at definition time when asked to."""
+        block = Computation()
+        block.add_node("label")
+        block.add_node("data")
+        block.add_node("result", lambda label, data: f"{label}{data}")
+        comp = Computation()
+
+        with pytest.raises(ValueError, match="Identifier node does not exist in the block"):
+            RepeatedBlocks(block, ("a",), "blocks", features=[IdNode("labl", create=False)]).add_to(comp)
+
+        assert comp.nodes() == []
+
+    def test_a_misspelled_id_node_is_reported_by_validate(self):
+        """Show where a permissive misspelling does surface, since it is not at build time."""
+        block = Computation()
+        block.add_node("label")
+        block.add_node("data")
+        block.add_node("result", lambda label, data: f"{label}{data}")
+        comp = Computation()
+        comp.add_node("source", value=1)
+
+        RepeatedBlocks(block, ("a",), "blocks", features=[IdNode("labl"), FanOut("source", "data")]).add_to(comp)
+
+        report = comp.validate()
+        assert [str(n) for n in report.uninitialized_inputs] == ["blocks/a/label"]
+        assert not report.is_ready
+        assert "blocks/a/labl" in comp.nodes(), "the misspelled node is created, and reads to nobody"
+
+    def test_input_value_rejects_a_name_the_template_never_mentions(self):
+        """Guard the seed-a-value case the same way as a fan-out target."""
+        comp = Computation()
+
+        with pytest.raises(ValueError, match="Pass create=True to add it to every block anyway"):
+            RepeatedBlocks(_double_block(), ("a",), "blocks", features=[InputValue("typo", 1)]).add_to(comp)
+
+        assert comp.nodes() == []
+
+    def test_input_value_create_seeds_an_undeclared_node(self):
+        """Let a caller deliberately seed a value the template does not declare."""
+        comp = Computation()
+
+        RepeatedBlocks(_double_block(), ("a", "b"), "blocks", features=[InputValue("extra", 9, create=True)]).add_to(
+            comp
+        )
+        comp.compute_all()
+
+        assert comp.v[["blocks/a/extra", "blocks/b/extra"]] == [9, 9]
+
+    def test_positional_and_a_keyed_aggregator_give_different_shapes(self):
+        """Pin the documented warning that the keyed alternative is not a drop-in."""
+        comp = Computation()
+        for key in ("x", "y"):
+            comp.add_node(key, value=pd.DataFrame({"v": [1]}))
+        sources = {"x": "x", "y": "y"}
+
+        add_fan_in(comp, "flat", sources, combine=Positional(_hconcat))
+        add_fan_in(comp, "keyed", sources, combine=_keyed_concat)
+        comp.compute_all()
+
+        assert list(comp.v.flat.columns) == ["v", "v"]
+        assert list(comp.v.keyed.columns) == [("x", "v"), ("y", "v")]
 
     def test_positional_adapts_a_positional_aggregator(self):
         """Remove the lambda boilerplate for an aggregator that takes values positionally."""

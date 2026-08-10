@@ -209,10 +209,14 @@ class Positional:
 
         FanIn("value", "total", combine=Positional(df_hconcat))
 
-    Keys are discarded, so prefer a keyed aggregator where one exists — for
-    dataframes, ``lambda m: pd.concat(m, axis=1)`` keeps the keys as column
-    labels. Like any callable that is not an importable module-level function,
-    this needs ``use_dill_for_functions=True`` to serialize.
+    Keys are discarded. A keyed aggregator can use them instead — for dataframes,
+    ``lambda m: pd.concat(m, axis=1)`` turns them into column labels — but that is
+    **a different result, not a drop-in replacement**: it adds an outer level to
+    the column index, where a flat positional concatenation does not. Choose it
+    because you want the keys in the output, not as a like-for-like swap.
+
+    Like any callable that is not an importable module-level function, this needs
+    ``use_dill_for_functions=True`` to serialize.
     """
 
     func: Callable[..., Any]
@@ -257,15 +261,22 @@ class IdNode:
 
     Block functions can then depend on their key by name, to look data up or to
     branch on it, without the key being wired in from outside.
+
+    ``create`` defaults to ``True``, unlike :class:`FanOut`, because creating the
+    node is this feature's whole job: a template that never mentions the name is
+    the ordinary case, not a mistake. The cost is that a misspelled name adds a
+    node nothing reads and leaves the real one unfilled — `validate()` reports
+    that as an uninitialized input, but only once the graph is built. Set
+    ``create=False`` where the template does declare the node, to have the
+    misspelling rejected at definition time instead.
     """
 
     name: Name
+    create: bool = True
 
     def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
         """Plan one value node per key, holding that key."""
-        name = _to_node_name(self.name, "Identifier node")
-        if ctx.block.has_node(name):
-            ctx.require_block_input(name, "Identifier node")
+        name = ctx.require_block_input(self.name, "Identifier node", create=self.create)
         for key, block_path in ctx.blocks.items():
             yield PlannedNode.input_node(block_path.join(name), key)
 
@@ -277,14 +288,19 @@ class InputValue:
     Unlike :class:`FanIn`'s ``result``, the shared node this creates **is**
     relative to the definition's ``base_path``, landing at ``<base_path>/<name>``
     so that two definitions with different base paths do not collide.
+
+    ``create`` behaves as it does on :class:`FanOut`, and defaults the same way:
+    seeding a value into a name the template never mentions is usually a typo,
+    so it must be asked for.
     """
 
     name: Name
     value: Any
+    create: bool = False
 
     def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
         """Plan one shared outer node, linked into every block."""
-        name = ctx.require_block_input(self.name, "Input value")
+        name = ctx.require_block_input(self.name, "Input value", create=self.create)
         shared = ctx.base_path.join(name)
         yield PlannedNode.input_node(shared, self.value, label=self.name)
         for block_path in ctx.blocks.values():
