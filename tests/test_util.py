@@ -10,6 +10,7 @@ This module tests:
 """
 
 import types
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import numpy as np
@@ -17,6 +18,7 @@ import pandas as pd
 import pytest
 
 from loman import Computation, NodeKey, States
+from loman.consts import NodeAttributes
 from loman.util import (
     AttributeView,
     FanIn,
@@ -34,6 +36,11 @@ from loman.util import (
     as_iterable,
     value_eq,
 )
+
+
+def _select_key(values, key):
+    """Pick one keyed value; module-level so the key type is visible in tests."""
+    return values[key]
 
 
 def _double_block() -> Computation:
@@ -540,6 +547,98 @@ class TestComputationUtilities:
             definition.add_to(comp)
 
         assert comp.nodes() == []
+
+    def test_repeated_blocks_preserve_block_executors(self):
+        """Keep the template's executor on block nodes, and leave generated nodes on the default.
+
+        The documentation promises that independent blocks can use configured
+        executors and that the generated adapter nodes use the computation's
+        default executor, so both halves are asserted here.
+        """
+        block = Computation()
+        block.add_node("data")
+        block.add_node("result", lambda data: data * 2, executor="worker")
+        comp = Computation(executor_map={"worker": ThreadPoolExecutor(1)})
+        comp.add_node("source", value={"a": 1, "b": 2})
+
+        RepeatedBlocks(
+            block,
+            ("a", "b"),
+            "blocks",
+            features=[
+                FanOut("source", "data", transform=_select_key),
+                FanIn("result", "results"),
+            ],
+        ).add_to(comp)
+
+        assert comp.dag.nodes[NodeKey(("blocks", "a", "result"))][NodeAttributes.EXECUTOR] == "worker"
+        assert comp.dag.nodes[NodeKey(("blocks", "a", "data"))][NodeAttributes.EXECUTOR] is None
+        assert comp.dag.nodes[NodeKey(("results",))][NodeAttributes.EXECUTOR] is None
+        assert comp.validate().missing_executors == ()
+
+        comp.compute_all()
+        assert comp.v.results == {"a": 2, "b": 4}
+
+    def test_repeated_blocks_report_a_missing_block_executor(self):
+        """Surface an unconfigured block executor through validate, rather than at compute time."""
+        block = Computation()
+        block.add_node("data")
+        block.add_node("result", lambda data: data * 2, executor="worker")
+        comp = Computation()
+
+        RepeatedBlocks(block, ("a",), "blocks", features=[InputValue("data", 3)]).add_to(comp)
+
+        missing = comp.validate().missing_executors
+        assert [(str(node), name) for node, name in missing] == [("blocks/a/result", "worker")]
+
+    def test_repeated_blocks_carry_non_string_keys_through_features(self):
+        """Pass non-string keys to transforms and back out through the fan-in mapping."""
+        comp = Computation()
+        comp.add_node("source", value={101: 1, 202: 2})
+
+        built = RepeatedBlocks(
+            _double_block(),
+            (101, 202),
+            "blocks",
+            features=[
+                IdNode("label"),
+                FanOut("source", "data", transform=_select_key),
+                FanIn("result", "results"),
+            ],
+        ).add_to(comp)
+        comp.compute_all()
+
+        assert built.blocks == {101: NodeKey(("blocks", 101)), 202: NodeKey(("blocks", 202))}
+        assert comp.v.results == {101: 2, 202: 4}
+        assert comp.value(NodeKey(("blocks", 101, "label"))) == 101
+        assert comp.value(NodeKey(("blocks", 101, "data"))) == 1
+
+    def test_repeated_blocks_keep_values_alongside_features(self):
+        """Let a fan-out replace a copied value while other copied values survive."""
+        block = Computation()
+        block.add_node("data")
+        block.add_node("scale")
+        block.add_node("result", lambda data, scale: data * scale)
+        block.insert("data", 2)
+        block.insert("scale", 100)
+        block.compute_all()
+        comp = Computation()
+        comp.add_node("source", value={"a": 7})
+
+        RepeatedBlocks(
+            block,
+            ("a",),
+            "blocks",
+            features=[FanOut("source", "data", transform=_select_key)],
+            keep_values=True,
+        ).add_to(comp)
+
+        assert comp.value(NodeKey(("blocks", "a", "scale"))) == 100
+        assert comp.state(NodeKey(("blocks", "a", "data"))) == States.COMPUTABLE
+
+        comp.compute_all()
+        assert comp.v["blocks/a/data"] == 7
+        assert comp.v["blocks/a/result"] == 700
 
     def test_repeated_blocks_can_copy_template_values(self):
         """Pass keep-values behavior through the declarative definition."""
