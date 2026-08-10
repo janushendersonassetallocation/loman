@@ -169,8 +169,11 @@ phase 1. *Size:* small.
 
 **Phase 3 — `ComputationBase`.** *Acceptance:* for one model expressed both ways,
 generated nodes, edges and computed values match exactly; `self`-binding works;
-a subclass inherits declared nodes; `isinstance` holds. *Depends on:* nothing.
-*Size:* medium.
+a subclass inherits declared nodes; `isinstance` holds; **and a subclass works as
+a repeated-block template**, since that is a real consumer's pattern rather than a
+hypothetical one — a `@ComputationFactory` computation fed to `RepeatedBlocks` is
+how they build today, and the inheritance form has to reach the same place.
+*Depends on:* nothing. *Size:* medium.
 
 **Phase 4 — `copy()` preserves the subclass.** *Acceptance:* `Signal().copy()` is
 a `Signal`, values intact. *Depends on:* phase 3. *Size:* small.
@@ -230,10 +233,13 @@ inherited.
 - **Does `view()` snapshot or stay live?** A facade holding the computation reads
   current values on each access, which is probably what people expect, but it
   means a `Signal` can stop conforming after it was handed out.
-- **Interaction with repeated blocks.** Adding a `ComputationBase` subclass as a
-  block works; using one as a *repeated-block template* is untested, because
-  those utilities were on an unmerged branch when this was written. Check before
-  phase 3.
+- **Interaction with repeated blocks** is now a phase-3 acceptance criterion
+  rather than an open question. A `@ComputationFactory` computation as a
+  repeated-block template is covered by a test on the utilities branch, including
+  the trap that `keep_values` being `False` drops a factory's
+  `input_node(value=...)` defaults. `ComputationBase` must land in the same place,
+  and a consumer already relying on the factory form would be the first to hit
+  any gap.
 - **Metaclass conflicts.** A computation class that already has a metaclass would
   now meet `Computation`'s. Unlikely, but a hard error when it happens.
 - **Should interfaces compose?** `class Tradeable(Signal, Priced)` is natural to
