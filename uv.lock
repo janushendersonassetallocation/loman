@@ -613,7 +613,7 @@ wheels = [
 
 [[package]]
 name = "loman"
-version = "0.6.1a4"
+version = "0.6.1a5"
 source = { editable = "." }
 dependencies = [
     { name = "attrs" },
