@@ -48,6 +48,7 @@ from loman.computeengine import (
     NullObject,
     RepeatedBlocksNode,
     TimingData,
+    _bind_self,
     identity_function,
 )
 from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
@@ -2246,6 +2247,40 @@ def test_computation_factory_repeated_blocks_from_computation_keeping_values():
     comp = OuterComputation()
 
     assert comp.v[["blocks/a/result", "blocks/b/result"]] == [8, 8]
+
+
+def test_binding_self_without_a_definition_object_is_reported_clearly():
+    """Explain the contradiction rather than surfacing a bare binding TypeError.
+
+    Asking for `self` binding with nothing to bind to is only reachable by driving
+    the API directly, but the message it produced came from inside types.MethodType
+    and said nothing about which callback or why.
+    """
+
+    def takes_self(self, value, key):
+        return value[key]
+
+    block = Computation()
+    block.add_node("data")
+    block.add_node("out", lambda data: data)
+    comp = Computation()
+    comp.add_node("src", value={"a": 1})
+
+    definition = util.RepeatedBlocks(block, ("a",), "blocks", features=[FanOut("src", "data", transform=takes_self)])
+
+    with pytest.raises(ValueError, match="no definition object was supplied"):
+        definition.add_to(comp, definition_object=None, ignore_self=True)
+
+    assert comp.nodes() == ["src"]
+
+
+def test_binding_self_is_skipped_when_ignore_self_is_off():
+    """Leave a self-taking callback alone rather than complaining, when binding is off."""
+
+    def takes_self(self, value, key):
+        return (self, value, key)
+
+    assert _bind_self(takes_self, None, False) is takes_self
 
 
 def test_repeated_blocks_node_with_invalid_type():

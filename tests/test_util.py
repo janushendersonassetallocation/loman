@@ -308,6 +308,24 @@ class TestComputationUtilities:
 
         assert comp.nodes() == []
 
+    def test_add_fan_in_rejects_cycles_before_mutating(self):
+        """Refuse a result that one of its own sources already depends on.
+
+        ``add_fan_out`` checked this from the start and ``add_fan_in`` did not, so
+        a genuinely cyclic graph was accepted and only surfaced later, during
+        planning or compute.
+        """
+        comp = Computation()
+        comp.add_node("src_a", lambda total: total + 1)
+        comp.add_node("src_b", value=2)
+        assert comp.state("total") == States.PLACEHOLDER
+
+        with pytest.raises(ValueError, match="would create a cycle"):
+            add_fan_in(comp, "total", {"a": "src_a", "b": "src_b"})
+
+        assert comp.state("total") == States.PLACEHOLDER, "the result node was not created"
+        assert comp.i.src_a == ["total"], "the existing dependency is untouched"
+
     def test_add_id_nodes_holds_each_key_as_a_value(self):
         """Give every block a predecessor-free node holding its own key."""
         comp = Computation()

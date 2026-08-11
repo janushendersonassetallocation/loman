@@ -572,8 +572,8 @@ def add_fan_in(
         The generated result node key.
 
     Raises:
-        ValueError: If source nodes are repeated, the result already exists, or
-            the result is also a source.
+        ValueError: If source nodes are repeated, the result already exists, the
+            result is also a source, or a source already depends on the result.
         TypeError: If a node name is a callable.
     """
     from loman.computeengine import C
@@ -589,6 +589,7 @@ def add_fan_in(
     if _is_defined(comp, result_node_key):
         msg = f"Fan-in result node already exists: {result_node_key!r}"
         raise ValueError(msg)
+    _validate_acyclic_edges(comp, ((source, result_node_key) for source in source_node_keys))
 
     comp.add_node(
         result_node_key,

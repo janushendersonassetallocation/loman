@@ -423,7 +423,7 @@ def _(comp):
 
 @app.cell
 def _(comp):
-    # concatentated
+    # concatenated
     comp.compute("stress_report")
     stress_report = comp.v.stress_report
     stress_report

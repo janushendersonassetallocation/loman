@@ -278,11 +278,22 @@ def _bind_self(f: Any, obj: object, ignore_self: bool) -> Any:
 
     Anything that is not callable, including ``None`` and a plain node name, is
     returned unchanged.
+
+    Asking for ``self`` when there is no definition object to bind to is a
+    contradiction, so it is reported here rather than as the bare
+    ``TypeError: instance must not be None`` that binding would otherwise raise.
     """
     if not callable(f) or not ignore_self:
         return f
     signature = get_signature(f)
     if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
+        if obj is None:
+            name = getattr(f, "__qualname__", repr(f))
+            msg = (
+                f"Cannot bind 'self' for {name}: no definition object was supplied. "
+                "Pass one, drop the 'self' parameter, or use ignore_self=False."
+            )
+            raise ValueError(msg)
         return types.MethodType(f, obj)
     return f
 

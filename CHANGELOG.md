@@ -1,6 +1,8 @@
 # Change Log
 
 ## [unreleased]
+- BUGFIX: `add_fan_in` accepted a result that one of its own sources already depended on, producing a cyclic graph that only surfaced later during planning or compute. It now rejects it before mutating, as `add_fan_out` always did
+- Asking for `self` binding with no definition object now explains the contradiction, instead of surfacing a bare `TypeError: instance must not be None` from inside the binding call
 - `FanOut` rejects a target the block template never mentions, since that is usually a typo that would add a dead node to every block; pass `create=True` to feed such a node deliberately. The low-level `add_fan_out` stays permissive, having no template to check against
 - `InputValue` takes the same `create` flag as `FanOut`, and `IdNode` takes it with a default of `True`, since creating the node is its purpose; pass `create=False` there to have a misspelled name rejected at definition time rather than surfacing later as an uninitialized input
 - Added `Positional`, wrapping an aggregator that takes its values positionally so a `combine` does not need a lambda at every call site
