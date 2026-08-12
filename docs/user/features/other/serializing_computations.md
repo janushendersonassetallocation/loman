@@ -178,6 +178,46 @@ For types that are not handled by the default serializer, pass a custom `Computa
 0
 ```
 
+## Constant arguments that cannot be encoded
+
+A constant argument given as `C(...)` is held on the node rather than on an edge,
+and the node's function cannot be called without it. So where an unencodable
+*function* is stored as `null` and the node merely loses the ability to
+recalculate, an unencodable *constant* raises `SerializationError` naming the node
+and the parameter, rather than writing a file that would raise `TypeError` from
+the missing argument on the first recalculation:
+
+```pycon
+>>> from loman import Computation, C, ComputationSerializer
+>>> def scale(x, factor):
+...     return x * factor
+>>> comp = Computation()
+>>> comp.add_node('x', value=10)
+>>> comp.add_node('scaled', scale, kwds={'factor': C(object())})
+>>> comp.write_json(io.StringIO())
+Traceback (most recent call last):
+    ...
+loman.exception.SerializationError: Cannot serialize constant argument 'factor' on node NodeKey('scaled') ...
+```
+
+The remedy is usually to register a transformer for the type, as in
+[Custom serialization for user-defined types](#custom-serialization-for-user-defined-types)
+above, or to set `serialize=False` on the node.
+
+Releases before this behaviour existed dropped such a constant silently. To keep
+writing files while an existing codebase is fixed, ask for the old behaviour
+explicitly — the constant is omitted and an `UnserializableConstantWarning` says
+so, which is a step towards fixing it rather than a setting to leave in place:
+
+```pycon
+>>> serializer = ComputationSerializer(on_unserializable_constant='drop')
+>>> comp.write_json(io.StringIO(), serializer=serializer)  # doctest: +SKIP
+UnserializableConstantWarning: Cannot serialize constant argument 'factor' on node
+NodeKey('scaled') ... Dropping it, because on_unserializable_constant='drop'. The
+saved graph will raise TypeError from the missing argument when this node is
+recalculated.
+```
+
 ## Pandas support
 
 DataFrames and Series are serialized automatically:
@@ -200,11 +240,18 @@ The file is a single JSON object with three top-level keys:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "nodes": [ ... ],
   "edges": [ ... ]
 }
 ```
+
+Version 2 added the node `args` and `kwds` maps described below. The two versions
+are readable in either direction: a version 1 file loads here, its missing maps
+read as "no constant arguments", and a version 2 file loads under releases that
+predate them, which ignore the new fields. Neither direction repairs the other —
+a graph saved as version 1 has no record of its constants, so it must be saved
+again to gain them.
 
 ### Node object
 
@@ -217,8 +264,18 @@ Each entry in `nodes` has:
 | `value` | any | Encoded value (see below), or `null` when absent. |
 | `has_value` | bool | `true` when `value` should be restored; `false` when the node has no value. |
 | `func` | object \| null | Encoded callable (see below), or `null`. |
+| `args` | object | Constant positional arguments, keyed by stringified index. Empty when the node has none. |
+| `kwds` | object | Constant keyword arguments, keyed by parameter name. Empty when the node has none. |
 | `serialize` | bool | Whether the node carries the `__serialize__` tag. |
 | `tags` | list[string] | Non-system user tags. |
+
+A node's function arguments come from two places, and a reader needs both to call
+it. An argument taken from another node is recorded on an **edge**; an argument
+given as a `ConstantValue` (`C(...)`) belongs to no node, so it is held on the
+node itself in `args` and `kwds`. Dropping the
+constants leaves the function short of arguments, which is why an unencodable one
+raises rather than being skipped — see
+[Constant arguments that cannot be encoded](#constant-arguments-that-cannot-be-encoded).
 
 ### Edge object
 
