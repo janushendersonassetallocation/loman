@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from typing import TYPE_CHECKING, Any, ClassVar, TextIO
 
 from loman.consts import EdgeAttributes, NodeAttributes, States, SystemTags
@@ -25,7 +26,18 @@ if TYPE_CHECKING:
     pass
 
 # Serialization format version — bump when the schema changes.
-FORMAT_VERSION = 1
+# 2 added the node "args" and "kwds" constant-argument maps. Files written by
+# version 1 still load: their absence is read as "no constant arguments".
+FORMAT_VERSION = 2
+
+# Sentinel for a constant the policy dropped, distinct from a legitimate None.
+_DROPPED = object()
+
+_CONSTANT_POLICIES = frozenset({"raise", "drop"})
+
+
+class UnserializableConstantWarning(UserWarning):
+    """A constant argument was dropped, so the saved graph cannot be recalculated."""
 
 
 def default_computation_transformer() -> Transformer:
@@ -96,6 +108,9 @@ class ComputationSerializer:
     - ``value``: transformer-encoded value (or ``null`` when absent / not serialized)
     - ``has_value``: bool — false when the node has no meaningful value to restore
     - ``func``: transformer-encoded callable (or ``null``)
+    - ``args``: transformer-encoded constant positional arguments, keyed by
+      stringified positional index
+    - ``kwds``: transformer-encoded constant keyword arguments, keyed by parameter name
     - ``serialize``: bool — whether the node has the ``__serialize__`` tag
     - ``tags``: list of non-system tags
 
@@ -106,6 +121,12 @@ class ComputationSerializer:
     - ``param_type``: ``"arg"`` or ``"kwd"``
     - ``param``: positional index (int) for args, parameter name (str) for kwds
 
+    Arguments taken from other nodes are recorded on **edges**, while arguments
+    given as :class:`~loman.computeengine.ConstantValue` are held on the node
+    itself and recorded in ``args`` and ``kwds``. Both are needed to call a node's
+    function, so a graph that dropped its constants would raise a
+    :class:`TypeError` the next time the node was calculated.
+
     Parameters
     ----------
     transformer:
@@ -115,6 +136,15 @@ class ComputationSerializer:
         When ``True``, lambdas and closures are serialized as base64-encoded dill
         blobs rather than raising :class:`~loman.exception.SerializationError`.
         Has no effect when a custom *transformer* is supplied.  Defaults to ``False``.
+    on_unserializable_constant:
+        What to do when a constant argument cannot be encoded. ``"raise"``, the
+        default, refuses to write a graph that could not be recalculated.
+        ``"drop"`` omits the constant and emits
+        :class:`UnserializableConstantWarning`, restoring the behaviour of
+        releases before constants were recorded — where such a graph saved
+        silently and then raised :class:`TypeError` from the missing argument on
+        the first recalculation. It exists so an existing codebase can keep
+        writing files while it is fixed, not as a setting to leave in place.
     """
 
     # States whose nodes carry a meaningful value that should be preserved.
@@ -125,14 +155,22 @@ class ComputationSerializer:
         transformer: Transformer | None = None,
         *,
         use_dill_for_functions: bool = False,
+        on_unserializable_constant: str = "raise",
     ) -> None:
         """Initialise with an optional custom transformer."""
+        if on_unserializable_constant not in _CONSTANT_POLICIES:
+            msg = (
+                f"on_unserializable_constant must be one of {sorted(_CONSTANT_POLICIES)}, "
+                f"got {on_unserializable_constant!r}"
+            )
+            raise ValueError(msg)
         if transformer is None:
             transformer = (
                 dill_computation_transformer() if use_dill_for_functions else default_computation_transformer()
             )
         self._t = transformer
         self._use_dill_for_functions = use_dill_for_functions
+        self._on_unserializable_constant = on_unserializable_constant
 
     def dump(self, comp: Any, fp: TextIO) -> None:
         """Serialize *comp* to *fp* (a text-mode file-like object)."""
@@ -193,6 +231,53 @@ class ComputationSerializer:
             # Non-importable callable (e.g. framework closure) — store null.
             return None
 
+    def _serialize_constant(self, node_key: Any, param: Any, value: Any) -> Any:
+        """Encode one constant argument held on a node.
+
+        Unlike a node function, a constant argument has no fallback: dropping it
+        would leave the node callable with the wrong number of arguments, so an
+        unrepresentable constant is an error rather than a ``null``.
+        """
+        try:
+            return self._t.to_dict(value)
+        except (UntransformableTypeError, ValueError, TypeError) as e:
+            msg = (
+                f"Cannot serialize constant argument {param!r} on node {node_key!r} ({e}). "
+                "Constant arguments are needed to call the node's function, so they cannot "
+                "be skipped: register a transformer for the type, set serialize=False on the "
+                "node, or use ComputationSerializer(use_dill_for_functions=True) for callables."
+            )
+            if self._on_unserializable_constant == "raise":
+                raise SerializationError(msg) from e
+            warnings.warn(
+                f"{msg} Dropping it, because on_unserializable_constant='drop'. The saved "
+                "graph will raise TypeError from the missing argument when this node is "
+                "recalculated.",
+                UnserializableConstantWarning,
+                stacklevel=2,
+            )
+            return _DROPPED
+
+    def _serialize_node_constants(
+        self, node_key: Any, node_data: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return the encoded constant positional and keyword arguments for a node.
+
+        A constant the policy drops is omitted from the mapping entirely, so the
+        reloaded node looks exactly as it did before constants were recorded.
+        """
+        encoded_args = {
+            str(index): encoded
+            for index, value in node_data.get(NodeAttributes.ARGS, {}).items()
+            if (encoded := self._serialize_constant(node_key, index, value)) is not _DROPPED
+        }
+        encoded_kwds = {
+            name: encoded
+            for name, value in node_data.get(NodeAttributes.KWDS, {}).items()
+            if (encoded := self._serialize_constant(node_key, name, value)) is not _DROPPED
+        }
+        return encoded_args, encoded_kwds
+
     def _serialize_node(self, node_key: Any, node_data: dict[str, Any]) -> dict[str, Any]:
         """Return the serialized dict for a single node."""
         state: States | None = node_data.get(NodeAttributes.STATE)
@@ -211,6 +296,9 @@ class ComputationSerializer:
         encoded_func = (
             self._serialize_node_func(node_key, raw_func) if raw_func is not None and serialize_flag else None
         )
+        encoded_args, encoded_kwds = (
+            self._serialize_node_constants(node_key, node_data) if encoded_func is not None else ({}, {})
+        )
 
         user_tags = [t for t in tags if not t.startswith("__")]
 
@@ -220,6 +308,8 @@ class ComputationSerializer:
             "value": encoded_value,
             "has_value": has_value,
             "func": encoded_func,
+            "args": encoded_args,
+            "kwds": encoded_kwds,
             "serialize": serialize_flag,
             "tags": user_tags,
         }
@@ -291,8 +381,12 @@ class ComputationSerializer:
             node_data[NodeAttributes.STATE] = state if state is not None else States.UNINITIALIZED
             node_data[NodeAttributes.VALUE] = value if has_value else None
             node_data[NodeAttributes.FUNC] = func
-            node_data[NodeAttributes.ARGS] = {}
-            node_data[NodeAttributes.KWDS] = {}
+            node_data[NodeAttributes.ARGS] = {
+                int(index): self._t.from_dict(encoded) for index, encoded in node_info.get("args", {}).items()
+            }
+            node_data[NodeAttributes.KWDS] = {
+                name: self._t.from_dict(encoded) for name, encoded in node_info.get("kwds", {}).items()
+            }
             node_data[NodeAttributes.TAG] = set()
             node_data[NodeAttributes.STYLE] = None
             node_data[NodeAttributes.GROUP] = None
