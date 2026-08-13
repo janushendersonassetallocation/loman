@@ -295,8 +295,13 @@ class ComputationWidget(anywidget.AnyWidget):
         if current is None or current == base:
             return trail
         relative = current.drop_root(base)
+        if relative is None:  # pragma: no cover
+            # drop_root only returns None when current is not below base, and the
+            # focus trail is built by descending from base, so this cannot happen.
+            # Returning the bare root is still the honest answer if it ever does.
+            return trail
         acc = base if base is not None else NodeKey.root()
-        for part in relative.parts:  # type: ignore[union-attr]
+        for part in relative.parts:
             acc = acc.join_parts(part)
             trail.append({"label": str(part), "path": str(acc)})
         return trail
@@ -305,7 +310,9 @@ class ComputationWidget(anywidget.AnyWidget):
         """Create the current GraphView, including interactive expansions."""
         transformations = self._base_transformations.copy()
         transformations.update(dict.fromkeys(self._expanded, NodeTransformations.EXPAND))
-        options = dict(self._draw_options)
+        # `.copy()` rather than `dict(...)`: the latter widens the TypedDict to a
+        # plain `dict[str, object]`, and every value then reaches `draw` as `object`.
+        options = self._draw_options.copy()
         graph_attr = dict(options["graph_attr"] or {})
         graph_attr["rankdir"] = self.rankdir
         # Graphviz paints an opaque white page into the SVG by default, which
@@ -317,7 +324,7 @@ class ComputationWidget(anywidget.AnyWidget):
         return self.computation.draw(
             self._root,
             node_transformations=transformations,
-            **options,  # type: ignore[arg-type]
+            **options,
         )
 
     @contextmanager

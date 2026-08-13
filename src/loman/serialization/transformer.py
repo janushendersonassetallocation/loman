@@ -7,7 +7,7 @@ import importlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -34,13 +34,9 @@ TYPENAME_DATACLASS = "dataclass"
 class UntransformableTypeError(Exception):
     """Exception raised when a type cannot be transformed for serialization."""
 
-    pass
-
 
 class UnrecognizedTypeError(Exception):
     """Exception raised when a type is not recognized during transformation."""
-
-    pass
 
 
 class MissingObject:
@@ -69,17 +65,17 @@ class CustomTransformer(ABC):
     @abstractmethod
     def name(self) -> str:
         """Return unique name identifier for this transformer."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @abstractmethod
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Convert object to dictionary representation."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @abstractmethod
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct object from dictionary representation."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
@@ -98,13 +94,13 @@ class Transformable(ABC):
     @abstractmethod
     def to_dict(self, transformer: "Transformer") -> dict[str, Any]:
         """Convert this object to dictionary representation."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @classmethod
     @abstractmethod
     def from_dict(cls, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct object from dictionary representation."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
 
 class Transformer:
@@ -223,7 +219,10 @@ class Transformer:
     def _attrs_to_dict(self, o: object) -> dict[str, Any]:
         """Convert an attrs object to serializable dictionary form."""
         data: dict[str, Any] = {}
-        for a in o.__attrs_attrs__:  # type: ignore[attr-defined]
+        # Both hooks are reached only after the caller has established that `o` is an
+        # attrs or dataclass instance, but the parameter stays `object` because that
+        # test is a runtime one; the introspection below is what proves the type.
+        for a in getattr(o, "__attrs_attrs__"):  # noqa: B009
             data[a.name] = self.to_dict(o.__getattribute__(a.name))
         res: dict[str, Any] = {KEY_TYPE: TYPENAME_ATTRS, KEY_CLASS: type(o).__name__}
         if len(data) > 0:
@@ -233,7 +232,7 @@ class Transformer:
     def _dataclass_to_dict(self, o: object) -> dict[str, Any]:
         """Convert a dataclass object to serializable dictionary form."""
         data: dict[str, Any] = {}
-        for f in dataclasses.fields(o):  # type: ignore[arg-type]
+        for f in dataclasses.fields(cast("Any", o)):  # see _attrs_to_dict above
             data[f.name] = self.to_dict(getattr(o, f.name))
         res: dict[str, Any] = {KEY_TYPE: TYPENAME_DATACLASS, KEY_CLASS: type(o).__name__}
         if len(data) > 0:

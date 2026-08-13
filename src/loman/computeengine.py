@@ -226,7 +226,7 @@ def node(comp: "Computation", name: Name | None = None, *args: Any, **kw: Any) -
     def inner(f: F) -> F:
         """Inner decorator that registers the function as a node."""
         if name is None:
-            comp.add_node(f.__name__, f, *args, **kw)
+            comp.add_node(getattr(f, "__name__"), f, *args, **kw)  # noqa: B009
         else:
             comp.add_node(name, f, *args, **kw)
         result: F = decorator.decorate(f, _node)
@@ -313,7 +313,9 @@ class CalcNode(Node):
         if ignore_self:
             signature = get_signature(self.f)
             if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
-                f = f.__get__(obj, obj.__class__)  # type: ignore[attr-defined]
+                # Bind the plain function to obj by hand. Only functions carry
+                # __get__, and f is annotated as a general callable.
+                f = getattr(f, "__get__")(obj, obj.__class__)  # noqa: B009
         if "ignore_self" in kwds:
             del kwds["ignore_self"]
         comp.add_node(name, f, **kwds)
@@ -332,7 +334,9 @@ def calc_node(f: F | None = None, **kwds: Any) -> F | Callable[[F], F]:
 
     def wrap(func: F) -> F:
         """Wrap function with node info attribute."""
-        func._loman_node_info = CalcNode(func, kwds)
+        # The marker is stashed on the function itself for the class scan to find
+        # later; a plain function has no such declared attribute.
+        cast("Any", func)._loman_node_info = CalcNode(func, kwds)
         return func
 
     if f is None:
@@ -442,7 +446,7 @@ def computation_factory(
             """Create a computation instance from the wrapped class."""
             obj = cls()
             comp = Computation(*args, **kwargs)
-            comp._definition_object = obj  # type: ignore[attr-defined]
+            cast("Any", comp)._definition_object = obj
             populate_computation_from_class(comp, cls, obj, ignore_self)
             return comp
 
@@ -693,9 +697,19 @@ class Computation:
             self._subscriptions = [s for s in self._subscriptions if s.resolve() is not None]
 
     def get_attribute_view_for_path(
-        self, nodekey: NodeKey, get_one_func: Callable[[Name], Any], get_many_func: Callable[[Name | Names], Any]
+        self, nodekey: NodeKey, get_one_func: Callable[..., Any], get_many_func: Callable[..., Any]
     ) -> AttributeView:
-        """Create an attribute view for a specific node path."""
+        """Create an attribute view for a specific node path.
+
+        The two callables are deliberately typed as ``Callable[..., Any]``. Callers
+        pass overloaded accessors -- ``value``, ``state``, ``tags`` and friends, each
+        of which is an overload set over a single name and a list of names -- and an
+        overload set is not assignable to a single ``Callable`` signature. Narrowing
+        the annotation would describe none of the arguments actually passed here.
+        ``get_many_func`` is not called at all; it is threaded through the recursive
+        call below, because the nested ``get_many_func_for_path`` is what the view
+        ends up using.
+        """
 
         def node_func() -> Iterable[str]:
             """Return list of child node names for this path."""
@@ -1531,13 +1545,16 @@ class Computation:
         :type raise_exceptions: Boolean, default False
         """
         calc_nodes: set[NodeKey] = set()
-        names = name if isinstance(name, (types.GeneratorType, list)) else [name]
+        # A Name may itself be iterable (any Hashable qualifies), so isinstance cannot
+        # distinguish "several names" from "one name that happens to be a sequence".
+        # Generator or list means several; everything else is wrapped as one.
+        names = cast("Iterable[Name]", name if isinstance(name, (types.GeneratorType, list)) else [name])
         for name0 in names:
             node_key = to_nodekey(name0)
             targets = (
                 [node_key]
                 if self.has_node(node_key)
-                else names_to_node_keys(self.get_tree_descendents(node_key, graph_nodes_only=True))
+                else names_to_node_keys(list(self.get_tree_descendents(node_key, graph_nodes_only=True)))
             )
             if not targets:
                 targets = [node_key]
@@ -1763,7 +1780,7 @@ class Computation:
     @overload
     def styles(self, name: Names) -> list[str | None]: ...
 
-    def styles(self, name: Name | Names) -> str | None | list[str | None]:
+    def styles(self, name: Name | Names) -> str | list[str | None] | None:
         """Get the tags associated with a node.
 
             >>> comp = Computation()
@@ -1808,7 +1825,7 @@ class Computation:
     @overload
     def get_timing(self, name: Names) -> list[TimingData | None]: ...
 
-    def get_timing(self, name: Name | Names) -> TimingData | None | list[TimingData | None]:
+    def get_timing(self, name: Name | Names) -> TimingData | list[TimingData | None] | None:
         """Get the timing information for a node.
 
         :param name: Name or names of the node to get the timing information of
@@ -2051,8 +2068,12 @@ class Computation:
 
             node_serialize = nx.get_node_attributes(self.dag, NodeAttributes.TAG)
             obj = self.copy()
-            obj.executor_map = None  # type: ignore[assignment]
-            obj.default_executor = None  # type: ignore[assignment]
+            # Executors are live objects and must not reach the serialized form.
+            # Cleared on the copy rather than declared optional, so every reader of
+            # a real Computation still sees them as always present.
+            serializable = cast("Any", obj)
+            serializable.executor_map = None
+            serializable.default_executor = None
             for name, tags in node_serialize.items():
                 if SystemTags.SERIALIZE not in tags:
                     obj._set_uninitialized(name)
@@ -2215,7 +2236,9 @@ class Computation:
 
             return get_field_value
 
-        for field_name in namedtuple_type._fields:  # type: ignore[attr-defined]
+        # `_fields` is the namedtuple protocol, not something `type` advertises, so
+        # read it the way duck typing intends rather than asserting a richer type.
+        for field_name in getattr(namedtuple_type, "_fields", ()):
             node_name = f"{name}.{field_name}"
             self.add_node(node_name, make_f(field_name), kwds={"tuple_val": name}, group=group)
             self.set_tag(node_name, SystemTags.EXPANSION)
@@ -2312,7 +2335,9 @@ class Computation:
             func = node_data.get(NodeAttributes.FUNC, None)
             executor = node_data.get(NodeAttributes.EXECUTOR, None)
             converter = node_data.get(NodeAttributes.CONVERTER, None)
-            new_node_name = self.prepend_path(node_name, base_path_nk)
+            # prepend_path returns its argument unchanged only for a ConstantValue,
+            # and node_name is a node name, so this branch always yields a NodeKey.
+            new_node_name = cast("NodeKey", self.prepend_path(node_name, base_path_nk))
             self.add_node(
                 new_node_name,
                 func,

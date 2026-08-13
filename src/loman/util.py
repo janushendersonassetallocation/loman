@@ -717,10 +717,16 @@ def apply1(
 
 
 def as_iterable(xs: T | Iterable[T]) -> Iterable[T]:
-    """Convert input to iterable form if not already iterable."""
+    """Convert input to iterable form if not already iterable.
+
+    The casts are unavoidable: ``T`` may itself be an iterable type, so narrowing
+    on ``isinstance`` cannot tell "an iterable of T" from "a T that happens to be
+    iterable". The runtime rule -- generator, list or set means many, anything else
+    means one -- is the definition this function exists to impose.
+    """
     if isinstance(xs, (types.GeneratorType, list, set)):
-        return xs  # type: ignore[return-value]
-    return (xs,)  # type: ignore[return-value]
+        return cast("Iterable[T]", xs)
+    return (cast("T", xs),)
 
 
 def apply_n(f: Callable[..., Any], *xs: Any, **kwds: Any) -> None:
@@ -814,7 +820,9 @@ def value_eq(a: Any, b: Any) -> bool:
     if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
         try:
             return bool(np.array_equal(a, b, equal_nan=True))
-        except Exception:
+        except Exception:  # noqa: BLE001
+            # Ragged or object-dtype arrays make array_equal raise rather than
+            # return False. "Cannot be compared" is the answer we want here.
             return False
 
     # Default comparison; ensure a single boolean
@@ -824,5 +832,7 @@ def value_eq(a: Any, b: Any) -> bool:
         if isinstance(result, (np.ndarray,)):
             return bool(np.all(result))
         return bool(result)
-    except Exception:
+    except Exception:  # noqa: BLE001
+        # `a == b` runs a user-supplied __eq__ over arbitrary values, so it can
+        # raise anything at all. Staleness checks must never propagate that.
         return False

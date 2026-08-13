@@ -4,8 +4,6 @@
 class ComputationError(Exception):
     """Base exception for computation-related errors."""
 
-    pass
-
 
 class MapError(ComputationError):
     """Exception raised during map operations with partial results."""
@@ -19,49 +17,33 @@ class MapError(ComputationError):
 class LoopDetectedError(ComputationError):
     """Exception raised when a dependency loop is detected."""
 
-    pass
-
 
 class NonExistentNodeError(ComputationError):
     """Exception raised when trying to access a non-existent node."""
-
-    pass
 
 
 class NodeAlreadyExistsError(ComputationError):
     """Exception raised when trying to create a node that already exists."""
 
-    pass
-
 
 class CannotInsertToPlaceholderNodeError(ComputationError):
     """Exception raised when trying to insert into a placeholder node."""
-
-    pass
 
 
 class InvalidBlockTypeError(TypeError, ComputationError):
     """Exception raised when a block is not callable or a Computation."""
 
-    pass
-
 
 class FittingError(ComputationError):
     """Exception raised when curve fitting exceeds error tolerance."""
-
-    pass
 
 
 class ValidationError(ComputationError):
     """Exception raised during computation validation."""
 
-    pass
-
 
 class SerializationError(ComputationError):
     """Exception raised during serialization/deserialization."""
-
-    pass
 
 
 # Backward compatibility aliases
