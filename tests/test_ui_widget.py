@@ -22,7 +22,12 @@ from loman.nodekey import to_nodekey
 from loman.ui import ComputationWidget
 from loman.ui.viewmodel import MIXED_STATE_LABEL
 from loman.visualization import GraphView
-from tests.conftest import create_example_block_computation
+from tests.conftest import create_example_block_computation, requires_dot
+
+# The widget renders its graph through graphviz on construction; without `dot`
+# every view is None and the assertions below fail on that rather than on anything
+# this module is testing.
+pytestmark = requires_dot
 
 STATIC = Path(__file__).parents[1] / "src" / "loman" / "ui" / "static"
 
@@ -2349,7 +2354,7 @@ class TestEveryNameSurfaceKeepsItsType:
             for attribute, value in vars(ComputationWidget).items()
             if isinstance(value, property)
             and not attribute.startswith("_")
-            and (attribute.endswith("_name") or attribute.endswith("_names"))
+            and (attribute.endswith(("_name", "_names")))
         )
 
     def test_the_sweep_actually_covers_something(self):

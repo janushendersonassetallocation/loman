@@ -42,6 +42,7 @@ from loman.visualization import (
 from tests.conftest import (
     BasicFourNodeComputation,
     create_example_block_computation,
+    requires_dot,
 )
 
 
@@ -880,6 +881,7 @@ class TestGraphViewRendering:
         v.viz_dot = None
         assert v.svg() is None
 
+    @requires_dot
     def test_graph_view_repr_svg(self):
         """Test GraphView._repr_svg_() method."""
         comp = Computation()
@@ -891,6 +893,7 @@ class TestGraphViewRendering:
 
     @patch("subprocess.run")
     @patch("tempfile.NamedTemporaryFile")
+    @requires_dot
     def test_graph_view_view_linux(self, mock_tempfile, mock_run):
         """Test GraphView.view() on Linux."""
         comp = Computation()
@@ -983,6 +986,7 @@ class TestVisualizationAttrNormalization:
         assert root is not None
 
 
+@requires_dot
 class TestGraphViewCollapse:
     """Tests for GraphView with collapse_all."""
 
@@ -1008,6 +1012,7 @@ class TestGraphViewCollapse:
         assert svg is not None
 
 
+@requires_dot
 class TestGraphViewEmpty:
     """Test GraphView with empty computation."""
 
@@ -1022,6 +1027,7 @@ class TestGraphViewEmpty:
         assert "<svg" in svg
 
 
+@requires_dot
 class TestVisualizationWin32Branch:
     """Test the Windows platform branch in view()."""
 
@@ -1055,6 +1061,7 @@ class TestVisualizationCalibrate:
         f.calibrate([])  # Should do nothing, no error
 
 
+@requires_dot
 class TestCollapseNodeMapped:
     """Test the collapse logic in visualization."""
 
@@ -1129,6 +1136,7 @@ class TestVisualizationOpenPdf:
         assert "open" in mock_run.call_args[0][0]
 
 
+@requires_dot
 class TestVisualizationWithNoneCmap:
     """Test visualization with None colormap."""
 
@@ -1196,6 +1204,7 @@ class TestRenameMetadataClearBranch:
         assert comp.metadata("new_name") == {}
 
 
+@requires_dot
 class TestGraphViewWithRootNode:
     """Test GraphView with root parameter filtering."""
 
@@ -1212,6 +1221,7 @@ class TestGraphViewWithRootNode:
         assert svg is not None
 
 
+@requires_dot
 class TestGraphViewNoneFormatter:
     """Tests for GraphView with node_formatter=None."""
 
@@ -1225,6 +1235,7 @@ class TestGraphViewNoneFormatter:
         assert svg is not None
 
 
+@requires_dot
 class TestColormapNodeFormatter:
     """Tests for colormap in node formatter."""
 
@@ -1251,6 +1262,7 @@ class TestColormapNodeFormatter:
         assert svg is not None
 
 
+@requires_dot
 class TestGraphViewTransformations:
     """Test GraphView with transformations."""
 
@@ -1270,6 +1282,7 @@ class TestGraphViewTransformations:
         assert svg is not None
 
 
+@requires_dot
 class TestVisualizationDropRootNone:
     """Test visualization when drop_root returns None."""
 
@@ -1314,6 +1327,7 @@ class TestVisualizationSubprocess:
 class TestVisualizationVizDagFormatterNone:
     """Test create_viz_dag with node_formatter=None."""
 
+    @requires_dot
     def test_create_viz_dag_no_formatter(self):
         """Test create_viz_dag without node formatter."""
         comp = Computation()

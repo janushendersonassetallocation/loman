@@ -1073,7 +1073,7 @@ class TestAttributeView:
         assert "get_item" in state
 
         # Create new AttributeView and restore state
-        new_av = AttributeView(lambda: [], lambda x: None)
+        new_av = AttributeView(list, lambda x: None)
         new_av.__setstate__(state)
         assert new_av.a == 1
 
@@ -1089,7 +1089,7 @@ class TestAttributeView:
         state = av.__getstate__()
         assert state["get_item"] is None
 
-        new_av = AttributeView(lambda: [], lambda x: None)
+        new_av = AttributeView(list, lambda x: None)
         new_av.__setstate__(state)
         # After setstate with get_item=None, get_item should default to get_attribute
         assert new_av["a"] == 1
