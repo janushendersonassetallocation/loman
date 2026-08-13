@@ -9,7 +9,7 @@ import types
 import warnings
 import weakref
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Executor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -40,7 +40,7 @@ from .exception import (
 from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .planning import ExecutionPlan, ValidationReport, create_execution_plan, validate_graph
-from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
+from .util import AttributeView, BlockFeature, RepeatedBlocks, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
 
 LOG = logging.getLogger("loman.computeengine")
@@ -273,6 +273,31 @@ class InputNode(Node):
 input_node = InputNode
 
 
+def _bind_self(f: Any, obj: object, ignore_self: bool) -> Any:
+    """Bind a callback to the definition object when its first parameter is 'self'.
+
+    Anything that is not callable, including ``None`` and a plain node name, is
+    returned unchanged.
+
+    Asking for ``self`` when there is no definition object to bind to is a
+    contradiction, so it is reported here rather than as the bare
+    ``TypeError: instance must not be None`` that binding would otherwise raise.
+    """
+    if not callable(f) or not ignore_self:
+        return f
+    signature = get_signature(f)
+    if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
+        if obj is None:
+            name = getattr(f, "__qualname__", repr(f))
+            msg = (
+                f"Cannot bind 'self' for {name}: no definition object was supplied. "
+                "Pass one, drop the 'self' parameter, or use ignore_self=False."
+            )
+            raise ValueError(msg)
+        return types.MethodType(f, obj)
+    return f
+
+
 @dataclass
 class CalcNode(Node):
     """A node representing a calculation in the computation graph."""
@@ -315,6 +340,16 @@ def calc_node(f: F | None = None, **kwds: Any) -> F | Callable[[F], F]:
     return wrap(f)
 
 
+def _resolve_block(block: "Callable[[], Computation] | Computation") -> "Computation":
+    """Resolve a block definition, calling computation factories to build the block."""
+    if isinstance(block, Computation):
+        return block
+    if callable(block):
+        return block()
+    msg = f"Block {block} must be callable or Computation"
+    raise TypeError(msg)
+
+
 @dataclass
 class Block(Node):
     """A node representing a computational block or subgraph."""
@@ -331,17 +366,55 @@ class Block(Node):
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
         """Add this block node to the computation graph."""
-        if isinstance(self.block, Computation):
-            comp.add_block(name, self.block, *self.args, **self.kwds)
-        elif callable(self.block):
-            block0 = self.block()
-            comp.add_block(name, block0, *self.args, **self.kwds)
-        else:
-            msg = f"Block {self.block} must be callable or Computation"
-            raise TypeError(msg)
+        comp.add_block(name, _resolve_block(self.block), *self.args, **self.kwds)
 
 
 block = Block
+
+
+@dataclass
+class RepeatedBlocksNode(Node):
+    """A node representing one keyed copy of a computation block per key.
+
+    The attribute name used in a computation factory class becomes the base path
+    for the generated blocks, so ``instruments = repeated_blocks(...)`` with keys
+    ``('AAPL', 'MSFT')`` creates the blocks ``instruments/AAPL`` and
+    ``instruments/MSFT``. ``features`` describe how data flows in and out of every
+    copy, exactly as for :class:`loman.util.RepeatedBlocks`.
+    """
+
+    block: "Callable[[], Computation] | Computation"
+    keys: tuple[Hashable, ...] = field(default_factory=tuple)
+    features: tuple[BlockFeature, ...] = field(default_factory=tuple)
+    keep_values: bool = False
+
+    def __init__(
+        self,
+        block: "Callable[[], Computation] | Computation",
+        keys: Iterable[Hashable],
+        *,
+        features: Sequence[BlockFeature] = (),
+        keep_values: bool = False,
+    ) -> None:
+        """Initialize a repeated blocks node with a block template and its keys."""
+        self.block = block
+        self.keys = tuple(keys)
+        self.features = tuple(features)
+        self.keep_values = keep_values
+
+    def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
+        """Add the repeated blocks and the nodes their features describe."""
+        definition: RepeatedBlocks[Hashable] = RepeatedBlocks(
+            block=_resolve_block(self.block),
+            keys=self.keys,
+            base_path=name,
+            features=self.features,
+            keep_values=self.keep_values,
+        )
+        definition.add_to(comp, definition_object=obj, ignore_self=ignore_self)
+
+
+repeated_blocks = RepeatedBlocksNode
 
 
 def populate_computation_from_class(comp: "Computation", cls: type, obj: object, ignore_self: bool = True) -> None:
@@ -2202,11 +2275,25 @@ class Computation:
         base_path: Name,
         block: "Computation",
         *,
-        keep_values: bool | None = True,
+        keep_values: bool = True,
         links: dict[str, Name] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Add a computation block as a subgraph to this computation."""
+        """Add a computation block as a subgraph to this computation.
+
+        ``keep_values`` defaults to ``True``, so values already held by ``block``
+        are copied along with its structure: a block added this way is often a
+        sub-model that has already been populated or calibrated, and would not be
+        computable without them. The repeated-block utilities in
+        :mod:`loman.util` default to ``False`` instead, because they stamp out
+        many copies of one template. See :class:`loman.util.RepeatedBlocks`.
+
+        :param base_path: Parent path to add the block's nodes below
+        :param block: Computation to copy into this computation
+        :param keep_values: Whether to copy the block's current values
+        :param links: Mapping from the block's relative input names to outer nodes
+        :param metadata: Metadata to attach to the block path
+        """
         base_path_nk = to_nodekey(base_path)
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
