@@ -1,12 +1,29 @@
 # Change Log
 
 ## [unreleased]
+- BUGFIX: `add_fan_in` accepted a result that one of its own sources already depended on, producing a cyclic graph that only surfaced later during planning or compute. It now rejects it before mutating, as `add_fan_out` always did
+- Asking for `self` binding with no definition object now explains the contradiction, instead of surfacing a bare `TypeError: instance must not be None` from inside the binding call
+- `FanOut` rejects a target the block template never mentions, since that is usually a typo that would add a dead node to every block; pass `create=True` to feed such a node deliberately. The low-level `add_fan_out` stays permissive, having no template to check against
+- `InputValue` takes the same `create` flag as `FanOut`, and `IdNode` takes it with a default of `True`, since creating the node is its purpose; pass `create=False` there to have a misspelled name rejected at definition time rather than surfacing later as an uninitialized input
+- Added `Positional`, wrapping an aggregator that takes its values positionally so a `combine` does not need a lambda at every call site
+- Documented which repeated-block names are relative to `base_path`: a fan-in `result` is a verbatim outer node, while an `InputValue` is placed under `base_path`
+- BUGFIX: a fan-out targeting a node an earlier feature planned raised a bare `KeyError` from inside the builder; it now reports the duplicate write
 - CI: the Graphviz install now retries transient package-feed failures, falls back between
   Chocolatey and winget, and fails loudly when `dot` is still missing rather than letting
   the test run report it as a hundred unrelated failures
 - Allow `Computation.compute` to compute one or more blocks
 - Added type hints on ComputationFactory
 - BUGFIX: `compute_and_get_value` sets error state on exception
+- Added utilities for repeated blocks and keyed fan-in/fan-out computations
+- Added `repeated_blocks` to declare repeated blocks within a `@ComputationFactory` class
+- Repeated blocks are now described by an ordered list of features (`FanOut`, `FanIn`, `IdNode`, `InputValue`), replacing the separate `fan_out` and `fan_in` arguments
+- Features describe nodes rather than creating them, so custom wiring patterns can be added by implementing `BlockFeature.plan` without giving up validate-before-mutate
+- Fan-out sources may be a function of the key, so each repeated block can read from a different node
+- `IdNode` gives each repeated block a node holding its own key
+- Fan-out transforms are now the generated node's own function rather than a wrapped constant
+- BUGFIX: a callable passed where a node name is expected raises `TypeError` instead of creating a node keyed by the function
+- BUGFIX: constant node arguments (`C(...)`) are now serialized. Previously they were silently dropped, so a reloaded graph looked up to date but raised `TypeError` from the missing argument as soon as the node was recalculated. Serialization format version is now 2; version 1 files still load. A constant that cannot be encoded now raises `SerializationError` naming the node instead of being dropped. Pass `ComputationSerializer(on_unserializable_constant="drop")` to restore the previous lenient behaviour while an existing codebase is fixed: the constant is omitted and an `UnserializableConstantWarning` is emitted, rather than the save failing. A version 1 file is not repaired by loading it under this release: its constants were never written, so a graph saved before this change must be saved again to gain them. Conversely, a version 2 file loads under earlier releases without error — they ignore the new fields, giving the same dropped constants as before — so the two versions can be read either way round while a codebase moves over
+- Added a Marimo example of a large repeated instrument-block computation
 - Added non-mutating graph validation and execution planning APIs with DataFrame diagnostics
 - Added `Computation.subscribe` and `ComputationEvent` for observing batched changes to a
   computation. A computation with no subscribers pays no measurable cost: state propagation

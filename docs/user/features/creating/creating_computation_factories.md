@@ -73,6 +73,10 @@ class ExampleComputation2:
 
 If this behavior for 'self' is not required, it can be disabled at the class level or for individual nodes by providing the kwarg `ignore_self=False`.
 
+## Sub-computations
+
+As well as `input_node` and `calc_node`, a computation factory class can use `block` to include another computation as a sub-graph, and `repeated_blocks` to include one keyed copy of a block per key, wired up with fan-out and fan-in nodes. See [Repeated Blocks and Fan-In/Fan-Out](computation_utilities.md) for `repeated_blocks`.
+
 ## Providing optional arguments through `@calc_node`
 
 Arguments provided to the `@calc_node` are passed through to `add_node`, and can be used to control node creation, argument mapping, styling, etc.

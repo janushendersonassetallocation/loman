@@ -640,7 +640,7 @@ def _(mo):
 
     Finally, our solution is potentially usable in a variety of different contexts. We might have a batch system using this computation graph, to produce daily, or periodic intraday valuations centrally, while the investment team managing a particular portfolio might appreciate the ability to run the same computation graph on their portfolios and model portfolios whenever they desire.
 
-    That brings us to the end of this example. We looked at how to use Loman to create a basic valuation system for a limited portfolio. In doing so, we explored several tangible benefits that we hope make life easier for quant practitioners. If anything is unclear in this example, feel free to contact the authors through the [Loman Forum on Google Groups](https://groups.google.com/forum/#!forum/loman-python).
+    That brings us to the end of this example. We looked at how to use Loman to create a basic valuation system for a limited portfolio. In doing so, we explored several tangible benefits that we hope make life easier for quant practitioners.
     """)
     return
 
