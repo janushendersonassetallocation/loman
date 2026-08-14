@@ -1,12 +1,16 @@
 ## Makefile (repo-owned)
 # Keep this file small. It can be edited without breaking template sync.
 
-DEFAULT_AI_MODEL=claude-sonnet-4.6
 LOGO_FILE=.rhiza/assets/rhiza-logo.svg
-GH_AW_ENGINE ?= copilot  # Default AI engine for gh-aw workflows (copilot, claude, or codex)
 
-# Override template default: fix quoting bug and typo (mkdocstring -> mkdocstrings)
-MKDOCS_EXTRA_PACKAGES = --with-editable . --with 'mkdocstrings[python]' --with mkdocs_graphviz
+# Override template default: include mkdocstrings plugin for API docs
+MKDOCS_EXTRA_PACKAGES = --with 'mkdocstrings[python]'
+
+# Override template default (v1.3.3 ships TYPECHECKER ?= both, i.e. ty + mypy
+# --strict). mypy --strict currently reports 48 errors in src/loman; until those
+# are fixed, keep the v0.10.3 behaviour of running ty alone so `all` stays green.
+# Flip back to `both` once the strict errors are resolved.
+TYPECHECKER = ty
 
 # Always include the Rhiza API (template-managed)
 include .rhiza/rhiza.mk

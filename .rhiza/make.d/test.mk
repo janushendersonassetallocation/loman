@@ -1,103 +1,41 @@
-## Makefile.tests - Testing and benchmarking targets
+## .rhiza/make.d/test.mk - optional Python testing extras (bundle: tests)
 # This file is included by the main Makefile.
-# It provides targets for running the test suite with coverage and
-# executing performance benchmarks.
+#
+# The gates the language contract names — `test`, `typecheck`, `security`,
+# `docs-coverage` — moved into `python.mk` in #1475, because `python.mk`'s own `all`
+# named them while this bundle owned them: a project syncing `core + python-core`
+# without `tests` got an `all` that could not run. The Rust and Go layers never had
+# that split, and now neither does Python.
+#
+# What is left here is what genuinely *is* optional — four gates no layer's `all`
+# depends on, each of which needs its own tool and its own folder convention:
+# benchmarks, Hypothesis property tests, stress/load tests and mutation testing.
+# Keeping them out of the layer is what lets a project take the Python gate set
+# without also declaring an opinion on mutation testing.
+#
+# `TESTS_FOLDER`, and the shared pytest config in `pytest.ini`, come from
+# `python.mk` / `python-core`. This bundle requires `python-core`, so both are always
+# present alongside it.
 
 # Declare phony targets (they don't produce files)
-.PHONY: test benchmark typecheck security docs-coverage hypothesis-test coverage-badge stress
+.PHONY: benchmark hypothesis-test stress mutation
 
-# Default directory for tests
-TESTS_FOLDER := tests
-
-# Minimum coverage percent for tests to pass
-# (Can be overridden in local.mk or via environment variable)
-COVERAGE_FAIL_UNDER ?= 90
-
-##@ Development and Testing
-
-# The 'test' target runs the complete test suite.
-# 1. Cleans up any previous test results in _tests/.
-# 2. Creates directories for HTML coverage and test reports.
-# 3. Invokes pytest via the local virtual environment.
-# 4. Generates terminal output, HTML coverage, JSON coverage, and HTML test reports.
-test:: install ## run all tests
-	@rm -rf _tests;
-
-	if [ -z "$$(find ${TESTS_FOLDER} -name 'test_*.py' -o -name '*_test.py' 2>/dev/null)" ]; then \
-	  printf "${YELLOW}[WARN] No test files found in ${TESTS_FOLDER}, skipping tests.${RESET}\n"; \
-	  exit 0; \
-	fi; \
-	mkdir -p _tests/html-coverage _tests/html-report; \
-	if [ -d ${SOURCE_FOLDER} ]; then \
-	  ${UV_BIN} run pytest \
-	  --ignore=${TESTS_FOLDER}/benchmarks \
-	  --ignore=${TESTS_FOLDER}/stress \
-	  --cov=${SOURCE_FOLDER} \
-	  --cov-report=term \
-	  --cov-report=html:_tests/html-coverage \
-	  --cov-fail-under=$(COVERAGE_FAIL_UNDER) \
-	  --cov-report=json:_tests/coverage.json \
-	  --cov-report=xml:_tests/coverage.xml \
-	  --html=_tests/html-report/report.html; \
-	else \
-	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, running tests without coverage${RESET}\n"; \
-	  ${UV_BIN} run pytest \
-	  --ignore=${TESTS_FOLDER}/benchmarks \
-	  --ignore=${TESTS_FOLDER}/stress \
-	  --html=_tests/html-report/report.html; \
-	fi
-
-# The 'typecheck' target runs static type analysis using ty.
-# 1. Checks if the source directory exists.
-# 2. Runs ty on the source folder.
-typecheck: install ## run ty type checking
-	@if [ -d ${SOURCE_FOLDER} ]; then \
-	  printf "${BLUE}[INFO] Running ty type checking...${RESET}\n"; \
-	  ${UV_BIN} run ty check ${SOURCE_FOLDER}; \
-	else \
-	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping typecheck${RESET}\n"; \
-	fi
-
-# Extra flags forwarded to pip-audit (e.g. --ignore-vuln CVE-XXXX-YYYY)
-PIP_AUDIT_ARGS ?=
-
-# The 'security' target performs security vulnerability scans.
-# 1. Runs pip-audit via pip_audit_policy.py: fails on runtime dep CVEs, warns on tooling (pip/setuptools/wheel).
-# 2. Runs bandit to find common security issues in the source code.
-security: install ## run security scans (pip-audit and bandit)
-	@printf "${BLUE}[INFO] Running pip-audit for dependency vulnerabilities...${RESET}\n"
-	@${UV_BIN} run python .rhiza/utils/pip_audit_policy.py ${PIP_AUDIT_ARGS}
-	@printf "${BLUE}[INFO] Running bandit security scan...${RESET}\n"
-	@${UVX_BIN} bandit -r ${SOURCE_FOLDER} -ll -q --ini .bandit
+##@ Development and Testing (extras)
 
 # The 'benchmark' target runs performance benchmarks using pytest-benchmark.
 # 1. Installs benchmarking dependencies (pytest-benchmark, pygal).
 # 2. Executes benchmarks found in the benchmarks/ subfolder.
 # 3. Generates histograms and JSON results.
-# 4. Runs a post-analysis script to process the results.
 benchmark:: install ## run performance benchmarks
 	@if [ -d "${TESTS_FOLDER}/benchmarks" ]; then \
 	  printf "${BLUE}[INFO] Running performance benchmarks...${RESET}\n"; \
-	  ${UV_BIN} pip install pytest-benchmark==5.2.3 pygal==3.1.0; \
 	  mkdir -p _tests/benchmarks; \
-	  ${UV_BIN} run pytest "${TESTS_FOLDER}/benchmarks/" \
+	  ${UV_BIN} run --with pytest --with pytest-benchmark==5.2.3 --with pygal==3.1.0 pytest "${TESTS_FOLDER}/benchmarks/" \
 	  		--benchmark-only \
 			--benchmark-histogram=_tests/benchmarks/histogram \
 			--benchmark-json=_tests/benchmarks/results.json; \
-	  ${UVX_BIN} "rhiza-tools>=0.2.3" analyze-benchmarks --benchmarks-json _tests/benchmarks/results.json --output-html _tests/benchmarks/report.html; \
 	else \
 	  printf "${YELLOW}[WARN] Benchmarks folder not found, skipping benchmarks${RESET}\n"; \
-	fi
-
-# The 'docs-coverage' target checks documentation coverage using interrogate.
-# 1. Checks if SOURCE_FOLDER exists.
-# 2. Runs interrogate on the source folder with verbose output.
-docs-coverage: install ## check documentation coverage with interrogate
-	@if [ -d "${SOURCE_FOLDER}" ]; then \
-	  printf "${BLUE}[INFO] Checking documentation coverage in ${SOURCE_FOLDER}...${RESET}\n"; \
-	  ${UV_BIN} run interrogate -vv ${SOURCE_FOLDER}; \
-	else \
-	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping docs-coverage${RESET}\n"; \
 	fi
 
 # The 'hypothesis-test' target runs property-based tests using Hypothesis.
@@ -111,7 +49,7 @@ hypothesis-test:: install ## run property-based tests with Hypothesis
 	fi; \
 	printf "${BLUE}[INFO] Running Hypothesis property-based tests...${RESET}\n"; \
 	mkdir -p _tests/hypothesis; \
-	PYTEST_HTML_TITLE="Hypothesis tests" ${UV_BIN} run pytest \
+	PYTEST_HTML_TITLE="Hypothesis tests" ${UV_BIN} run --with pytest --with hypothesis --with pytest-html pytest \
 	  --ignore=${TESTS_FOLDER}/benchmarks \
 	  -v \
 	  --hypothesis-show-statistics \
@@ -126,19 +64,6 @@ hypothesis-test:: install ## run property-based tests with Hypothesis
 	fi; \
 	exit $$exit_code
 
-coverage-badge: test ## generate coverage badge into _tests/coverage-badge.svg
-	@if [ ! -d "${SOURCE_FOLDER}" ]; then \
-	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping coverage-badge${RESET}\n"; \
-	  exit 0; \
-	fi; \
-	if [ ! -f _tests/coverage.xml ]; then \
-	  printf "${RED}[ERROR] Coverage report not found at _tests/coverage.xml, run 'make test' first.${RESET}\n"; \
-	  exit 1; \
-	fi; \
-	printf "${BLUE}[INFO] Generating coverage badge...${RESET}\n"; \
-	${UVX_BIN} "genbadge[coverage]" coverage -i _tests/coverage.xml -o _tests/coverage-badge.svg; \
-	printf "${GREEN}[SUCCESS] Coverage badge generated at _tests/coverage-badge.svg${RESET}\n"
-
 # The 'stress' target runs stress/load tests.
 # 1. Checks if stress tests exist in the tests/stress directory.
 # 2. Runs pytest with the stress marker to execute only stress tests.
@@ -150,8 +75,25 @@ stress:: install ## run stress/load tests
 	fi; \
 	printf "${BLUE}[INFO] Running stress/load tests...${RESET}\n"; \
 	mkdir -p _tests/stress; \
-	${UV_BIN} run pytest \
+	${UV_BIN} run --with pytest --with pytest-html pytest \
 	  -v \
 	  -m stress \
 	  --tb=short \
 	  --html=_tests/stress/report.html
+
+mutation: install ## run mutation tests with mutmut
+	@if [ ! -d ${SOURCE_FOLDER} ]; then \
+	  printf "${YELLOW}[WARN] Source folder ${SOURCE_FOLDER} not found, skipping mutation tests.${RESET}\n"; \
+	  exit 0; \
+	fi; \
+	printf "${BLUE}[INFO] Running mutation tests on ${SOURCE_FOLDER}...${RESET}\n"; \
+	mkdir -p _tests/mutation; \
+	run_status=0; \
+	${UV_BIN} run --with mutmut mutmut run \
+	  --paths-to-mutate="${SOURCE_FOLDER}" \
+	  --tests-dir="${TESTS_FOLDER}" || run_status=$$?; \
+	${UV_BIN} run --with mutmut mutmut html || exit $$?; \
+	rm -rf _tests/mutation/html; \
+	mv html _tests/mutation/html || exit $$?; \
+	${UV_BIN} run --with mutmut mutmut results || exit $$?; \
+	exit $$run_status

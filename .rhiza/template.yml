@@ -1,9 +1,12 @@
 template-repository: "jebel-quant/rhiza"
-template-branch: "v0.10.3"
+template-branch: "v1.3.3"
+
+# v1.x reorganized template content into bundles. `github-project` expands to
+# core, python-core, github, book, marimo, tests, github-book, github-marimo,
+# github-tests — the workflow overlays that used to be implied by `github`.
+profiles:
+  - github-project
 
 templates:
   - devcontainer
-  - github
-  - book
-  - marimo
-  - tests
+  - github-devcontainer

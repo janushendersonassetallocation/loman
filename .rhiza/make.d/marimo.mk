@@ -1,6 +1,24 @@
 ## Makefile.marimo - Marimo notebook targets
 # This file is included by the main Makefile
 
+# Contribute the marimo notebook folder to the shared deptry scan defined in
+# quality.mk. DEP004 (misplaced development dependency) is ignored because
+# notebooks legitimately import packages declared as development dependencies.
+ifneq ($(wildcard $(MARIMO_FOLDER)),)
+DEPTRY_FOLDERS += $(MARIMO_FOLDER)
+DEPTRY_IGNORE += --ignore DEP004
+endif
+
+# Exempt docutils from the licence gate in python.mk, on the same accumulator principle:
+# the bundle that brings a dependency in owns the exemption for it, rather than every
+# consumer rediscovering it. marimo depends on docutils, which is offered under a choice
+# of licences and reports all of them as one string -- "BSD License; GNU General Public
+# License (GPL); Public Domain". pip-licenses matches --fail-on against that string with
+# no notion of *or*, so now that the gate actually matches, `GPL` hits a package every
+# consumer of this bundle takes under BSD. Unconditional, unlike the deptry lines above:
+# the dependency arrives with marimo itself, not with a notebook folder.
+LICENSE_IGNORE_PACKAGES += docutils
+
 # Declare phony targets (they don't produce files)
 .PHONY: marimo-validate marimo
 
