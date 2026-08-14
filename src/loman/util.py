@@ -820,7 +820,7 @@ def value_eq(a: Any, b: Any) -> bool:
     if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
         try:
             return bool(np.array_equal(a, b, equal_nan=True))
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Ragged or object-dtype arrays make array_equal raise rather than
             # return False. "Cannot be compared" is the answer we want here.
             return False
@@ -832,7 +832,7 @@ def value_eq(a: Any, b: Any) -> bool:
         if isinstance(result, (np.ndarray,)):
             return bool(np.all(result))
         return bool(result)
-    except Exception:  # noqa: BLE001
+    except Exception:
         # `a == b` runs a user-supplied __eq__ over arbitrary values, so it can
         # raise anything at all. Staleness checks must never propagate that.
         return False

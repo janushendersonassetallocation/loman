@@ -78,7 +78,7 @@ def _safe_repr(value: Any, limit: int = MAX_REPR_LENGTH) -> str:
     """Return a bounded repr, tolerating a broken ``__repr__``."""
     try:
         text = repr(value)
-    except Exception:  # noqa: BLE001 - a broken __repr__ must not break the detail panel
+    except Exception:  # a broken __repr__ must not break the detail panel
         text = f"<{type(value).__name__}: repr unavailable>"
     return _truncate(text, limit)
 
