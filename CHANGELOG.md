@@ -1,6 +1,11 @@
 # Change Log
 
 ## [unreleased]
+- BUGFIX: `make book` failed with `module 'mkdocs_graphviz' has no attribute 'makeExtension'`, taking
+  the docs build down. mkdocs_graphviz 2.0 stopped being a Markdown extension and became an MkDocs
+  plugin, so the `markdown_extensions` entry could no longer load it. It is pinned below 2 rather than
+  migrated: the book is built by zensical, which shims only a fixed set of MkDocs plugins and would
+  have silently ignored the graphviz plugin, rendering every graph as a plain code fence instead
 - BUGFIX: `add_fan_in` accepted a result that one of its own sources already depended on, producing a cyclic graph that only surfaced later during planning or compute. It now rejects it before mutating, as `add_fan_out` always did
 - Asking for `self` binding with no definition object now explains the contradiction, instead of surfacing a bare `TypeError: instance must not be None` from inside the binding call
 - `FanOut` rejects a target the block template never mentions, since that is usually a typo that would add a dead node to every block; pass `create=True` to feed such a node deliberately. The low-level `add_fan_out` stays permissive, having no template to check against
