@@ -13,21 +13,21 @@ Nodes can be tagged with string tags, either when the node is added, using the `
 !!! note
     Tags beginning and ending with double-underscores ("\___\[tag\]___") are reserved for internal use by Loman.
 
-The tags associated with a node can be inspected using the `tags` method, or the `t` attribute-style accessor:
+The tags associated with a node can be inspected using the `tags` method, or the `t` attribute-style accessor. Both return a `set`, so the examples below sort it to give a stable order:
 
 ```pycon
->>> comp.tags('a')
-{'__serialize__', 'bar', 'foo'}
->>> comp.t.b
-{'__serialize__', 'bar'}
+>>> sorted(comp.tags('a'))
+['__serialize__', 'bar', 'foo']
+>>> sorted(comp.t.b)
+['__serialize__', 'bar']
 ```
 
 Tags can also be cleared with the `clear_tag` and `clear_tags` methods:
 
 ```pycon
 >>> comp.clear_tag(['a', 'b'], 'foo')
->>> comp.t.a
-{'__serialize__', 'bar'}
+>>> sorted(comp.t.a)
+['__serialize__', 'bar']
 ```
 
 By design, no error is thrown if a tag is added to a node that already has that tag, nor if a tag is cleared from a node that does not have that tag.

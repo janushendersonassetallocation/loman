@@ -27,7 +27,12 @@ dependencies = [
     "pydotplus",
     "dill >= 0.2.5",
     "networkx >= 2.0",
-    "pandas >= 0.19.2",
+    # 2.0 is the real floor: serialization records each datetime value's
+    # resolution using Timestamp.unit / DatetimeIndex.unit and restores it with
+    # as_unit(), all of which arrived with non-nanosecond support in pandas 2.0.
+    # Without them a microsecond index would be reread as nanoseconds, which is
+    # wrong timestamps rather than an import error.
+    "pandas >= 2.0",
     "attrs >= 25.0"
 ]
 
@@ -35,6 +40,12 @@ dependencies = [
 ui = [
     "anywidget>=0.9",
     "traitlets>=5.14",
+]
+# Optional serialization codecs. Neither is required: without them large values
+# are stored as .npy and compressed with zlib, which is in the standard library.
+efficient = [
+    "pyarrow>=15",
+    "zstandard>=0.22",
 ]
 
 [dependency-groups]
@@ -52,6 +63,8 @@ Homepage = "https://github.com/janusassetallocation/loman"
 packages = ["src/loman"]
 
 [tool.deptry.package_module_name_map]
+pyarrow = "pyarrow"
+zstandard = "zstandard"
 matplotlib = "matplotlib"
 pydotplus = "pydotplus"
 decorator = "decorator"
