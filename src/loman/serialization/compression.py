@@ -1,40 +1,35 @@
-"""Blob compression, and deciding when it is worth doing.
+"""Blob compression.
 
-Measured on this codebase, blanket compression is wrong in both directions. On
-random float data, DEFLATE bought about 4% and cost three seconds for 128 MB. On
-a realistic price series --- a random walk rounded to two decimals, which is what
-financial data actually looks like --- zlib level 1 was **eight times** smaller
-and took ten milliseconds.
+Compression is a choice the caller makes, named on the profile as a codec and
+level: ``"zstd:1"``, ``"zlib:6"``, or ``"none"``. Nothing here estimates,
+samples or guesses.
 
-So neither always-on nor always-off is defensible, and the choice cannot be made
-from the codec or the dtype either: both of those examples are float64 arrays.
-It has to come from the data. ``"auto"`` compresses a sample, extrapolates, and
-keeps the result only if it is worth keeping.
+There used to be an ``"auto"`` mode that compressed the first 256 KiB of a blob,
+extrapolated, and skipped compression when the projection looked poor. It was
+deleted rather than tuned, because it was wrong in both directions on data whose
+character changes part way through --- which market data routinely does. On a
+payload with a random head and a compressible tail it projected a 3.6% saving
+against an actual 36.8%, and silently stored the blob raw.
 
-Compression is applied here, before bytes reach the container, and the container
-stores them without compressing again. That prevents double-compressing an
-already-compact payload and keeps stored members at known offsets.
+The only reason to guess was that zlib rejects incompressible data at about
+43 MB/s, so compressing to find out was expensive. zstd does the same at roughly
+1 GB/s, and compresses real data better and faster besides, which is why it is a
+required dependency rather than an extra. Compressing to find out now costs
+about a second per gigabyte of incompressible data, so there is nothing left for
+a heuristic to save.
+
+One rule remains, and it is a measurement rather than a prediction: whichever of
+the compressed and raw payloads is smaller is the one stored. A blob that did
+not shrink is written as-is and recorded as ``"none"``, so no future read pays a
+decompression step for nothing.
 """
 
 from __future__ import annotations
 
 import zlib
 from collections.abc import Callable
-from typing import Any
 
 from loman.exception import SerializationError
-
-#: Bytes of a payload compressed to decide whether compressing all of it pays.
-SAMPLE_BYTES = 256 * 1024
-
-#: A sampled payload must shrink by at least this fraction to be worth storing
-#: compressed. Below it, the decompression cost on every future read outweighs
-#: the saving.
-MIN_SAVING = 0.10
-
-#: Level used for the probe. Level 1 is the cheapest, and the question being
-#: asked is "does this compress at all", not "how small can it get".
-PROBE_LEVEL = 1
 
 Codec = tuple[Callable[[bytes], bytes], Callable[[bytes], bytes]]
 
@@ -46,9 +41,7 @@ def _zlib_codec(level: int) -> Codec:
 
 def _zstd_codec(level: int) -> Codec:
     """Return the compress/decompress pair for zstd at *level*."""
-    from loman._extras import require
-
-    zstandard = require("zstandard", "efficient")
+    import zstandard
 
     def compress(data: bytes) -> bytes:
         return zstandard.ZstdCompressor(level=level).compress(data)
@@ -64,7 +57,16 @@ _FAMILIES: dict[str, Callable[[int], Codec]] = {
     "zstd": _zstd_codec,
 }
 
-_DEFAULT_LEVELS = {"zlib": 6, "zstd": 3}
+# Level 1 for zstd: on measured data it gives 9.3x on a realistic price series
+# at 568 MB/s, and rejects incompressible data at 1067 MB/s. Higher levels cost
+# materially more for little further gain on numeric payloads.
+_DEFAULT_LEVELS = {"zlib": 6, "zstd": 1}
+
+#: What the efficient profile uses when the caller names nothing.
+DEFAULT_COMPRESSION = "zstd:1"
+
+#: Accepted when compression should not happen at all.
+NO_COMPRESSION = "none"
 
 
 def parse_spec(spec: str) -> tuple[str, int | None]:
@@ -84,7 +86,8 @@ def get_codec(spec: str) -> Codec:
     family, level = parse_spec(spec)
     factory = _FAMILIES.get(family)
     if factory is None:
-        msg = f"Unknown compression {spec!r}; expected one of {sorted(['none', 'auto', *_FAMILIES])}"
+        known = sorted([NO_COMPRESSION, *_FAMILIES])
+        msg = f"Unknown compression {spec!r}; expected one of {known}"
         raise ValueError(msg)
     return factory(_DEFAULT_LEVELS[family] if level is None else level)
 
@@ -103,33 +106,34 @@ def register_codec(family: str, factory: Callable[[int], Codec], default_level: 
 def compress_blob(data: bytes, spec: str, *, compressible: bool = True) -> tuple[bytes, str]:
     """Return *data* compressed according to *spec*, and the spec actually used.
 
+    The returned spec is ``"none"`` whenever the raw bytes are what got stored,
+    whether because compression was not asked for or because it did not shrink
+    them. That is what the manifest records, so a reader never has to know what
+    was originally requested.
+
     :param data: The payload.
-    :param spec: ``"none"``, ``"auto"``, or a family with an optional level.
+    :param spec: ``"none"``, or a family with an optional level.
     :param compressible: False for payloads that already compress themselves,
-        such as parquet. Short-circuits to no compression, which is how
+        such as parquet. Skips compression entirely, which is how
         double-compression is prevented.
     """
-    if spec == "none" or not compressible or not data:
-        return data, "none"
-
-    if spec == "auto":
-        chosen = _probe(data)
-        if chosen is None:
-            return data, "none"
-        spec = chosen
+    if spec == NO_COMPRESSION or not compressible or not data:
+        return data, NO_COMPRESSION
 
     compress, _ = get_codec(spec)
     compressed = compress(data)
-    # A payload that grew is stored raw. Incompressible data does exist, and
-    # storing it larger than it started would be perverse.
+
+    # Store whichever is smaller. Incompressible data comes back slightly larger
+    # than it went in, since a codec adds framing, and keeping that would mean a
+    # bigger file *and* a decompression step on every future read.
     if len(compressed) >= len(data):
-        return data, "none"
+        return data, NO_COMPRESSION
     return compressed, spec
 
 
 def decompress_blob(data: bytes, spec: str) -> bytes:
     """Return *data* decompressed according to *spec*."""
-    if spec in ("none", "", None):
+    if spec in (NO_COMPRESSION, "", None):
         return data
     try:
         _, decompress = get_codec(spec)
@@ -137,31 +141,3 @@ def decompress_blob(data: bytes, spec: str) -> bytes:
         msg = f"Cannot read a blob compressed with {spec!r}: {exc}"
         raise SerializationError(msg) from exc
     return decompress(data)
-
-
-def _probe(data: bytes) -> str | None:
-    """Return a compression spec worth using for *data*, or ``None``.
-
-    Compresses at most :data:`SAMPLE_BYTES` and extrapolates. Sampling rather
-    than compressing everything is what makes the decision cheap enough to make
-    per blob: the probe costs about a millisecond regardless of payload size.
-    """
-    sample = data[:SAMPLE_BYTES]
-    compressed = zlib.compress(sample, PROBE_LEVEL)
-    saving = 1.0 - (len(compressed) / len(sample))
-    if saving < MIN_SAVING:
-        return None
-    return f"zlib:{PROBE_LEVEL}"
-
-
-def describe_available() -> dict[str, Any]:
-    """Return which compression families can be used in this environment."""
-    available = {}
-    for family in _FAMILIES:
-        try:
-            get_codec(family)
-        except ImportError:
-            available[family] = False
-        else:
-            available[family] = True
-    return available

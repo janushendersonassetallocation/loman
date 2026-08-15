@@ -649,44 +649,55 @@ def _(Path, tmp):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 9. Compression is decided from the data
+    ## 9. Compression
 
-    Blanket compression is wrong in both directions, and the dtype cannot tell you
-    which case you are in — both examples below are `float64` arrays.
+    Blobs are compressed with **zstd at level 1** by default. The codec is your
+    choice; nothing is inferred from the data.
 
-    A rounded price series compresses roughly eight times in about ten
-    milliseconds. Raw random floats compress a few percent and cost seconds. So
-    each blob is sampled: 256 KiB is compressed, the result extrapolated, and the
-    compression kept only if it saves more than 10%. The probe costs about a
-    millisecond.
+    That it is on by default rests on one measurement: zstd rejects data it
+    cannot compress at about 1 GB/s, roughly 25 times faster than zlib, while
+    also compressing real data better and faster. Compressing to find out is
+    therefore a non-event, which is why zstandard is a required dependency.
+
+    After compressing, the two sizes are compared and **whichever is smaller is
+    stored**. A blob that did not shrink is written exactly as it came and
+    recorded as `"none"`, so nothing is ever stored larger than it started and no
+    future read pays a decompression step for nothing.
     """)
     return
 
 
 @app.cell
 def _(Computation, make_prices, manifest_of, np, size_of, tmp):
-    _realistic = make_prices(200_000, rounded=True)["px"].to_numpy()
-    _random = np.random.default_rng(0).standard_normal(200_000)
+    import os as _os
 
-    for _label, _values in [("rounded px_frame", _realistic), ("random floats", _random)]:
+    _cases = [
+        ("rounded prices", make_prices(200_000, rounded=True)["px"].to_numpy()),
+        ("random float64", np.random.default_rng(0).standard_normal(200_000)),
+        ("random bytes", np.frombuffer(_os.urandom(1_600_000), dtype=np.uint8)),
+    ]
+    for _label, _values in _cases:
         _comp = Computation()
         _comp.add_node("v", value=_values)
-        _path = tmp / f"cmp_{_label.split()[0]}.loman"
+        _path = tmp / f"cmp_{_label.split()[1]}.loman"
         _comp.save(str(_path))
 
         _entry = manifest_of(_path)["blobs"][0]
-        _chose = _entry["compression"]
         _ratio = _entry["size"] / _entry.get("stored_size", _entry["size"])
-        print(f"{_label:16s} auto chose {_chose:8s}  {size_of(_path):>10,} bytes  ({_ratio:.1f}x)")
+        print(f"{_label:16s} stored as {_entry['compression']:8s} {size_of(_path):>10,} bytes  ({_ratio:.1f}x)")
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    To override the decision, pass a profile. `compression` accepts `"auto"` (the
-    default), `"none"`, `"zlib:1"`–`"zlib:9"`, and `"zstd:N"` with the
-    `loman[efficient]` extra installed.
+    Note the third row: genuinely random bytes cannot be compressed, so the
+    attempt is discarded and the blob is stored raw. Random `float64` is *not* a
+    good example of incompressible data — zstd still finds about 4% in the
+    exponent bytes.
+
+    To choose something else, pass a profile. `compression` accepts `"none"`, or
+    a codec and optional level: `"zstd:1"`–`"zstd:22"`, `"zlib:1"`–`"zlib:9"`.
     """)
     return
 
@@ -699,7 +710,7 @@ def _(Computation, make_prices, size_of, tmp):
     _comp = Computation()
     _comp.add_node("v", value=_values)
 
-    for _spec in ["none", "auto", "zlib:9"]:
+    for _spec in ["none", "zstd:1", "zstd:19", "zlib:9"]:
         _profile = SerializationProfile("demo", inline_max_bytes=8192, compression=_spec)
         _path = tmp / f"lvl_{_spec.replace(':', '')}.loman"
         _comp.save(str(_path), profile=_profile)
@@ -816,7 +827,7 @@ def _(Computation, SerializationProfile, comp_remote, px_frame, size_of, tmp):
     _local = SerializationProfile(
         "local",
         inline_max_bytes=8192,
-        compression="auto",
+        compression="zstd:1",
         overrides={"prices": {"store": None}},
     )
     comp_remote.save(str(tmp / "local.loman"), profile=_local)
@@ -852,7 +863,7 @@ def _(
     _tagged = SerializationProfile(
         "tagged",
         inline_max_bytes=8192,
-        compression="auto",
+        compression="zstd:1",
         overrides={"tag:bulky": {"store": "warehouse"}},
     )
     _bucket = BucketStore("tagged-data")
@@ -878,7 +889,7 @@ def _(mo):
 @app.cell
 def _(BucketStore, Computation, SerializationProfile, px_frame, size_of, tmp):
     _bucket = BucketStore("hybrid")
-    _profile = SerializationProfile("hybrid", inline_max_bytes=8192, compression="auto")
+    _profile = SerializationProfile("hybrid", inline_max_bytes=8192, compression="zstd:1")
     _comp = Computation()
     _comp.add_node("prices", value=px_frame, store="warehouse")
     _comp.save(str(tmp / "hybrid.json"), profile=_profile, stores={"warehouse": _bucket})

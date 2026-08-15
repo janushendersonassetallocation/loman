@@ -229,7 +229,7 @@ class TestProfileOverridesTheNode:
         profile = SerializationProfile(
             name="test",
             inline_max_bytes=1024,
-            compression="auto",
+            compression="zstd:1",
             overrides={"prices": {"store": "elsewhere"}},
         )
         comp.save(str(tmp_path / "c.loman"), profile=profile, stores={"elsewhere": elsewhere})
@@ -250,7 +250,7 @@ class TestProfileOverridesTheNode:
         profile = SerializationProfile(
             name="local",
             inline_max_bytes=1024,
-            compression="auto",
+            compression="zstd:1",
             overrides={"prices": {"store": None}},
         )
         comp.save(str(tmp_path / "c.loman"), profile=profile)
@@ -271,7 +271,7 @@ class TestProfileOverridesTheNode:
         profile = SerializationProfile(
             name="tagged",
             inline_max_bytes=1024,
-            compression="auto",
+            compression="zstd:1",
             overrides={"tag:bulky": {"store": "warehouse"}},
         )
         comp.save(str(tmp_path / "c.loman"), profile=profile, stores={"warehouse": store})
@@ -288,7 +288,7 @@ class TestProfileOverridesTheNode:
         profile = SerializationProfile(
             name="tagged",
             inline_max_bytes=1024,
-            compression="auto",
+            compression="zstd:1",
             overrides={"tag:bulky": {"store": "warehouse"}},
         )
         comp.save(str(tmp_path / "c.loman"), profile=profile, stores={"warehouse": store})
@@ -306,7 +306,7 @@ class TestExternalStoreWithReadableManifest:
         comp.add_node("prices", value=frame, store="warehouse")
 
         store = RecordingStore()
-        profile = SerializationProfile(name="hybrid", inline_max_bytes=1024, compression="auto")
+        profile = SerializationProfile(name="hybrid", inline_max_bytes=1024, compression="zstd:1")
         comp.save(str(tmp_path / "c.json"), profile=profile, container="json", stores={"warehouse": store})
 
         assert store.writes
@@ -423,7 +423,7 @@ class TestStoreInteractionWithProfileFeatures:
         comp.add_node("prices", value=_frame(), store="warehouse")
 
         store = RecordingStore()
-        profile = SerializationProfile(name="ck", inline_max_bytes=1024, compression="auto", checksums=True)
+        profile = SerializationProfile(name="ck", inline_max_bytes=1024, compression="zstd:1", checksums=True)
         comp.save(str(tmp_path / "c.loman"), profile=profile, stores={"warehouse": store})
 
         entry = _manifest(tmp_path / "c.loman")["blobs"][0]

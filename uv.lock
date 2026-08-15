@@ -624,12 +624,12 @@ dependencies = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pydotplus" },
+    { name = "zstandard" },
 ]
 
 [package.optional-dependencies]
 efficient = [
     { name = "pyarrow" },
-    { name = "zstandard" },
 ]
 ui = [
     { name = "anywidget" },
@@ -657,7 +657,7 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'efficient'", specifier = ">=15" },
     { name = "pydotplus" },
     { name = "traitlets", marker = "extra == 'ui'", specifier = ">=5.14" },
-    { name = "zstandard", marker = "extra == 'efficient'", specifier = ">=0.22" },
+    { name = "zstandard", specifier = ">=0.22" },
 ]
 provides-extras = ["ui", "efficient"]
 

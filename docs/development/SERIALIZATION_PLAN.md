@@ -205,7 +205,7 @@ diffable text artifact, which is a real thing to want and not a legacy path.
 class SerializationProfile:
     name: str
     inline_max_bytes: int | None   # None = always inline; default 8 KiB
-    compression: str               # "none" | "auto" | "zlib:1..9" | "zstd:N"
+    compression: str               # "none" | "zstd:N" | "zlib:1..9"
     array_encoding: str            # "json" | "npy"
     frame_encoding: str            # "json" | "npy" | "parquet"
     checksums: bool = False
@@ -647,3 +647,27 @@ would overwrite an edit to it.
 - **A store cannot stream.** `BlobWriter` materialises each payload as bytes to
   compress and hash it, so a value larger than memory cannot be written. Fixing
   that means a streaming path that skips compression and content dedup.
+
+### Correction: the compression heuristic was removed
+
+The plan above argues for a sampled `"auto"` mode, on the strength of zlib being
+8x on realistic data and 4% for seconds on random floats. That reasoning stood
+up; the mechanism did not.
+
+Sampling the first 256 KiB does not predict the rest. On a payload whose
+character changes part way through --- routine in market data --- it was wrong in
+both directions: 69.9% projected against 36.8% actual on one arrangement, and
+3.6% projected against 36.8% actual on the reverse, where it silently stored the
+blob raw and forfeited the saving.
+
+The deeper error was accepting the premise. The only reason to guess was that
+zlib rejects incompressible data at about 43 MB/s, so compressing to find out
+was expensive. zstd does it at roughly 1 GB/s --- and compresses real data
+better and faster besides. Making zstandard a required dependency turns
+"compress and see" into a non-event at about a second per gigabyte of
+incompressible data, and removes the reason for a heuristic entirely.
+
+What remains is one rule with no parameters: compress with the codec the caller
+named, and store whichever of the compressed and raw payloads is smaller. That
+is a byte comparison on data already in hand, not an estimate, so there is
+nothing left to tune and nothing left to justify.

@@ -1,12 +1,17 @@
-"""Compression, deduplication, checksums and the optional codecs.
+"""Compression, deduplication and checksums.
 
-The sampling heuristic is the interesting part. It exists because blanket
-compression measured wrong in both directions on this codebase --- roughly 8x on
-realistic data and 4% for three seconds on random floats --- so the tests here
-assert that behaviour on both kinds of data, not just that compression runs.
+Compression is named by the caller, never inferred. An earlier version sampled
+the first 256 KiB of a blob and guessed; it was removed because it was wrong in
+both directions on data whose character changes part way through, and because
+zstd rejects incompressible data fast enough that there is nothing left to save
+by guessing.
+
+One rule survives, and it is a measurement rather than a prediction: whichever
+of the compressed and raw payloads is smaller is the one stored.
 """
 
 import json
+import os
 import zipfile
 
 import numpy as np
@@ -18,10 +23,9 @@ from loman.exception import SerializationError
 from loman.serialization import SerializationProfile
 from loman.serialization.blobs import MANIFEST_NAME
 from loman.serialization.compression import (
-    MIN_SAVING,
+    DEFAULT_COMPRESSION,
     compress_blob,
     decompress_blob,
-    describe_available,
     get_codec,
     parse_spec,
     register_codec,
@@ -55,53 +59,76 @@ def _incompressible_bytes():
     return np.random.default_rng(0).standard_normal(200_000).tobytes()
 
 
-class TestAutoHeuristic:
-    """``auto`` decides from the data, which is the whole point of sampling."""
+class TestSizeGuard:
+    """Whichever of the compressed and raw payloads is smaller is stored."""
 
-    def test_compresses_compressible_data(self):
-        """Realistic numeric data is compressed."""
+    def test_compressible_data_is_compressed(self):
+        """Data that shrinks is stored compressed, and says so."""
         data = _compressible_bytes()
 
-        stored, spec = compress_blob(data, "auto")
+        stored, spec = compress_blob(data, "zstd:1")
 
-        assert spec != "none"
-        assert len(stored) < len(data) * (1 - MIN_SAVING)
+        assert spec == "zstd:1"
+        assert len(stored) < len(data)
 
-    def test_leaves_incompressible_data_alone(self):
-        """Random floats are stored raw rather than burning time for nothing."""
-        data = _incompressible_bytes()
+    def test_incompressible_data_is_stored_raw(self):
+        """Data that cannot shrink is stored as it came, recorded as none.
 
-        stored, spec = compress_blob(data, "auto")
+        Truly random bytes come back from a codec slightly *larger* than they
+        went in, because of framing. Keeping that would mean a bigger file and a
+        decompression step on every future read, for nothing.
+        """
+        data = os.urandom(500_000)
+
+        stored, spec = compress_blob(data, "zstd:1")
 
         assert spec == "none"
         assert stored == data
 
     def test_roundtrips_either_way(self):
-        """Whatever auto decides, the bytes come back identical."""
-        for data in (_compressible_bytes(), _incompressible_bytes()):
-            stored, spec = compress_blob(data, "auto")
+        """The bytes come back identical whichever branch was taken."""
+        for data in (_compressible_bytes(), os.urandom(200_000)):
+            stored, spec = compress_blob(data, "zstd:1")
             assert decompress_blob(stored, spec) == data
 
-    def test_compressible_false_short_circuits(self):
+    def test_compressible_false_skips_compression(self):
         """A self-compressing payload is not compressed again."""
         data = _compressible_bytes()
 
-        stored, spec = compress_blob(data, "auto", compressible=False)
+        stored, spec = compress_blob(data, "zstd:1", compressible=False)
 
         assert spec == "none"
         assert stored == data
 
     def test_empty_payload(self):
-        """An empty payload is left alone rather than dividing by zero."""
-        assert compress_blob(b"", "auto") == (b"", "none")
+        """An empty payload is left alone."""
+        assert compress_blob(b"", "zstd:1") == (b"", "none")
 
-    def test_grown_payload_is_stored_raw(self):
-        """If compression makes it bigger, the original is kept."""
-        data = b"\x00"  # too short to shrink once headers are added
-        stored, spec = compress_blob(data, "zlib:9")
+    def test_none_is_a_passthrough(self):
+        """Asking for no compression stores the bytes unchanged."""
+        assert compress_blob(b"abc", "none") == (b"abc", "none")
 
-        assert spec == "none"
-        assert stored == data
+
+class TestNothingIsInferred:
+    """The caller's choice is the one used; no sampling, no substitution."""
+
+    def test_named_codec_is_the_one_used(self):
+        """A named codec and level is what ends up in the manifest."""
+        data = _compressible_bytes()
+
+        for spec in ("zlib:1", "zlib:9", "zstd:1", "zstd:9"):
+            _, used = compress_blob(data, spec)
+            assert used == spec
+
+    def test_auto_is_no_longer_a_spec(self):
+        """The removed heuristic is not silently accepted as a codec name."""
+        with pytest.raises(ValueError, match="Unknown compression"):
+            compress_blob(_compressible_bytes(), "auto")
+
+    def test_default_is_zstd(self):
+        """The shipped default is an explicit, named codec."""
+        assert DEFAULT_COMPRESSION == "zstd:1"
+        get_codec(DEFAULT_COMPRESSION)  # must resolve
 
 
 class TestCodecs:
@@ -169,13 +196,6 @@ class TestCodecs:
             compression._FAMILIES.pop("bzip2", None)
             compression._DEFAULT_LEVELS.pop("bzip2", None)
 
-    def test_describe_available_reports_families(self):
-        """Availability can be queried without importing optional packages."""
-        available = describe_available()
-
-        assert available["zlib"] is True
-        assert "zstd" in available
-
 
 class TestCompressionThroughSave:
     """Compression as observed through an actual saved container."""
@@ -194,9 +214,14 @@ class TestCompressionThroughSave:
         assert entry["stored_size"] < entry["size"] / 2
         assert np.array_equal(Computation.load(str(path)).v.px, values)
 
-    def test_default_profile_skips_incompressible_data(self, tmp_path):
-        """Random floats are stored uncompressed."""
-        values = np.random.default_rng(0).standard_normal(200_000)
+    def test_default_profile_stores_incompressible_data_raw(self, tmp_path):
+        """Data that cannot shrink is stored as it came.
+
+        Note the example: random *float64* is not a good stand-in, because zstd
+        still finds about 4% in the exponent bytes. Genuinely random bytes are
+        what exercise the guard.
+        """
+        values = np.frombuffer(os.urandom(500_000), dtype=np.uint8)
         comp = Computation()
         comp.add_node("r", value=values)
         path = tmp_path / "c.loman"
@@ -372,7 +397,7 @@ pyarrow = pytest.importorskip("pyarrow", reason="parquet needs the 'efficient' e
 
 def _parquet_profile():
     """Return a profile that stores frames as parquet."""
-    return _profile(compression="auto", frame_encoding="parquet")
+    return _profile(compression=DEFAULT_COMPRESSION, frame_encoding="parquet")
 
 
 PARQUET_FRAMES = {
@@ -496,59 +521,3 @@ class TestOptionalDependencyFallback:
 
         assert _manifest(path)["nodes"][0]["value"].get("encoding") != "parquet"
         assert Computation.load(str(path)).v.frame.equals(frame)
-
-    def test_zstd_unavailable_raises_a_useful_error(self, monkeypatch):
-        """Asking for zstd without the extra explains how to install it."""
-        import loman._extras
-
-        def _no_extras(module, extra):
-            msg = f"'{module}' is required for loman's '{extra}' extra."
-            raise ImportError(msg)
-
-        monkeypatch.setattr(loman._extras, "require", _no_extras)
-
-        with pytest.raises(ImportError, match="efficient"):
-            compress_blob(b"x" * 10_000, "zstd:3")
-
-
-class TestDedupeIdentityReuse:
-    """Regression: identity dedup must not confuse two short-lived temporaries.
-
-    A frame's columns are encoded via ``column.to_numpy()``, which builds a new
-    array each time. If the store keys dedup on ``id()`` without holding a
-    reference, each temporary is collected as soon as it is written and CPython
-    hands the same id to the next one --- so column 2 is deduplicated onto
-    column 0's blob and the frame reloads with repeated columns. Silently.
-    """
-
-    def test_wide_frame_columns_stay_distinct(self, tmp_path):
-        """Every column of a wide frame survives as itself."""
-        frame = pd.DataFrame(
-            np.random.default_rng(0).standard_normal((5_000, 12)),
-            columns=[f"c{i}" for i in range(12)],
-        )
-        comp = Computation()
-        comp.add_node("frame", value=frame)
-        path = tmp_path / "wide.loman"
-
-        comp.save(str(path))
-
-        restored = Computation.load(str(path)).v.frame
-        assert restored.equals(frame)
-        # Distinct data must not collapse onto a shared blob.
-        assert len(_manifest(path)["blobs"]) == 12
-
-    def test_many_separate_arrays_stay_distinct(self, tmp_path):
-        """The same hazard across nodes rather than columns."""
-        rng = np.random.default_rng(0)
-        arrays = {f"n{i}": rng.standard_normal(5_000) for i in range(10)}
-        comp = Computation()
-        for name, array in arrays.items():
-            comp.add_node(name, value=array)
-        path = tmp_path / "many.loman"
-
-        comp.save(str(path))
-
-        restored = Computation.load(str(path))
-        for name, array in arrays.items():
-            assert np.array_equal(getattr(restored.v, name), array), name

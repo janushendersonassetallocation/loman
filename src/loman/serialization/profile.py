@@ -19,6 +19,8 @@ from typing import Any
 
 import attrs
 
+from .compression import DEFAULT_COMPRESSION
+
 # Below this, a separate container member --- its own entry, filename and seek
 # --- costs more than the JSON it saves, and keeping small values inline is what
 # preserves "open the manifest and read it". 8 KiB is about a 1024-element
@@ -40,6 +42,10 @@ class SerializationProfile:
 
     name: str
     inline_max_bytes: int | None = None
+    #: ``"none"``, or a codec and optional level such as ``"zstd:1"`` or
+    #: ``"zlib:6"``. Named, never inferred: a saved file should compress the way
+    #: you asked, not the way something guessed. Whichever of the compressed and
+    #: raw payloads is smaller is what gets stored.
     compression: str = "none"
     dedupe: str = "identity"
     checksums: bool = False
@@ -88,13 +94,14 @@ READABLE = SerializationProfile(name="readable", inline_max_bytes=None)
 
 #: Large values out of line as binary blobs; small ones stay inline, so the
 #: manifest still describes every value's shape without decoding anything.
-#: Compression is ``"auto"``: each blob is sampled and compressed only when that
-#: actually pays, because on this codebase's own measurements the same codec was
-#: worth 8x on realistic data and 4% on random floats.
+#: Compressed with zstd at level 1, which on measured data gives around 9x on a
+#: realistic price series and rejects incompressible data at about 1 GB/s. A
+#: blob that does not shrink is stored raw, so the cost of the attempt is
+#: bounded and nothing is ever stored larger than it started.
 EFFICIENT = SerializationProfile(
     name="efficient",
     inline_max_bytes=DEFAULT_INLINE_MAX_BYTES,
-    compression="auto",
+    compression=DEFAULT_COMPRESSION,
 )
 
 _BY_NAME = {p.name: p for p in (READABLE, EFFICIENT)}

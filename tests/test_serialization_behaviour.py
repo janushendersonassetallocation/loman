@@ -434,7 +434,7 @@ class TestConcurrentSaves:
         serializer = _slow_serializer()
         profiles = {
             "readable": SerializationProfile("readable", inline_max_bytes=None),
-            "efficient": SerializationProfile("efficient", inline_max_bytes=1024, compression="auto"),
+            "efficient": SerializationProfile("efficient", inline_max_bytes=1024, compression="zstd:1"),
         }
         barrier = threading.Barrier(2)
 

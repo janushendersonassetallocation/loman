@@ -74,48 +74,88 @@ grows with its size; a directory rewrites only the file that changed.
 
 ## Compression
 
-On by default, and decided per value from the data itself. Each blob is sampled,
-compressed, and kept compressed only if that actually paid:
+Blobs are compressed with **zstd at level 1** by default. You choose the codec;
+nothing is inferred from the data.
 
 ```pycon
 >>> comp2 = Computation()
 >>> comp2.add_node('rounded', value=np.round(np.arange(200_000) * 0.01, 2))
->>> comp2.add_node('random', value=np.random.default_rng(0).standard_normal(200_000))
->>> comp2.save('mixed.loman')
->>> blobs = json.loads(zipfile.ZipFile('mixed.loman').read('manifest.json'))['blobs']
->>> sorted((b['node'], b['compression'] != 'none') for b in blobs)
-[('random', False), ('rounded', True)]
+>>> comp2.save('rounded.loman')
+>>> entry = json.loads(zipfile.ZipFile('rounded.loman').read('manifest.json'))['blobs'][0]
+>>> entry['compression']
+'zstd:1'
+>>> entry['stored_size'] < entry['size'] // 5
+True
 ```
 
-This is not fussiness. On realistic numeric data — a rounded price series —
-zlib at level 1 is around **eight times** smaller and costs about ten
-milliseconds. On random floats the same codec buys about 4% and costs seconds.
-Neither always-on nor always-off is right, and the dtype does not tell you which
-case you are in: both of those are float64 arrays. The sample costs roughly a
-millisecond.
-
-To override it, pass a profile:
+To choose something else, pass a profile:
 
 ```pycon
 >>> from loman import SerializationProfile
->>> archive = SerializationProfile('archive', inline_max_bytes=8192, compression='zlib:9')
+>>> archive = SerializationProfile('archive', inline_max_bytes=8192, compression='zstd:19')
 >>> comp.save('small.loman', profile=archive)
+>>> fast = SerializationProfile('fast', inline_max_bytes=8192, compression='none')
+>>> comp.save('fast.loman', profile=fast)
 ```
 
-`compression` accepts `"auto"` (the default), `"none"`, `"zlib:1"`–`"zlib:9"`,
-and `"zstd:N"` with the `efficient` extra installed.
+`compression` accepts `"none"`, or a codec and optional level: `"zstd:1"` to
+`"zstd:22"`, `"zlib:1"` to `"zlib:9"`. You can register your own with
+`loman.serialization.compression.register_codec`.
+
+### Why zstd, and why on by default
+
+Compressing is worth doing without being asked only if finding out costs almost
+nothing. Measured on 4 MB payloads:
+
+| | reject incompressible | realistic price series |
+|---|---|---|
+| zlib:1 | 43 MB/s | 8.0× at 291 MB/s |
+| **zstd:1** | **1067 MB/s** | **9.3× at 568 MB/s** |
+
+zstd rejects data it cannot compress about 25 times faster than zlib, and
+compresses real data better and faster besides. That is why it is a required
+dependency rather than an optional one: it turns "compress and see" from a
+decision into a non-event, at roughly a second per gigabyte of incompressible
+data.
+
+### What gets stored
+
+Whichever is smaller. After compressing, the two sizes are compared and the
+smaller one is written; a blob that did not shrink is stored exactly as it came
+and recorded as `"none"`:
+
+```pycon
+>>> import os
+>>> comp3 = Computation()
+>>> comp3.add_node('noise', value=np.frombuffer(os.urandom(500_000), dtype=np.uint8))
+>>> comp3.save('noise.loman')
+>>> json.loads(zipfile.ZipFile('noise.loman').read('manifest.json'))['blobs'][0]['compression']
+'none'
+```
+
+That is a byte comparison on data already in hand, not an estimate, so there is
+no threshold to tune. Without it an incompressible blob would be stored slightly
+*larger* than raw — codecs add framing — and every future read would pay a
+decompression step for nothing.
+
+!!! note
+    An earlier version of this had an `"auto"` mode that compressed the first
+    256 KiB of each blob and extrapolated. It was removed rather than tuned: on
+    a payload whose character changes part way through — common in market data —
+    it was wrong in both directions, once projecting a 3.6% saving against an
+    actual 36.8% and storing the blob raw. With zstd there was nothing left for
+    it to save.
 
 ## Optional extras
 
-Everything above works with no dependencies beyond loman's own: values are stored
-as `.npy` and compressed with `zlib`, both from numpy and the standard library.
+Everything above works with loman's own dependencies: values are stored as
+`.npy` and compressed with zstd, both of which come with loman.
 
 ```bash
 pip install 'loman[efficient]'
 ```
 
-adds `zstandard` for better compression, and `pyarrow` for storing DataFrames as
-parquet:
+adds `pyarrow`, for storing DataFrames as parquet:
 
 ```pycon
 >>> parquet = SerializationProfile('pq', inline_max_bytes=8192, frame_encoding='parquet')
@@ -123,9 +163,9 @@ parquet:
 ```
 
 Parquet's value is that other tools can read the blobs directly. It is not
-automatically smaller — on rounded numeric data the default `.npy`-plus-zlib path
-often wins, because zlib exploits the repetition that rounding creates. Measure
-before assuming. If pyarrow cannot represent a particular frame (duplicate column
+automatically smaller: on a 200k-row price frame the default `.npy`-plus-zstd
+path came out at 1.21 MB against parquet's 1.46 MB, because zstd exploits the
+repetition that rounding creates. Measure before assuming. If pyarrow cannot represent a particular frame (duplicate column
 names, for instance), the save falls back to the default encoding rather than
 failing.
 
