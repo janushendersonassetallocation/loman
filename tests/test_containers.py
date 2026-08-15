@@ -156,8 +156,12 @@ class TestOneSpecTwoSerializations:
 
         with zipfile.ZipFile(tmp_path / "a.loman") as zf:
             zip_blobs = {n: zf.read(n) for n in zf.namelist() if n != MANIFEST_NAME}
+        # as_posix, not str: a blob key is "blobs/0000.npy" in the manifest on
+        # every platform, but relative_to gives it back with a backslash on
+        # Windows. The separator is the test's, not the format's.
         dir_blobs = {
-            str(p.relative_to(tmp_path / "a_dir")): p.read_bytes() for p in (tmp_path / "a_dir" / "blobs").iterdir()
+            p.relative_to(tmp_path / "a_dir").as_posix(): p.read_bytes()
+            for p in (tmp_path / "a_dir" / "blobs").iterdir()
         }
 
         assert zip_blobs == dir_blobs
