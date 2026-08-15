@@ -933,12 +933,6 @@ def _(Computation, tmp):
 
 
 @app.cell
-def _(mo, normal, safe):
-    mo.vstack([safe, normal])
-    return
-
-
-@app.cell
 def _(safe):
     safe.src["b"]
     return

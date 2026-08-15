@@ -62,6 +62,13 @@ Homepage = "https://github.com/janusassetallocation/loman"
 [tool.hatch.build.targets.wheel]
 packages = ["src/loman"]
 
+[tool.deptry.per_rule_ignores]
+# The 'efficient' extras are loaded by name through loman._extras.require, so
+# there is no import statement for deptry's static analysis to find. They are
+# genuinely used --- see serialization/compression.py and transformer.py --- and
+# genuinely optional, which is the whole point of resolving them at run time.
+DEP002 = ["pyarrow", "zstandard"]
+
 [tool.deptry.package_module_name_map]
 pyarrow = "pyarrow"
 zstandard = "zstandard"
