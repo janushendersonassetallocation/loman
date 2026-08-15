@@ -25,7 +25,7 @@ values poked into a bare graph.
 """
 
 import json
-import subprocess
+import subprocess  # nosec B404 - the point of these tests is a separate interpreter
 import sys
 import textwrap
 import threading
@@ -55,8 +55,13 @@ SRC = REPO_ROOT / "src"
 
 
 def _run_python(code: str) -> subprocess.CompletedProcess:
-    """Run *code* in a separate interpreter with loman importable."""
-    return subprocess.run(
+    """Run *code* in a separate interpreter with loman importable.
+
+    The command is this interpreter and a string written in this file --- no
+    shell, and nothing from outside the test suite --- which is why the bandit
+    warning about untrusted input is waived here rather than worked around.
+    """
+    return subprocess.run(  # nosec B603 - fixed interpreter, test-authored source, shell=False
         [sys.executable, "-c", textwrap.dedent(code)],
         capture_output=True,
         text=True,

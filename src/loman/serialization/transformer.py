@@ -479,47 +479,61 @@ class Transformer:
         return source.get(ref[BLOB_REF_KEY])
 
     def to_dict(self, o: object) -> Any:
-        """Convert an object to a serializable dictionary representation."""
-        # Exact-type checks, not isinstance: numpy scalars, IntEnum members and
-        # bool subclasses are all instances of int or float, and an isinstance
-        # fast path would return them as bare numbers, silently discarding the
-        # type. Anything that is not exactly one of these falls through to the
-        # registered transformers, which is where those types are handled.
+        """Convert an object to a serializable dictionary representation.
+
+        Split in two along the line that matters. This half handles values whose
+        type is *exactly* a builtin, which is the overwhelming majority of what a
+        graph holds and so the path worth keeping short; everything else goes to
+        :meth:`_to_dict_object`.
+
+        The checks are exact-type, not ``isinstance``, deliberately: numpy
+        scalars and ``IntEnum`` members are instances of ``int`` or ``float``, so
+        an ``isinstance`` fast path would return them as bare numbers and
+        silently discard the type. Falling through is what lets the registered
+        transformers see them.
+        """
         type_ = type(o)
         if type_ is str or o is None or o is True or o is False or type_ is int:
             return o
-        elif type_ is float:
+        if type_ is float:
             # cast: an exact-type check carries no narrowing for a type checker.
             number = cast("float", o)
             return number if math.isfinite(number) else {KEY_TYPE: TYPENAME_FLOAT, KEY_VALUES: _nonfinite_name(number)}
-        elif type_ is tuple:
+        if type_ is tuple:
             return {KEY_TYPE: TYPENAME_TUPLE, KEY_VALUES: [self.to_dict(x) for x in cast("tuple[Any, ...]", o)]}
-        elif type_ is list:
+        if type_ is list:
             return [self.to_dict(x) for x in cast("list[Any]", o)]
-        elif type_ is dict:
+        if type_ is dict:
             return self._dict_to_dict(cast("dict[Any, Any]", o))
-        # Check registered custom transformers before generic dataclass/attrs paths
-        # so that explicitly registered types (e.g. NodeKey) take priority.
-        elif self.get_transformer_for_obj(o) is not None:
+        return self._to_dict_object(o)
+
+    def _to_dict_object(self, o: object) -> Any:
+        """Encode a value that is not exactly a builtin scalar or container.
+
+        Order is significant. Registered transformers come first so an
+        explicitly registered type --- ``NodeKey``, say --- wins over the generic
+        attrs and dataclass handling that would otherwise also claim it.
+        """
+        if self.get_transformer_for_obj(o) is not None:
             return self._to_dict_transformer(o)
-        elif isinstance(o, Transformable):
+        if isinstance(o, Transformable):
             return {KEY_TYPE: TYPENAME_TRANSFORMABLE, KEY_CLASS: type(o).__name__, KEY_DATA: o.to_dict(self)}
-        elif HAS_ATTRS and attrs.has(type(o)):
+        if HAS_ATTRS and attrs.has(type(o)):
             return self._attrs_to_dict(o)
-        elif dataclasses.is_dataclass(o) and not isinstance(o, type):
+        if dataclasses.is_dataclass(o) and not isinstance(o, type):
             return self._dataclass_to_dict(o)
+
         # Subclasses of the builtin containers, reached only when nothing above
         # claimed them: a namedtuple, an OrderedDict, a list subclass. Encoded as
         # the plain builtin form, which is what they did before exact-type
         # dispatch was introduced.
-        elif isinstance(o, tuple):
+        if isinstance(o, tuple):
             return {KEY_TYPE: TYPENAME_TUPLE, KEY_VALUES: [self.to_dict(x) for x in o]}
-        elif isinstance(o, list):
+        if isinstance(o, list):
             return [self.to_dict(x) for x in o]
-        elif isinstance(o, dict):
+        if isinstance(o, dict):
             return self._dict_to_dict(o)
-        else:
-            return self._to_dict_transformer(o)
+        return self._to_dict_transformer(o)
 
     def _dict_to_dict(self, o: dict[Any, Any]) -> dict[str, Any]:
         """Convert a dictionary to serializable form.
