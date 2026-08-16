@@ -46,6 +46,31 @@ class SerializationError(ComputationError):
     """Exception raised during serialization/deserialization."""
 
 
+class DeserializedError(ComputationError):
+    """Stand-in for an exception whose original class could not be rebuilt.
+
+    A saved ERROR node records the name of the exception that produced it.
+    Rebuilding an arbitrary one would mean importing whatever module the file
+    names, which is executing code chosen by the file, so only builtin exception
+    types are reconstructed. Everything else becomes one of these, carrying the
+    original identity as data for post-mortem reading.
+
+    :ivar exception_type: Name of the exception class that was originally raised.
+    :ivar exception_module: Module that class came from, when it was recorded.
+    """
+
+    def __init__(self, message: str, exception_type: str, exception_module: str | None = None) -> None:
+        """Record the original exception's identity alongside its message."""
+        super().__init__(message)
+        self.exception_type = exception_type
+        self.exception_module = exception_module
+
+    def __repr__(self) -> str:
+        """Show the original exception's type so it is not mistaken for this one."""
+        qualified = f"{self.exception_module}.{self.exception_type}" if self.exception_module else self.exception_type
+        return f"DeserializedError({qualified}: {super().__str__()!r})"
+
+
 # Backward compatibility aliases
 MapException = MapError
 LoopDetectedException = LoopDetectedError
