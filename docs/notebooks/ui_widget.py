@@ -519,6 +519,56 @@ def _(mo, section_ui):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## Building the graph, not only watching it
+
+    Everything above changes the values in a computation. `buildable=True`
+    lets the widget build the computation itself: **+ Node** in the toolbar opens
+    a form, and a selected node grows **Edit**, **Rename** and **Delete**.
+
+    A node is one of two things. An **input** is a name and optionally a scalar —
+    with no value it starts `UNINITIALIZED`, which is how you declare an input to
+    supply later. A **calculation** is a name, a list of inputs and a Python
+    expression: each input becomes a parameter of the compiled function *and* an
+    edge in the graph, so `price` and `quantity` with `price * quantity` is the
+    same node `add_node` would have built.
+
+    Try it on the two inputs below. Add a calculation called `interest`, with
+    `notional` and `rate` as its inputs and `notional * rate` as its expression;
+    then press **Compute all**.
+
+    Names are read against the block in focus, so a name typed while inside a
+    block lands in it, and a leading `/` reaches back out. That is also how a
+    block gets built — there is no "new block" button, because a block is a
+    naming convention: add `market/spot` and `market/vol` and the block appears.
+
+    `namespace=` is what puts your own imports in scope for an expression, so
+    `np.sqrt(notional)` works below. Two things worth knowing: this compiles and
+    runs an expression written in the browser inside the kernel, which is why it
+    is opt-in rather than part of `editable`; and a function built this way has
+    no importable path, so `comp.save()` keeps its value but not its function.
+    """)
+    return
+
+
+@app.cell
+def _(loman, mo, np):
+    sketch = loman.Computation()
+    sketch.add_node("notional", value=1_000_000.0)
+    sketch.add_node("rate", value=0.045)
+    sketch_ui = mo.ui.anywidget(sketch.widget(collapse_all=False, buildable=True, namespace={"np": np}))
+    return (sketch_ui,)
+
+
+@app.cell(hide_code=True)
+def _(mo, sketch_ui):
+    _static_export = "data:text/javascript" in sketch_ui.text
+    mo.Html(sketch_ui.widget.graph_svg) if _static_export else sketch_ui
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Worth knowing
 
     **A bare `comp` stays a static picture.** Evaluating `comp` on its own
@@ -558,6 +608,8 @@ def _(mo):
     widget = comp.widget(root="emea")    # scope the widget to one block
     comp.widget(rankdir="TB")            # start top-to-bottom; LR is the default
     comp.widget(editable=False)          # inspect only; navigation still works
+    comp.widget(buildable=True)     # add, redefine, rename and delete nodes
+    comp.widget(namespace=globals())     # imports a built node's expression can use
     comp.widget(fit_on_render=True)      # scale to the pane on every render
     comp.widget(max_rendered_nodes=2000) # raise the ceiling on opening a block
 
