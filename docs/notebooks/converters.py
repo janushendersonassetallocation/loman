@@ -312,11 +312,12 @@ def _(mo):
     definition, so calling it again without `converter=` leaves the node unconverted. Pass
     the converter every time you redefine the node.
 
-    **`write_json` does not save converters.** A converter is a live Python callable and
-    JSON serialization does not attempt to encode it, so a computation restored with
-    `read_json` has no converters and stores inserted values unchanged. Re-apply them
-    after loading, or build the graph in a computation factory so it is always constructed
-    the same way.
+    **Converters survive saving, but must be importable.** `write_json`/`read_json` and
+    `save`/`load` store a converter the way they store a node's function: by reference. A
+    module-level function or a builtin such as `float` comes back intact, so a reloaded
+    graph still coerces and still validates. A `lambda` has no importable path and raises
+    `SerializationError` naming the node, so define converters at module level rather than
+    inline.
 
     **`add_block` keeps converters.** A validated block template stays validated wherever
     it is used.
@@ -336,7 +337,7 @@ def _(Computation):
     redefine.add_node("x")  # no converter= this time
     redefine.insert("x", 5)
 
-    # A JSON round trip drops it
+    # An importable converter survives a JSON round trip
     saved = Computation()
     saved.add_node("y", value=1, converter=float)
     _buffer = io.StringIO()
@@ -344,6 +345,15 @@ def _(Computation):
     _buffer.seek(0)
     reloaded = Computation.read_json(_buffer)
     reloaded.insert("y", 7, force=True)
+
+    # A lambda converter has no importable path
+    inline = Computation()
+    inline.add_node("w", value=1, converter=lambda v: float(v))
+    try:
+        inline.write_json(io.StringIO())
+        lambda_outcome = "saved"
+    except Exception as exc:
+        lambda_outcome = type(exc).__name__
 
     # add_block keeps it
     template = Computation()
@@ -355,6 +365,7 @@ def _(Computation):
     {
         "after redefining without converter=": type(redefine.v["x"]).__name__,
         "after write_json / read_json": type(reloaded.v["y"]).__name__,
+        "saving a lambda converter": lambda_outcome,
         "inside a block added with add_block": type(host.v["blk/z"]).__name__,
     }
     return
@@ -363,8 +374,9 @@ def _(Computation):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The first two are `int` — the converter is gone. The third is `float`, carried into
-    the block.
+    Only the first is `int` — redefining the node dropped its converter. The round-tripped
+    node is still a `float`, the lambda is refused with `SerializationError`, and the block
+    carries its converter along.
 
     ## Summary
 

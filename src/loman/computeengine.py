@@ -846,7 +846,8 @@ class Computation:
             without storing the value, which is how a validator is written: check the value and return it
             unchanged when it is acceptable. The exception propagates to the caller when the value was
             supplied, but not when it was calculated, where the failure is reported as node state instead.
-            Note that converters are not preserved by ``write_json``, since they are live callables.
+            A converter is saved by reference, like a node's function, so it must be importable: a
+            module-level function or builtin round-trips, while a lambda raises ``SerializationError``.
         :type converter: Callable, default None
         :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which
             case, set serialize to False

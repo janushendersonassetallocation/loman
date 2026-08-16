@@ -9,9 +9,9 @@
 - Documented node converters, which had been supported since 2024 but appeared in no
   documentation, docstring or example. Added a user guide page and a Marimo notebook covering
   coercion, the converter-as-validator pattern, where a conversion failure raises versus where it
-  only marks the node ERROR, and the fact that `write_json` does not preserve converters. The
-  `converter` parameter is now described in the `add_node` docstring, so it also reaches the API
-  reference
+  only marks the node ERROR, and the fact that a converter is saved by reference and so must be
+  importable. The `converter` parameter is now described in the `add_node` docstring, so it also
+  reaches the API reference
 - Calc nodes declared on a `@ComputationFactory` class now round-trip, so a saved computation can be reloaded and recomputed. They are methods bound to the definition object, which has no importable path --- after decoration the class's name refers to the factory function --- so the function used to be dropped and the reloaded graph could never update again. It is now stored as the class and method name and rebuilt by constructing a fresh definition object. State set in `__init__` is therefore reconstructed; state mutated on `self` at run time is not, and a definition class that cannot be constructed without arguments still falls back to being stored without a function
 - Serialization format version restarts at 1. The shapes written by pre-release versions are still read on a best-effort basis; they were never covered by a published guarantee, so continuing their numbering would have implied one
 - `make test-compat` runs the version-sensitive tests against the oldest supported pandas. It lives in its own repo-owned makefile rather than alongside the graphviz install hook, and depends on `install-uv` rather than `install`, since `uv run --isolated` resolves its own environment and does not need the project venv

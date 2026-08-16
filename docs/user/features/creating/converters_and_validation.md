@@ -127,13 +127,12 @@ conversion, the same as any other failed node — see
 - **Redefining a node drops its converter.** `add_node` sets the whole node
   definition, so calling it again without `converter=` leaves the node with no
   converter. Pass the converter each time you redefine the node.
-- **Converters are not saved by `write_json`.** A converter is a live Python callable,
-  and JSON serialization does not attempt to encode it: a computation loaded with
-  `read_json` has no converters, and values inserted into it are stored unchanged.
-  Re-apply converters after loading, or set them up in a
-  [computation factory](creating_computation_factories.md) so that the graph is always
-  constructed the same way. (The deprecated `write_dill`/`read_dill` pair does preserve
-  them, since it pickles the callable.)
+- **Converters survive saving, but must be importable.** `write_json`/`read_json` and
+  `save`/`load` store a converter the same way they store a node's function: by
+  reference. A module-level function or a builtin such as `float` comes back intact, so
+  a reloaded graph still coerces and still validates. A `lambda` has no importable path
+  and raises `SerializationError` naming the node — define the converter at module level,
+  or in a [computation factory](creating_computation_factories.md), rather than inline.
 - **`add_block` preserves converters.** A node's converter comes along when its
   computation is added as a block, so a validated block template stays validated
   wherever it is used.
