@@ -66,6 +66,7 @@ nav:
       - Features:
           - Creating:
               - Constant Values: user/features/creating/constant_values.md
+              - Converters and Validation: user/features/creating/converters_and_validation.md
               - Node Decorator: user/features/creating/adding_nodes_using_decorators.md
               - Named Tuples: user/features/creating/automatically_expanding_named_tuples.md
               - Computation Factories: user/features/creating/creating_computation_factories.md
@@ -87,6 +88,7 @@ nav:
   - Notebooks:
       - Overview: notebooks.md
       - CDOs: notebooks/cdos.html
+      - Converters and Validation: notebooks/converters.html
       - Interest Rate Swaps: notebooks/interest_rate_swaps.html
       - Portfolio: notebooks/portfolio.html
       - Large Repeated Blocks: notebooks/pipeline_example.html

@@ -840,6 +840,15 @@ class Computation:
         :type kwds: Dictionary, default None
         :param value: If given, the value is inserted into the node, and the node state set to UPTODATE.
         :type value: default None
+        :param converter: Callable applied to any value on its way into the node. The node stores what the
+            converter returns, both for values supplied by ``value``, ``insert`` and ``insert_many``, and for
+            values the node calculates with ``func``. A converter that raises leaves the node in state ERROR
+            without storing the value, which is how a validator is written: check the value and return it
+            unchanged when it is acceptable. The exception propagates to the caller when the value was
+            supplied, but not when it was calculated, where the failure is reported as node state instead.
+            A converter is saved by reference, like a node's function, so it must be importable: a
+            module-level function or builtin round-trips, while a lambda raises ``SerializationError``.
+        :type converter: Callable, default None
         :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which
             case, set serialize to False
         :type serialize: boolean, default True
