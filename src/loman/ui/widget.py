@@ -14,10 +14,11 @@ import anywidget
 import traitlets
 
 from loman.computeengine import ComputationEvent
-from loman.consts import NodeTransformations
+from loman.consts import NodeTransformations, States
 from loman.nodekey import Name, NodeKey, to_nodekey
 
-from .value import apply_cell_edit, from_wire
+from .builder import GraphBuildError, build_definition, relative_name, resolve_name
+from .value import ValueWireError, apply_cell_edit, from_wire
 from .viewmodel import build_detail, node_states, state_colors
 
 if TYPE_CHECKING:
@@ -45,6 +46,12 @@ _REQUEST_HISTORY = 64
 #: that large is refused rather than merely sluggish. Raise it with
 #: ``max_rendered_nodes=`` if you know what you are asking for.
 DEFAULT_MAX_RENDERED_NODES = 500
+
+#: How many node names the widget will offer the browser as suggestions while
+#: someone types an input into the node form. Names are small, but a graph with
+#: more nodes than this would send a list larger than the picture it belongs
+#: to, for a convenience --- so past it the form simply stops suggesting.
+MAX_NAME_SUGGESTIONS = 500
 
 #: Sentinel from :meth:`ComputationWidget._canonical_output`: the trait is
 #: view-dependent and no view exists yet, so its echoed value is left alone.
@@ -134,6 +141,16 @@ class ComputationWidget(anywidget.AnyWidget):
     ack = traitlets.Int(0).tag(sync=True)
     expanded_paths = traitlets.List(traitlets.Unicode(), default_value=[]).tag(sync=True)
     editable = traitlets.Bool(True).tag(sync=True)
+    #: Permit building the graph itself --- adding, redefining, renaming and
+    #: deleting nodes --- from the toolbar and the detail panel. Off by
+    #: default, and deliberately separate from :attr:`editable`: defining a
+    #: calculation node means running an expression typed in the browser inside
+    #: the kernel, which is a different thing to agree to than editing a value.
+    buildable = traitlets.Bool(False).tag(sync=True)
+    #: Every node name in the computation, in the same relative form the node
+    #: form accepts, so the browser can suggest inputs as they are typed. Empty
+    #: past :data:`MAX_NAME_SUGGESTIONS` nodes.
+    node_names = traitlets.List(traitlets.Unicode(), default_value=[]).tag(sync=True)
     #: Scale the graph down to fit the pane whenever it is re-rendered, if it
     #: would otherwise overflow. Off by default: a large graph fitted into a
     #: notebook pane is unreadable, and reading is the usual reason to open one.
@@ -169,6 +186,7 @@ class ComputationWidget(anywidget.AnyWidget):
     layout_request = traitlets.Dict(default_value={}).tag(sync=True)
     focus_request = traitlets.Dict(default_value={}).tag(sync=True)
     full_view_request = traitlets.Dict(default_value={}).tag(sync=True)
+    graph_request = traitlets.Dict(default_value={}).tag(sync=True)
 
     def __init__(
         self,
@@ -185,18 +203,30 @@ class ComputationWidget(anywidget.AnyWidget):
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        buildable: bool = False,
+        namespace: dict[str, Any] | None = None,
         fit_on_render: bool = False,
         max_rendered_nodes: int = DEFAULT_MAX_RENDERED_NODES,
         rankdir: str = "LR",
     ) -> None:
         """Create a widget and subscribe it to ``computation``.
 
-        Arguments other than ``editable`` and ``max_rendered_nodes`` mirror
-        :meth:`Computation.draw`.
+        Arguments other than ``editable``, ``buildable``, ``namespace``
+        and ``max_rendered_nodes`` mirror :meth:`Computation.draw`.
 
         :param editable: Permit scalar input edits and computation controls.
             Expanding and collapsing blocks stays available either way, because
             navigating a graph does not mutate it.
+        :param buildable: Permit building the graph in the widget: adding,
+            redefining, renaming and deleting nodes. Off by default, and needs
+            ``editable`` as well. Defining a calculation node compiles and runs
+            an expression typed in the browser, in the kernel, with whatever
+            ``namespace`` gives it --- so it is opt-in rather than implied by
+            being able to edit a value.
+        :param namespace: Globals a node built in the widget is compiled
+            against, so its expression can use the notebook's own imports. Pass
+            ``globals()`` for that. The default is an empty namespace, where
+            only builtins are in scope.
         :param max_rendered_nodes: Refuse an expand request that would put more
             than this many nodes on screen. It does not cap the initial view:
             what you asked to draw is drawn.
@@ -236,10 +266,12 @@ class ComputationWidget(anywidget.AnyWidget):
         self._canonical_rankdir = str(graph_attr["rankdir"]) if graph_attr and "rankdir" in graph_attr else rankdir
         self._seen_requests: deque[str] = deque(maxlen=_REQUEST_HISTORY)
         self._max_rendered_nodes = max_rendered_nodes
+        self._namespace = namespace
         self._writing = 0
         self._unsubscribe: Callable[[], None] | None = None
         super().__init__(
             editable=editable,
+            buildable=buildable,
             fit_on_render=fit_on_render,
             repaint_states=colors == "state",
             rankdir=self._canonical_rankdir,
@@ -444,6 +476,7 @@ class ComputationWidget(anywidget.AnyWidget):
             # blocks lets the front end make their cluster labels the handle.
             self.expanded_paths = sorted(str(block) for block in self._expanded)
             self.focus_trail = self._focus_trail()
+            self.node_names = self._node_names()
             self.revision = self.computation.revision
             if self.selected_id:
                 selected_visible = self._id_to_visible.get(self.selected_id)
@@ -457,11 +490,28 @@ class ComputationWidget(anywidget.AnyWidget):
             self._refresh_detail()
         return True
 
+    def _node_names(self) -> list[str]:
+        """Name every node in the computation, for the node form's suggestions.
+
+        Names are relative to the view's root, exactly as the form reads them
+        back, so a suggestion can be accepted as typed.
+        """
+        if len(self.computation.dag) > MAX_NAME_SUGGESTIONS:
+            return []
+        root = None if self._root is None else to_nodekey(self._root)
+        return sorted(relative_name(node_key, root) for node_key in self.computation.dag.nodes)
+
     def _detail_for(self, node_id: str) -> dict[str, Any]:
         """Build the detail payload for one rendered node ID."""
         if self._view is None:
             return {}
-        return build_detail(self._view, node_id, editable=self.editable, id_to_visible=self._id_to_visible)
+        return build_detail(
+            self._view,
+            node_id,
+            editable=self.editable,
+            id_to_visible=self._id_to_visible,
+            root=None if self._root is None else to_nodekey(self._root),
+        )
 
     def _refresh_detail(self) -> None:
         """Refresh the selected node's lazy detail payload."""
@@ -521,6 +571,7 @@ class ComputationWidget(anywidget.AnyWidget):
             "rankdir": lambda: self._canonical_rankdir,
             "focus_trail": self._focus_trail,
             "full_view": lambda: self._canonical_full_view,
+            "node_names": self._node_names,
         }
         if name in view_independent:
             return view_independent[name]()
@@ -545,6 +596,7 @@ class ComputationWidget(anywidget.AnyWidget):
         "focus_trail",
         "full_view",
         "graph_svg",
+        "node_names",
         "node_states",
         "rankdir",
         "revision",
@@ -863,6 +915,125 @@ class ComputationWidget(anywidget.AnyWidget):
         if self._full_view_key is None:
             return None
         return self.computation.value(self._full_view_key)
+
+    def _request_key(self, request: dict[str, Any]) -> NodeKey:
+        """Resolve which existing node a graph request is aimed at.
+
+        :param request: A request naming a rendered node by ``id``, or a node
+            by ``target`` in the relative form the node form uses.
+        :return: The full computation key of the node.
+        :raises GraphBuildError: If the ID names a collapsed block, which is
+            several nodes rather than one.
+        :raises KeyError: If the rendered ID is unknown.
+        """
+        if "id" not in request:
+            return resolve_name(str(request.get("target", "")), self._root)
+        assert self._view is not None  # noqa: S101
+        visible = self._id_to_visible[request["id"]]
+        members = self._view.original_nodes[visible]
+        if len(members) != 1:
+            msg = f"{self._full_visible_key(visible)} is a block; open it and act on the nodes inside"
+            raise GraphBuildError(msg)
+        return members[0]
+
+    def _select_key(self, node_key: NodeKey) -> None:
+        """Select a node by its computation key, if it is on screen.
+
+        Selecting what was just built is what makes the node form feel like it
+        put something somewhere: the panel opens on the new node, showing the
+        state it landed in and the definition it was given.
+        """
+        if self._view is None:
+            return
+        visible = node_key if self._root is None else node_key.drop_root(to_nodekey(self._root))
+        node_id = None if visible is None else self._view.node_index_map.get(visible)
+        if node_id is not None:
+            self.selected_id = node_id
+
+    def _add_node(self, request: dict[str, Any]) -> str:
+        """Add a node, or replace one the browser asked to redefine.
+
+        A PLACEHOLDER does not count as existing. It is the outline Loman
+        leaves where a node was referred to but never defined, so defining it
+        is filling in a blank rather than overwriting anything --- and it is
+        the very next thing to do after building a node whose inputs are not
+        there yet.
+        """
+        definition = build_definition(request, root=self._root, namespace=self._namespace)
+        existed = (
+            self.computation.has_node(definition.key) and self.computation.state(definition.key) != States.PLACEHOLDER
+        )
+        if existed and not request.get("replace"):
+            msg = f"{definition.key} already exists; select it and choose Edit to redefine it"
+            raise GraphBuildError(msg)
+        definition.apply(self.computation)
+        self._select_key(definition.key)
+        return f"{'Redefined' if existed else 'Added'} {definition.key}"
+
+    def _rename_node(self, request: dict[str, Any]) -> str:
+        """Rename an existing node, keeping the edges into and out of it."""
+        node_key = self._request_key(request)
+        new_key = resolve_name(str(request.get("name", "")), self._root)
+        if new_key == node_key:
+            msg = f"{node_key} already has that name"
+            raise GraphBuildError(msg)
+        self.computation.rename_node(node_key, new_key)
+        self._select_key(new_key)
+        return f"Renamed {node_key} to {new_key}"
+
+    def _delete_node(self, request: dict[str, Any]) -> str:
+        """Delete an existing node.
+
+        Loman keeps a deleted node that others still depend on as a
+        PLACEHOLDER, so the message says which happened rather than claiming
+        the node has gone when its outline is still on screen.
+        """
+        node_key = self._request_key(request)
+        self.computation.delete_node(node_key)
+        if self.computation.has_node(node_key):
+            return f"{node_key} is now a placeholder: nodes still depend on it"
+        return f"Deleted {node_key}"
+
+    @traitlets.observe("graph_request")
+    @_acknowledges
+    def _graph_requested(self, change: dict[str, Any]) -> None:
+        """Build the graph itself: add, redefine, rename or delete a node.
+
+        This is the one request that runs code the browser wrote, so it is
+        gated on :attr:`buildable` as well as :attr:`editable`, and says
+        which switch is missing rather than refusing silently.
+        """
+        request = change["new"]
+        if not request or not hasattr(self, "_id_to_visible") or not self._claim_request(request):
+            return
+        if not self.editable:
+            self._fail("Graph edit failed: this widget is read-only")
+            return
+        if not self.buildable:
+            self._fail("Graph edit failed: pass buildable=True to comp.widget() to build the graph here")
+            return
+        handlers: dict[str, Callable[[dict[str, Any]], str]] = {
+            "add": self._add_node,
+            "rename": self._rename_node,
+            "delete": self._delete_node,
+        }
+        handler = handlers.get(str(request.get("action")))
+        if handler is None:
+            self._fail(f"Graph edit failed: {request.get('action')!r} is not something the graph builder does")
+            return
+        try:
+            self._set_status(handler(request))
+        except (GraphBuildError, ValueWireError) as exc:
+            # Written for whoever is looking at the form, so it is shown as
+            # written rather than behind the name of its exception class.
+            LOG.debug("Loman widget graph request was rejected", exc_info=True)
+            self._fail(f"Graph edit failed: {exc}")
+        except Exception as exc:
+            # Everything else, from a name Loman will not take to a node that
+            # cannot be deleted: the status line is the only place the person
+            # who pressed the button would ever see it.
+            LOG.debug("Loman widget graph request failed", exc_info=True)
+            self._fail(f"Graph edit failed: {type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         """Unsubscribe from the computation and close the widget comm."""

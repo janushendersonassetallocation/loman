@@ -8,6 +8,7 @@ creating_computation_factories
 computation_utilities
 adding_nodes_using_decorators
 constant_values
+converters_and_validation
 tagging_nodes
 automatically_expanding_named_tuples
 non_string_node_names

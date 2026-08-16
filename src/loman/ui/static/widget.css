@@ -423,6 +423,93 @@ button.loman-crumb:disabled { opacity: 0.45; cursor: default; }
 details.loman-source { font-size: 12px; }
 details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
 
+/* ------------------------------------------------------------- node form */
+
+/* Shares the inspector's column: two panels either side of the graph would
+   leave the graph with nothing, and only one of them is ever being read. */
+.loman-builder {
+  display: flex;
+  flex: 0 0 clamp(240px, 32%, 340px);
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  background: var(--loman-panel);
+  border-left: 1px solid var(--loman-line);
+}
+.loman-builder[hidden] { display: none; }
+
+.loman-field { display: block; margin-bottom: 8px; }
+.loman-field:last-child { margin-bottom: 0; }
+.loman-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--loman-ink-3);
+}
+.loman-field .loman-note { display: block; }
+
+.loman-widget .loman-text,
+.loman-widget .loman-select,
+.loman-widget .loman-expression {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--loman-ink);
+  background: var(--loman-field);
+  border: 1px solid var(--loman-line-strong);
+  border-radius: var(--loman-radius-sm);
+  padding: 4px 7px;
+}
+.loman-widget .loman-expression { resize: vertical; white-space: pre; }
+.loman-widget .loman-text[type="checkbox"] { width: 16px; height: 16px; }
+
+.loman-value-row { display: flex; gap: 6px; align-items: center; }
+.loman-value-row .loman-select { flex: 0 1 auto; }
+
+.loman-input-rows { display: flex; flex-direction: column; gap: 4px; }
+.loman-input-row { display: flex; gap: 4px; align-items: center; }
+.loman-input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--loman-ink);
+  background: var(--loman-field);
+  border: 1px solid var(--loman-line-strong);
+  border-radius: var(--loman-radius-sm);
+  padding: 4px 7px;
+}
+.loman-widget button.loman-add-input {
+  margin-top: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.loman-form-pane { padding: 10px 12px; border-bottom: 1px solid var(--loman-line); }
+.loman-form-pane[hidden] { display: none; }
+
+/* A definition is taller than the pane on any real graph, so the buttons stay
+   put rather than being something to go looking for. */
+.loman-section.loman-form-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--loman-panel);
+  border-top: 1px solid var(--loman-line);
+}
+
+/* Armed only by its own first press, so the wording is what says the next one
+   deletes --- the colour alone would be a claim nobody has agreed to yet. */
+.loman-widget button.loman-danger:hover:not(:disabled) { color: var(--loman-critical); }
+.loman-widget button.loman-danger[data-armed] {
+  color: var(--loman-critical);
+  border-color: var(--loman-critical);
+}
+
 /* --------------------------------------------------------------- statusbar */
 
 .loman-status {
@@ -467,6 +554,14 @@ details.loman-source summary { cursor: pointer; color: var(--loman-ink-2); }
   .loman-inspector {
     flex: none;
     max-height: 300px;
+    border-left: 0;
+    border-top: 1px solid var(--loman-line);
+  }
+  /* Taller than the inspector: a form is a fixed set of fields to fill in,
+     not a panel to skim, and stacked is where the column is narrowest. */
+  .loman-builder {
+    flex: none;
+    max-height: 420px;
     border-left: 0;
     border-top: 1px solid var(--loman-line);
   }

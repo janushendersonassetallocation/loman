@@ -10,6 +10,7 @@ from loman._extras import require
 require("anywidget", "ui")
 require("traitlets", "ui")
 
+from .builder import GraphBuildError  # noqa: E402
 from .widget import ComputationWidget  # noqa: E402
 
-__all__ = ["ComputationWidget"]
+__all__ = ["ComputationWidget", "GraphBuildError"]

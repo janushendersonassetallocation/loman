@@ -3354,16 +3354,7 @@ class TestTags:
 
 
 class TestWriteDill:
-    """Tests for write_dill, write_dill_old and read_dill."""
-
-    def test_write_dill_old_deprecated(self, tmp_path):
-        """Test write_dill_old is deprecated."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        path = tmp_path / "comp_old.dill"
-        with pytest.warns(DeprecationWarning, match=".*"):
-            comp.write_dill_old(str(path))
+    """Tests for write_dill and read_dill."""
 
     def test_write_dill_to_file(self, tmp_path):
         """Test write_dill to file path."""
@@ -3407,23 +3398,9 @@ class TestWriteDill:
         ):  # Intentionally broad
             Computation.read_dill(buf)
 
-    def test_write_dill_old_with_fileobj(self):
-        """Test write_dill_old with file object."""
+    def test_write_dill_respects_serialize_flag(self, tmp_path):
+        """A node with serialize=False round-trips through dill as UNINITIALIZED."""
         comp = Computation()
-        comp.add_node("a", value=42)
-
-        buf = io.BytesIO()
-        with pytest.warns(DeprecationWarning, match=".*"):
-            comp.write_dill_old(buf)
-
-    def test_write_dill_old_with_tags(self, tmp_path):
-        """Test write_dill_old with nodes that have TAG but not SERIALIZE - covers line 1508."""
-        import warnings
-
-        import dill  # nosec B403
-
-        comp = Computation()
-        # Add node with serialize=False so it won't have SERIALIZE tag
         comp.add_node("a", value=1, serialize=False)
 
         def calc_b(a):
@@ -3431,24 +3408,18 @@ class TestWriteDill:
 
         comp.add_node("b", calc_b)
         comp.compute_all()
-
-        # Add a custom tag to 'a' (which already doesn't have SERIALIZE)
         comp.set_tag("a", "my_custom_tag")
 
-        # Write using write_dill_old (deprecated)
-        # This should set uninitialized for node 'a' that has TAG but not SERIALIZE
-        file_path = tmp_path / "comp.pkl"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            comp.write_dill_old(str(file_path))
+        file_path = tmp_path / "comp.dill"
+        with pytest.warns(DeprecationWarning, match="write_dill"):
+            comp.write_dill(str(file_path))
 
-        # Read back
-        with open(file_path, "rb") as f:
-            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data  # noqa: S301
+        with pytest.warns(DeprecationWarning, match="read_dill"):
+            loaded = Computation.read_dill(str(file_path))
 
-        # Check structure
         assert loaded.has_node("a")
         assert loaded.has_node("b")
+        assert loaded.state("a") == States.UNINITIALIZED
 
 
 class TestPrintErrors:
