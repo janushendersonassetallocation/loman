@@ -2559,6 +2559,8 @@ class Computation:
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        buildable: bool = False,
+        namespace: dict[str, Any] | None = None,
         fit_on_render: bool = False,
         max_rendered_nodes: int = 500,
         rankdir: str = "LR",
@@ -2579,6 +2581,15 @@ class Computation:
 
         :param editable: Allow scalar input editing and computation controls.
             Expanding and collapsing blocks stays available either way.
+        :param buildable: Allow the graph itself to be built in the
+            widget: adding, redefining, renaming and deleting nodes. Off by
+            default, and needs ``editable`` too, because defining a calculation
+            node compiles and runs an expression typed in the browser inside
+            this kernel.
+        :param namespace: Globals a node built in the widget is compiled
+            against, so its expression can use the notebook's own imports.
+            Pass ``globals()``. The default is an empty namespace, in which
+            only builtins are in scope.
         :param fit_on_render: Scale the graph to fit the pane on every render,
             rather than opening at natural size. Useful when the shape of a
             large graph matters more than its labels.
@@ -2603,6 +2614,8 @@ class Computation:
             show_expansion=show_expansion,
             collapse_all=collapse_all,
             editable=editable,
+            buildable=buildable,
+            namespace=namespace,
             fit_on_render=fit_on_render,
             max_rendered_nodes=max_rendered_nodes,
             rankdir=rankdir,
