@@ -24,6 +24,9 @@ from loman import (
     Computation,
     ComputationEvent,
     ComputationFactory,
+    FanIn,
+    FanOut,
+    IdNode,
     LoopDetectedError,
     MapError,
     NonExistentNodeError,
@@ -33,6 +36,8 @@ from loman import (
     computation_factory,
     input_node,
     node,
+    repeated_blocks,
+    util,
 )
 from loman.computeengine import (
     Block,
@@ -41,7 +46,9 @@ from loman.computeengine import (
     NodeData,
     NodeKey,
     NullObject,
+    RepeatedBlocksNode,
     TimingData,
+    _bind_self,
     identity_function,
 )
 from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
@@ -1987,6 +1994,304 @@ def test_computation_factory_with_blocks():
     assert comp.v.output == 22 + 31
 
 
+@ComputationFactory
+class _InstrumentBlock:
+    """Block template used by the repeated block factory tests."""
+
+    data = input_node()
+    scale = input_node()
+
+    @calc_node
+    def value(self, data, scale):
+        return data * scale
+
+
+def _select_instrument(positions, instrument_id):
+    """Select one instrument's position from a keyed mapping."""
+    return positions[instrument_id]
+
+
+def test_computation_factory_with_repeated_blocks():
+    """Test computation factory with repeated blocks, fan-out and fan-in."""
+
+    @ComputationFactory
+    class OuterComputation:
+        positions = input_node()
+        scale = input_node(value=10)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("AAPL", "MSFT"),
+            features=[
+                FanOut("positions", "data", transform=_select_instrument),
+                FanOut("scale", "scale"),
+                FanIn("value", "values"),
+                FanIn("value", "total", combine=lambda values: sum(values.values())),
+            ],
+        )
+
+        @calc_node
+        def doubled_total(self, total):
+            return 2 * total
+
+    comp = OuterComputation()
+
+    comp.insert("positions", {"AAPL": 2, "MSFT": 3})
+    comp.compute_all()
+
+    assert comp.v.instruments.AAPL.value == 20
+    assert comp.v.instruments.MSFT.value == 30
+    assert comp.v.values == {"AAPL": 20, "MSFT": 30}
+    assert comp.v.total == 50
+    assert comp.v.doubled_total == 100
+
+
+def test_computation_factory_repeated_blocks_binds_self_to_callbacks():
+    """Test repeated block transforms and combines defined as methods receive self."""
+
+    @ComputationFactory
+    class OuterComputation:
+        positions = input_node()
+        scale = input_node(value=1)
+        offset = 100
+
+        def select(self, positions, instrument_id):
+            return positions[instrument_id] + self.offset
+
+        def total_up(self, values):
+            return sum(values.values())
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a", "b"),
+            features=[
+                FanOut("positions", "data", transform=select),
+                FanOut("scale", "scale"),
+                FanIn("value", "total", combine=total_up),
+            ],
+        )
+
+    comp = OuterComputation()
+
+    comp.insert("positions", {"a": 1, "b": 2})
+    comp.compute("total")
+
+    assert comp.v.total == 203
+
+
+def test_computation_factory_repeated_blocks_without_ignore_self():
+    """Test repeated block callbacks are left unbound when ignore_self is disabled."""
+
+    @ComputationFactory(ignore_self=False)
+    class OuterComputation:
+        positions = input_node()
+        scale = input_node(value=1)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a",),
+            features=[
+                FanOut("positions", "data", transform=_select_instrument),
+                FanOut("scale", "scale"),
+                FanIn("value", "total", combine=lambda values: sum(values.values())),
+            ],
+        )
+
+    comp = OuterComputation()
+
+    comp.insert("positions", {"a": 7})
+    comp.compute("total")
+
+    assert comp.v.total == 7
+
+
+def test_computation_factory_repeated_blocks_with_per_key_source_and_id_node():
+    """Test repeated blocks reading a different node per key, with identifier nodes."""
+
+    @ComputationFactory
+    class InstrumentBlock:
+        label = input_node()
+        price = input_node()
+
+        @calc_node
+        def tagged(self, label, price):
+            return f"{label}:{price}"
+
+    @ComputationFactory
+    class OuterComputation:
+        prefix = "data"
+
+        def price_source(self, label):
+            return f"{self.prefix}/{label}"
+
+        instruments = repeated_blocks(
+            InstrumentBlock,
+            keys=("AAPL", "MSFT"),
+            features=[IdNode("label"), FanOut(price_source, "price"), FanIn("tagged", "tags")],
+        )
+
+    comp = OuterComputation()
+    comp.add_node("data/AAPL", value=190)
+    comp.add_node("data/MSFT", value=430)
+    comp.compute("tags")
+
+    assert comp.v.tags == {"AAPL": "AAPL:190", "MSFT": "MSFT:430"}
+    assert comp.v["instruments/AAPL/label"] == "AAPL"
+    assert comp.i["instruments/AAPL/price"] == ["data/AAPL"]
+    assert comp.i["instruments/MSFT/price"] == ["data/MSFT"]
+
+
+def test_computation_factory_repeated_blocks_keeps_a_plain_string_source():
+    """Test a non-callable source is left alone by the self-binding step."""
+
+    @ComputationFactory
+    class OuterComputation:
+        shared = input_node(value=5)
+
+        instruments = repeated_blocks(
+            _InstrumentBlock,
+            keys=("a",),
+            features=[FanOut("shared", "data"), FanOut("shared", "scale"), FanIn("value", "total")],
+        )
+
+    comp = OuterComputation()
+    comp.compute("total")
+
+    assert comp.v.total == {"a": 25}
+
+
+def test_factory_built_computation_works_as_a_repeated_block_template():
+    """Use a @ComputationFactory computation as the template for repeated blocks.
+
+    This is the shape a consumer reaches for first — define the per-instance model
+    as a factory class, then stamp it out — and it goes through util rather than
+    the repeated_blocks class-body form, so it was otherwise untested.
+    """
+
+    @ComputationFactory
+    class PositionsComputation:
+        quantity = input_node()
+        price = input_node(value=2)
+
+        @calc_node
+        def value(self, quantity, price):
+            return quantity * price
+
+    comp = Computation()
+    comp.add_node("quantities", value={"AAPL": 10, "MSFT": 5})
+
+    features = [
+        IdNode("label"),
+        FanOut("quantities", "quantity", transform=_select_instrument),
+        FanIn("value", "total", combine=lambda values: sum(values.values())),
+    ]
+    built = util.RepeatedBlocks(PositionsComputation(), ("AAPL", "MSFT"), "positions", features=features).add_to(comp)
+    comp.compute_all()
+
+    assert built.blocks == {"AAPL": NodeKey(("positions", "AAPL")), "MSFT": NodeKey(("positions", "MSFT"))}
+    assert comp.v["positions/AAPL/label"] == "AAPL"
+
+    # A factory class commonly gives inputs a default with input_node(value=...).
+    # keep_values is False by default, so those defaults are NOT carried into the
+    # copies, and the blocks cannot compute until the input is supplied.
+    assert comp.state("positions/AAPL/price") == States.UNINITIALIZED
+    assert comp.v.total is None
+    assert [str(n) for n in comp.validate().uninitialized_inputs] == [
+        "positions/AAPL/price",
+        "positions/MSFT/price",
+    ]
+
+
+def test_factory_template_defaults_survive_with_keep_values():
+    """Carry a factory's input defaults into every copy when asked to."""
+
+    @ComputationFactory
+    class PositionsComputation:
+        quantity = input_node()
+        price = input_node(value=2)
+
+        @calc_node
+        def value(self, quantity, price):
+            return quantity * price
+
+    comp = Computation()
+    comp.add_node("quantities", value={"AAPL": 10, "MSFT": 5})
+
+    util.RepeatedBlocks(
+        PositionsComputation(),
+        ("AAPL", "MSFT"),
+        "positions",
+        features=[
+            FanOut("quantities", "quantity", transform=_select_instrument),
+            FanIn("value", "total", combine=lambda values: sum(values.values())),
+        ],
+        keep_values=True,
+    ).add_to(comp)
+    comp.compute_all()
+
+    assert comp.v["positions/AAPL/price"] == 2
+    assert comp.v.total == 30
+
+
+def test_computation_factory_repeated_blocks_from_computation_keeping_values():
+    """Test repeated blocks accept a computation template and can copy its values."""
+    template = Computation()
+    template.add_node("data", value=4)
+    template.add_node("result", lambda data: data * 2)
+    template.compute_all()
+
+    @ComputationFactory
+    class OuterComputation:
+        blocks = repeated_blocks(template, keys=("a", "b"), keep_values=True)
+
+    comp = OuterComputation()
+
+    assert comp.v[["blocks/a/result", "blocks/b/result"]] == [8, 8]
+
+
+def test_binding_self_without_a_definition_object_is_reported_clearly():
+    """Explain the contradiction rather than surfacing a bare binding TypeError.
+
+    Asking for `self` binding with nothing to bind to is only reachable by driving
+    the API directly, but the message it produced came from inside types.MethodType
+    and said nothing about which callback or why.
+    """
+
+    def takes_self(self, value, key):
+        return value[key]
+
+    block = Computation()
+    block.add_node("data")
+    block.add_node("out", lambda data: data)
+    comp = Computation()
+    comp.add_node("src", value={"a": 1})
+
+    definition = util.RepeatedBlocks(block, ("a",), "blocks", features=[FanOut("src", "data", transform=takes_self)])
+
+    with pytest.raises(ValueError, match="no definition object was supplied"):
+        definition.add_to(comp, definition_object=None, ignore_self=True)
+
+    assert comp.nodes() == ["src"]
+
+
+def test_binding_self_is_skipped_when_ignore_self_is_off():
+    """Leave a self-taking callback alone rather than complaining, when binding is off."""
+
+    def takes_self(self, value, key):
+        return (self, value, key)
+
+    assert _bind_self(takes_self, None, False) is takes_self
+
+
+def test_repeated_blocks_node_with_invalid_type():
+    """Test RepeatedBlocksNode with invalid block type raises TypeError."""
+    repeated = RepeatedBlocksNode("not a callable or computation", keys=("a",))
+
+    outer_comp = Computation()
+    with pytest.raises(TypeError, match="must be callable or Computation"):
+        repeated.add_to_comp(outer_comp, "blocks", None, ignore_self=True)
+
+
 def test_block_add_to_comp():
     """Test block add to comp."""
     inner_comp = Computation()
@@ -3048,16 +3353,7 @@ class TestTags:
 
 
 class TestWriteDill:
-    """Tests for write_dill, write_dill_old and read_dill."""
-
-    def test_write_dill_old_deprecated(self, tmp_path):
-        """Test write_dill_old is deprecated."""
-        comp = Computation()
-        comp.add_node("a", value=1)
-
-        path = tmp_path / "comp_old.dill"
-        with pytest.warns(DeprecationWarning, match=".*"):
-            comp.write_dill_old(str(path))
+    """Tests for write_dill and read_dill."""
 
     def test_write_dill_to_file(self, tmp_path):
         """Test write_dill to file path."""
@@ -3101,23 +3397,9 @@ class TestWriteDill:
         ):  # Intentionally broad
             Computation.read_dill(buf)
 
-    def test_write_dill_old_with_fileobj(self):
-        """Test write_dill_old with file object."""
+    def test_write_dill_respects_serialize_flag(self, tmp_path):
+        """A node with serialize=False round-trips through dill as UNINITIALIZED."""
         comp = Computation()
-        comp.add_node("a", value=42)
-
-        buf = io.BytesIO()
-        with pytest.warns(DeprecationWarning, match=".*"):
-            comp.write_dill_old(buf)
-
-    def test_write_dill_old_with_tags(self, tmp_path):
-        """Test write_dill_old with nodes that have TAG but not SERIALIZE - covers line 1508."""
-        import warnings
-
-        import dill  # nosec B403
-
-        comp = Computation()
-        # Add node with serialize=False so it won't have SERIALIZE tag
         comp.add_node("a", value=1, serialize=False)
 
         def calc_b(a):
@@ -3125,24 +3407,18 @@ class TestWriteDill:
 
         comp.add_node("b", calc_b)
         comp.compute_all()
-
-        # Add a custom tag to 'a' (which already doesn't have SERIALIZE)
         comp.set_tag("a", "my_custom_tag")
 
-        # Write using write_dill_old (deprecated)
-        # This should set uninitialized for node 'a' that has TAG but not SERIALIZE
-        file_path = tmp_path / "comp.pkl"
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            comp.write_dill_old(str(file_path))
+        file_path = tmp_path / "comp.dill"
+        with pytest.warns(DeprecationWarning, match="write_dill"):
+            comp.write_dill(str(file_path))
 
-        # Read back
-        with open(file_path, "rb") as f:
-            loaded = dill.load(f)  # nosec B301 - testing serialization with trusted data  # noqa: S301
+        with pytest.warns(DeprecationWarning, match="read_dill"):
+            loaded = Computation.read_dill(str(file_path))
 
-        # Check structure
         assert loaded.has_node("a")
         assert loaded.has_node("b")
+        assert loaded.state("a") == States.UNINITIALIZED
 
 
 class TestPrintErrors:

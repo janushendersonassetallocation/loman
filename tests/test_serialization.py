@@ -1,7 +1,10 @@
 """Tests for serialization and transformation functionality in Loman."""
 
+import datetime
+import decimal
 import io
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -10,8 +13,22 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from loman import Computation, ComputationFactory, SerializationError, States, calc_node, input_node
+from loman import (
+    C,
+    Computation,
+    ComputationFactory,
+    FanIn,
+    FanOut,
+    IdNode,
+    SerializationError,
+    States,
+    calc_node,
+    input_node,
+    util,
+)
 from loman.computeengine import NodeData
+from loman.consts import NodeAttributes
+from loman.exception import DeserializedError
 from loman.nodekey import NodeKey, parse_nodekey
 from loman.serialization import (
     ComputationSerializer,
@@ -22,6 +39,11 @@ from loman.serialization import (
     Transformer,
     UnrecognizedTypeException,
     UntransformableTypeException,
+)
+from loman.serialization.computation import (
+    FORMAT_VERSION,
+    UnserializableConstantWarning,
+    default_computation_transformer,
 )
 from loman.serialization.default import default_transformer
 from loman.serialization.transformer import (
@@ -34,6 +56,33 @@ from loman.serialization.transformer import (
 # Module-level helper functions for JSON serialization acceptance tests.
 # These must be at module level so they are importable by module + qualname.
 # =============================================================================
+
+
+class _CustomTestError(Exception):
+    """Non-builtin exception, used to check it is not imported on load."""
+
+
+def _raise_value_error():
+    """Raise a builtin exception so an ERROR node can be produced."""
+    msg = "boom"
+    raise ValueError(msg)
+
+
+def _raise_custom_error():
+    """Raise a non-builtin exception so an ERROR node can be produced."""
+    msg = "custom boom"
+    raise _CustomTestError(msg)
+
+
+def _json_add_one_from_a(a):
+    """Return a + 1, taking its argument from a node named 'a'."""
+    return a + 1
+
+
+def _roundtrip(comp):
+    """Serialize and reload *comp* with the default serializer."""
+    serializer = ComputationSerializer()
+    return serializer.loads(serializer.dumps(comp))
 
 
 def _json_add_one(x):
@@ -75,7 +124,7 @@ TEST_TRANSFORMED_OBJS: list[object] = [
     {"type": "tuple", "values": ["Hello", "World"]},
     ["Hello", "World"],
     {"Hello": "World"},
-    {"data": {"foo": "bar", "type": "test"}, "type": "dict"},
+    {"items": [["type", "test"], ["foo", "bar"]], "type": "dict"},
     [{"a": 1, "b": 2}, {"type": "tuple", "values": [1, 2, 3]}, "Hello"],
 ]
 
@@ -606,6 +655,210 @@ def test_serialize_nested_loman_with_unserializable_nodes():
     assert outer2.v.out == outer.v.out
 
 
+def _three_args(x, n, f):
+    """Take one node argument and two constants."""
+    return f(x + n)
+
+
+def _apply_it(x, f):
+    """Apply a constant callable to a node value."""
+    return f(x)
+
+
+def _select_and_scale(values, key):
+    """Pick one keyed value and scale it."""
+    return values[key] * 10
+
+
+def _sum_values(values):
+    """Total a keyed mapping of values."""
+    return sum(values.values())
+
+
+def _add(a, b):
+    """Add two values."""
+    return a + b
+
+
+def _times_three(v):
+    """Multiply by three."""
+    return v * 3
+
+
+class TestConstantArguments:
+    """Tests that constant arguments survive a JSON roundtrip.
+
+    Arguments taken from other nodes are recorded on edges, but arguments given as
+    ``C(...)`` live on the node. Both are needed to call the function, so dropping
+    the constants leaves a graph that looks fine until something recalculates.
+    """
+
+    def test_constant_argument_survives_roundtrip(self):
+        """Recompute correctly after a roundtrip, using the restored constant."""
+        comp = Computation()
+        comp.add_node("x", value=10)
+        comp.add_node("y", _add, args=["x", C(5)], inspect=False)
+        comp.compute_all()
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.v.y == 15
+        restored.insert("x", 100)
+        restored.compute_all()
+        assert restored.state("y") == States.UPTODATE
+        assert restored.v.y == 105
+
+    def test_constant_keyword_argument_survives_roundtrip(self):
+        """Restore constants passed by keyword as well as by position."""
+        comp = Computation()
+        comp.add_node("x", value=10)
+        comp.add_node("y", _add, kwds={"a": "x", "b": C(7)})
+        comp.compute_all()
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        restored.insert("x", 1)
+        restored.compute_all()
+        assert restored.v.y == 8
+
+    def test_repeated_blocks_recompute_after_roundtrip(self):
+        """Roundtrip a generated fan-out and fan-in graph and recalculate it."""
+        block = Computation()
+        block.add_node("data")
+        comp = Computation()
+        comp.add_node("prices", value={"a": 1, "b": 2})
+        util.RepeatedBlocks(
+            block,
+            ("a", "b"),
+            "blocks",
+            features=[
+                IdNode("label"),
+                FanOut("prices", "data", transform=_select_and_scale),
+                FanIn("data", "all_data", combine=_sum_values),
+            ],
+        ).add_to(comp)
+        comp.compute_all()
+        assert comp.v.all_data == 30
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.v.all_data == 30
+        assert restored.v["blocks/a/label"] == "a"
+        restored.insert("prices", {"a": 5, "b": 7})
+        restored.compute_all()
+        assert restored.v.all_data == 120
+
+    def test_unserializable_constant_raises(self):
+        """Refuse to save a constant that cannot be restored."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(lambda v: v * 3)], inspect=False)
+
+        with pytest.raises(SerializationError, match="Cannot serialize constant argument 1"):
+            ComputationSerializer().dumps(comp)
+
+    def test_unserializable_constant_type_raises(self):
+        """Name the offending constant when its type has no transformer."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(object())], inspect=False)
+
+        with pytest.raises(SerializationError, match="Cannot serialize constant argument 1"):
+            ComputationSerializer().dumps(comp)
+
+    def test_set_constant_is_serializable(self):
+        """A set constant round-trips; it is no longer an unencodable type."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C({1, 2})], inspect=False)
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+        assert restored.dag.nodes[parse_nodekey("y")][NodeAttributes.ARGS][1] == {1, 2}
+
+    def test_dill_serializes_a_callable_constant(self):
+        """Serialize a lambda constant when dill is enabled."""
+        comp = Computation()
+        comp.add_node("x", value=2)
+        comp.add_node("y", _apply_it, args=["x", C(_times_three)], inspect=False)
+        comp.compute_all()
+
+        serializer = ComputationSerializer(use_dill_for_functions=True)
+        restored = serializer.loads(serializer.dumps(comp))
+
+        restored.insert("x", 5)
+        restored.compute_all()
+        assert restored.v.y == 15
+
+    def test_constants_are_skipped_for_unserialized_nodes(self):
+        """Leave constants out for a node whose function is not serialized."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(lambda v: v)], inspect=False, serialize=False)
+
+        payload = json.loads(ComputationSerializer().dumps(comp))
+
+        node = next(n for n in payload["nodes"] if n["key"] == "y")
+        assert node["args"] == {}
+        assert node["func"] is None
+
+    def test_drop_policy_restores_the_old_lenient_behaviour(self):
+        """Let an existing codebase keep writing files, loudly, while it is fixed."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _apply_it, args=["x", C(lambda v: v * 3)], inspect=False)
+        comp.compute_all()
+        serializer = ComputationSerializer(on_unserializable_constant="drop")
+
+        with pytest.warns(UnserializableConstantWarning, match="Dropping it"):
+            payload = json.loads(serializer.dumps(comp))
+
+        node = next(n for n in payload["nodes"] if n["key"] == "y")
+        assert node["args"] == {}, "the dropped constant should be absent, not null"
+        restored = serializer.loads(json.dumps(payload))
+        assert restored.v.y == 3, "the stored value still round-trips"
+
+    def test_drop_policy_keeps_the_constants_it_can_encode(self):
+        """Drop only what cannot be encoded, not every constant on the node."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _three_args, args=["x", C(5), C(lambda v: v)], inspect=False)
+        serializer = ComputationSerializer(on_unserializable_constant="drop")
+
+        with pytest.warns(UnserializableConstantWarning):
+            payload = json.loads(serializer.dumps(comp))
+
+        node = next(n for n in payload["nodes"] if n["key"] == "y")
+        assert set(node["args"]) == {"1"}, "the encodable constant survives, the lambda does not"
+
+    def test_unknown_constant_policy_is_rejected(self):
+        """Reject a misspelled policy at construction, not at save time."""
+        with pytest.raises(ValueError, match="on_unserializable_constant must be one of"):
+            ComputationSerializer(on_unserializable_constant="warn")
+
+    def test_version_one_files_without_constants_still_load(self):
+        """Read a file written before constants were recorded."""
+        comp = Computation()
+        comp.add_node("x", value=1)
+        comp.add_node("y", _add, args=["x", C(2)], inspect=False)
+        comp.compute_all()
+        serializer = ComputationSerializer()
+
+        payload = json.loads(serializer.dumps(comp))
+        payload["version"] = 1
+        for node in payload["nodes"]:
+            node.pop("args", None)
+            node.pop("kwds", None)
+
+        restored = serializer.loads(json.dumps(payload))
+
+        assert restored.v.y == 3
+        assert restored.dag.nodes[parse_nodekey("y")][NodeAttributes.ARGS] == {}
+
+
 class TestTransformer:
     """Tests for the Transformer round-trip behaviour and error handling."""
 
@@ -701,7 +954,8 @@ class TestTransformer:
 
     def test_default_transformer(self):
         """Test default_transformer creates a Transformer with NdArray support."""
-        t = default_transformer()
+        with pytest.warns(DeprecationWarning, match="default_transformer is deprecated"):
+            t = default_transformer()
         assert isinstance(t, Transformer)
         # Test that NdArrayTransformer is registered
         arr = np.array([1, 2, 3])
@@ -1589,3 +1843,523 @@ class TestJsonFileEncoding:
 def _coverage_module_level_function():
     """Module-level function used to force an import round-trip mismatch."""
     return None
+
+
+# =============================================================================
+# Value-model round-trip matrix.
+#
+# One curated list of awkward values, each asserted to come back as an equal
+# object of the same type. Every entry here corresponds to something that either
+# raised or returned the wrong thing before the value transformers existed.
+# =============================================================================
+
+
+def _tz_frame():
+    """Return a frame indexed by a timezone-aware DatetimeIndex."""
+    idx = pd.date_range("2020-01-01", periods=3, freq="min", tz="Europe/London")
+    return pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": ["x", "y", "z"]}, index=idx)
+
+
+def _multiindex_frame():
+    """Return a frame indexed by a named MultiIndex."""
+    idx = pd.MultiIndex.from_tuples([(1, "x"), (2, "y")], names=["n", "l"])
+    return pd.DataFrame({"a": [1, 2]}, index=idx)
+
+
+AWKWARD_VALUES = {
+    "nan": float("nan"),
+    "inf": float("inf"),
+    "neg_inf": float("-inf"),
+    "int_keyed_dict": {1: "a", 2: "b"},
+    "tuple_keyed_dict": {(1, 2): "a"},
+    "reserved_type_key": {"type": "not-metadata", "foo": "bar"},
+    "tz_frame": _tz_frame(),
+    "multiindex_frame": _multiindex_frame(),
+    "multiindex_columns": pd.DataFrame([[1, 2]], columns=pd.MultiIndex.from_tuples([("a", 1), ("b", 2)])),
+    "empty_frame": pd.DataFrame(),
+    "object_column": pd.DataFrame({"o": [1, "two"]}),
+    "mixed_dtype_frame": pd.DataFrame({"i": [1, 2], "f": [1.5, 2.5], "s": ["a", "b"]}),
+    "categorical_frame": pd.DataFrame({"c": pd.Categorical(["a", "b"])}),
+    "frame_with_nan": pd.DataFrame({"a": [float("nan"), 1.0]}),
+    "timedelta_index_frame": pd.DataFrame({"a": [1.0, 2.0]}, index=pd.timedelta_range("1D", periods=2)),
+    "tz_series": pd.Series([1.0, 2.0], index=pd.date_range("2020", periods=2, tz="UTC"), name="s"),
+    "zero_d_array": np.array(3.0),
+    "array_with_nan": np.array([np.nan, np.inf, 1.0]),
+    "np_float32": np.float32(1.5),
+    "np_int64": np.int64(5),
+    "np_bool": np.bool_(True),
+    "np_datetime64": np.datetime64("2020-01-01", "ns"),
+    "set": {1, 2, 3},
+    "frozenset": frozenset([1, 2]),
+    "bytes": b"\x00\xff",
+    "bytearray": bytearray(b"\x01\x02"),
+    "decimal": decimal.Decimal("1.10"),
+    "datetime": datetime.datetime(2020, 1, 1, 12, 30),
+    "date": datetime.date(2020, 1, 1),
+    "time": datetime.time(12, 30, 15),
+    "timedelta": datetime.timedelta(days=1, microseconds=5),
+    "timestamp": pd.Timestamp("2020-01-01"),
+    "tz_timestamp": pd.Timestamp("2020-01-01", tz="UTC"),
+    "pd_timedelta": pd.Timedelta("1D"),
+    "nat": pd.NaT,
+    "range_index": pd.RangeIndex(0, 10, 2),
+    "none": None,
+    "empty_dict": {},
+    "nested": {"a": [1, {"b": (2, 3)}], "c": {4: "d"}},
+}
+
+
+def _assert_equivalent(original, restored):
+    """Assert *restored* matches *original*, using each type's own equality."""
+    if isinstance(original, (pd.DataFrame, pd.Series, pd.Index)):
+        assert type(restored) is type(original)
+        assert restored.equals(original), f"{original}\n!=\n{restored}"
+    elif isinstance(original, np.ndarray):
+        assert np.array_equal(restored, original, equal_nan=True)
+    elif isinstance(original, float) and math.isnan(original):
+        assert math.isnan(restored)
+    elif original is pd.NaT:
+        assert restored is pd.NaT
+    else:
+        assert type(restored) is type(original)
+        assert restored == original
+
+
+@pytest.mark.parametrize("label", sorted(AWKWARD_VALUES))
+def test_awkward_value_roundtrip(label):
+    """Every awkward value comes back equal, and as the same type."""
+    original = AWKWARD_VALUES[label]
+    comp = Computation()
+    comp.add_node("x", value=original)
+
+    serializer = ComputationSerializer()
+    restored = serializer.loads(serializer.dumps(comp)).v.x
+
+    _assert_equivalent(original, restored)
+
+
+@pytest.mark.parametrize("label", sorted(AWKWARD_VALUES))
+def test_awkward_value_produces_strict_json(label):
+    """The document parses under a strict JSON reader.
+
+    ``json.dump`` writes bare ``NaN`` / ``Infinity`` tokens by default, which
+    Python reads back and nothing else does. ``parse_constant`` fires on exactly
+    those tokens, so this fails if one ever reaches the file again.
+    """
+
+    def _reject(token):
+        msg = f"non-standard JSON token: {token}"
+        raise AssertionError(msg)
+
+    comp = Computation()
+    comp.add_node("x", value=AWKWARD_VALUES[label])
+    text = ComputationSerializer().dumps(comp)
+
+    json.loads(text, parse_constant=_reject)
+
+
+class TestDictKeyFidelity:
+    """Dicts with keys JSON cannot express directly."""
+
+    def test_int_keys_stay_ints(self):
+        """An int-keyed dict does not come back string-keyed."""
+        t = default_computation_transformer()
+        assert t.from_dict(t.to_dict({1: "a"})) == {1: "a"}
+
+    def test_mixed_key_types(self):
+        """Keys of different types coexist in one dict."""
+        original = {1: "int", "s": "str", (2, 3): "tuple", None: "none"}
+        t = default_computation_transformer()
+        assert t.from_dict(t.to_dict(original)) == original
+
+    def test_string_keyed_dict_stays_readable(self):
+        """A plain string-keyed dict is still encoded as a JSON object."""
+        t = default_computation_transformer()
+        assert t.to_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2}
+
+    def test_reserved_key_is_escaped(self):
+        """A dict holding a reserved key is escaped, not misread."""
+        t = default_computation_transformer()
+        encoded = t.to_dict({"type": "test", "foo": "bar"})
+        assert encoded["type"] == "dict"
+        assert t.from_dict(encoded) == {"type": "test", "foo": "bar"}
+
+    def test_legacy_escaped_dict_still_reads(self):
+        """The pre-``items`` escaped form is still understood.
+
+        Version 2 files wrote escaped dicts as a nested JSON object under
+        ``data``. Those files must keep loading.
+        """
+        t = default_computation_transformer()
+        legacy = {"type": "dict", "data": {"type": "test", "foo": "bar"}}
+        assert t.from_dict(legacy) == {"type": "test", "foo": "bar"}
+
+
+class TestStaleValuesArePreserved:
+    """STALE nodes keep their values through a round-trip."""
+
+    def test_stale_and_computable_values_survive(self):
+        """Out-of-date nodes are written with the values they still hold.
+
+        Overwriting an input leaves its direct dependant COMPUTABLE and anything
+        further downstream STALE. Both keep the values they last computed, and
+        those intermediates are the point of saving a graph for inspection.
+        """
+
+        def add_one(a):
+            return a + 1
+
+        def double(b):
+            return b * 2
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", add_one)
+        comp.add_node("c", double)
+        comp.compute_all()
+        assert (comp.v.b, comp.v.c) == (2, 4)
+
+        comp.insert("a", 10)
+        assert comp.state("b") == States.COMPUTABLE
+        assert comp.state("c") == States.STALE
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.state("b") == States.COMPUTABLE
+        assert restored.state("c") == States.STALE
+        assert restored.v.b == 2
+        assert restored.v.c == 4
+
+    def test_uninitialized_node_has_no_value(self):
+        """An uninitialized node still round-trips without one."""
+        comp = Computation()
+        comp.add_node("a")
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.state("a") == States.UNINITIALIZED
+
+    def test_none_value_is_distinguished_from_absent(self):
+        """A node whose value is None keeps it, rather than looking valueless."""
+        comp = Computation()
+        comp.add_node("a", value=None)
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp))
+
+        assert restored.state("a") == States.UPTODATE
+        assert restored.v.a is None
+
+
+# =============================================================================
+# Node fidelity: attributes the graph carries beyond value, state and function.
+# =============================================================================
+
+
+def _identity_converter(x):
+    """Module-level converter, importable so it can round-trip."""
+    return x
+
+
+class TestNodeAttributeFidelity:
+    """Presentational and execution attributes survive a round-trip."""
+
+    def test_group_and_style_survive(self):
+        """A node's group and style are restored, not reset to None."""
+        comp = Computation()
+        comp.add_node("a", value=1, group="inputs", style="small")
+
+        restored = _roundtrip(comp)
+
+        node = restored.dag.nodes[parse_nodekey("a")]
+        assert node[NodeAttributes.GROUP] == "inputs"
+        assert node[NodeAttributes.STYLE] == "small"
+
+    def test_executor_survives(self):
+        """A node's named executor is restored."""
+        comp = Computation()
+        comp.add_node("a", value=1, executor="pool")
+
+        restored = _roundtrip(comp)
+
+        assert restored.dag.nodes[parse_nodekey("a")][NodeAttributes.EXECUTOR] == "pool"
+
+    def test_converter_survives(self):
+        """An importable converter is restored as the same callable."""
+        comp = Computation()
+        comp.add_node("a", value=1, converter=_identity_converter)
+
+        restored = _roundtrip(comp)
+
+        assert restored.dag.nodes[parse_nodekey("a")][NodeAttributes.CONVERTER] is _identity_converter
+
+    def test_absent_attributes_stay_none(self):
+        """A node with no group/style/executor still loads with None for them."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        restored = _roundtrip(comp)
+
+        node = restored.dag.nodes[parse_nodekey("a")]
+        assert node[NodeAttributes.GROUP] is None
+        assert node[NodeAttributes.STYLE] is None
+        assert node[NodeAttributes.EXECUTOR] is None
+        assert node[NodeAttributes.CONVERTER] is None
+
+    def test_timing_survives(self):
+        """Execution timing recorded during compute is restored."""
+
+        def slow(a):
+            return a + 1
+
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", slow)
+        comp.compute_all()
+
+        original = comp.dag.nodes[parse_nodekey("b")][NodeAttributes.TIMING]
+        assert original is not None
+
+        restored = _roundtrip(comp).dag.nodes[parse_nodekey("b")][NodeAttributes.TIMING]
+
+        assert restored.start == original.start
+        assert restored.end == original.end
+        assert restored.duration == original.duration
+
+    def test_metadata_survives(self):
+        """Per-node metadata, which lives on the computation, is restored."""
+        comp = Computation()
+        comp.add_node("a", value=1, metadata={"owner": "risk", "sla_minutes": 30})
+
+        restored = _roundtrip(comp)
+
+        assert restored.metadata("a") == {"owner": "risk", "sla_minutes": 30}
+
+
+class TestErrorReconstruction:
+    """ERROR nodes rebuild the exception they can, and name the rest."""
+
+    def test_builtin_exception_class_is_restored(self):
+        """A ValueError comes back as a ValueError, not a bare Exception."""
+        comp = Computation()
+        comp.add_node("bad", _raise_value_error)
+        comp.compute_all()
+        assert comp.state("bad") == States.ERROR
+
+        restored = _roundtrip(comp)
+
+        exc = restored["bad"].value.exception
+        assert type(exc) is ValueError
+        assert str(exc) == "boom"
+
+    def test_custom_exception_becomes_deserialized_error(self):
+        """A non-builtin exception is not imported; its identity is kept as data."""
+        comp = Computation()
+        comp.add_node("bad", _raise_custom_error)
+        comp.compute_all()
+
+        restored = _roundtrip(comp)
+
+        exc = restored["bad"].value.exception
+        assert isinstance(exc, DeserializedError)
+        assert exc.exception_type == "_CustomTestError"
+        assert str(exc) == "custom boom"
+        assert "_CustomTestError" in repr(exc)
+
+    def test_traceback_is_preserved(self):
+        """The recorded traceback text survives for post-mortem reading."""
+        comp = Computation()
+        comp.add_node("bad", _raise_value_error)
+        comp.compute_all()
+
+        restored = _roundtrip(comp)
+
+        assert "_raise_value_error" in restored["bad"].value.traceback
+
+
+class TestAllowCode:
+    """Loading with allow_code=False refuses to resolve callables."""
+
+    def test_functions_are_not_restored(self):
+        """Node functions come back as None rather than being imported."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", _json_add_one_from_a)
+        comp.compute_all()
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp), allow_code=False)
+
+        assert restored.dag.nodes[parse_nodekey("b")][NodeAttributes.FUNC] is None
+
+    def test_values_and_structure_still_load(self):
+        """Refusing code still leaves an inspectable graph."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", _json_add_one_from_a)
+        comp.compute_all()
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp), allow_code=False)
+
+        assert restored.v.a == 1
+        assert restored.v.b == 2
+        assert restored.state("b") == States.UPTODATE
+        assert set(restored.dag.edges()) == set(comp.dag.edges())
+
+    def test_converter_is_not_restored(self):
+        """Converters are callables too, and are skipped alongside functions."""
+        comp = Computation()
+        comp.add_node("a", value=1, converter=_identity_converter)
+
+        serializer = ComputationSerializer()
+        restored = serializer.loads(serializer.dumps(comp), allow_code=False)
+
+        assert restored.dag.nodes[parse_nodekey("a")][NodeAttributes.CONVERTER] is None
+
+    def test_dill_blob_is_not_unpickled(self):
+        """A dill-encoded lambda is not executed when code is refused."""
+        comp = Computation()
+        comp.add_node("a", value=3)
+        comp.add_node("b", lambda a: a * 2)
+        comp.compute_all()
+
+        serializer = ComputationSerializer(use_dill_for_functions=True)
+        restored = serializer.loads(serializer.dumps(comp), allow_code=False)
+
+        assert restored.dag.nodes[parse_nodekey("b")][NodeAttributes.FUNC] is None
+        assert restored.v.b == 6  # the computed value is data, and still loads
+
+    def test_read_json_passes_the_flag_through(self):
+        """Computation.read_json exposes allow_code."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+        comp.add_node("b", _json_add_one_from_a)
+        comp.compute_all()
+
+        buf = io.StringIO()
+        comp.write_json(buf)
+        buf.seek(0)
+
+        restored = Computation.read_json(buf, allow_code=False)
+        assert restored.dag.nodes[parse_nodekey("b")][NodeAttributes.FUNC] is None
+
+
+# =============================================================================
+# Legacy shape compatibility.
+#
+# Documents in the shapes written by pre-release versions of loman, held here
+# verbatim. The reader has never inspected the "version" field, so nothing but
+# these fixtures stands between an encoding change and silently failing to read
+# a file somebody already has.
+#
+# The version numbers inside them are the ones those documents carried; they do
+# not correspond to the current FORMAT_VERSION, which restarts at 1. What is
+# being pinned is the *shape*, not the number.
+# =============================================================================
+
+# No "args"/"kwds" maps on nodes.
+LEGACY_NO_CONSTANTS_DOCUMENT = """
+{
+  "version": 1,
+  "nodes": [
+    {"key": "a", "state": "UPTODATE", "value": 1, "has_value": true,
+     "func": null, "serialize": true, "tags": []},
+    {"key": "b", "state": "UPTODATE", "value": 2, "has_value": true,
+     "func": {"type": "func_ref", "module": "tests.test_serialization",
+              "qualname": "_json_add_one_from_a"},
+     "serialize": true, "tags": ["reviewed"]}
+  ],
+  "edges": [{"src": "a", "dst": "b", "param_type": "kwd", "param": "a"}]
+}
+"""
+
+# Escaped dicts under "data", row-major frames, indexes as element lists.
+LEGACY_SHAPES_DOCUMENT = """
+{
+  "version": 2,
+  "nodes": [
+    {"key": "escaped", "state": "UPTODATE", "has_value": true,
+     "value": {"type": "dict", "data": {"type": "test", "foo": "bar"}},
+     "func": null, "args": {}, "kwds": {}, "serialize": true, "tags": []},
+    {"key": "frame", "state": "UPTODATE", "has_value": true,
+     "value": {"type": "dataframe", "columns": ["x", "y"], "index": [0, 1],
+               "data": [[1.0, 3.0], [2.0, 4.0]],
+               "dtypes": {"x": "float64", "y": "float64"}},
+     "func": null, "args": {}, "kwds": {}, "serialize": true, "tags": []},
+    {"key": "series", "state": "UPTODATE", "has_value": true,
+     "value": {"type": "series", "name": "s", "dtype": "int64",
+               "index": [0, 1], "data": [10, 20]},
+     "func": null, "args": {}, "kwds": {}, "serialize": true, "tags": []},
+    {"key": "array", "state": "UPTODATE", "has_value": true,
+     "value": {"type": "ndarray", "shape": [3], "dtype": "<f8",
+               "data": [1.0, 2.0, 3.0]},
+     "func": null, "args": {}, "kwds": {}, "serialize": true, "tags": []},
+    {"key": "failed", "state": "ERROR", "has_value": true,
+     "value": {"__loman_error__": true, "exception_type": "ValueError",
+               "exception_str": "old boom", "traceback": "Traceback ..."},
+     "func": null, "args": {}, "kwds": {}, "serialize": true, "tags": []}
+  ],
+  "edges": []
+}
+"""
+
+
+class TestFormatCompatibility:
+    """Files in the shapes written by earlier versions still load."""
+
+    def test_document_without_constants_loads(self):
+        """A document predating the constant-argument maps still loads."""
+        comp = ComputationSerializer().loads(LEGACY_NO_CONSTANTS_DOCUMENT)
+
+        assert comp.v.a == 1
+        assert comp.v.b == 2
+        assert comp.dag.nodes[parse_nodekey("b")][NodeAttributes.FUNC] is _json_add_one_from_a
+        assert comp.dag.nodes[parse_nodekey("b")][NodeAttributes.ARGS] == {}
+        assert "reviewed" in comp.t.b
+
+    def test_legacy_graph_recomputes(self):
+        """A legacy graph is still usable, not merely readable."""
+        comp = ComputationSerializer().loads(LEGACY_NO_CONSTANTS_DOCUMENT)
+
+        comp.insert("a", 10)
+        comp.compute_all()
+
+        assert comp.v.b == 11
+
+    def test_legacy_escaped_dict(self):
+        """The pre-``items`` escaped dict layout still decodes."""
+        comp = ComputationSerializer().loads(LEGACY_SHAPES_DOCUMENT)
+
+        assert comp.v.escaped == {"type": "test", "foo": "bar"}
+
+    def test_legacy_row_major_frame(self):
+        """A row-major frame with a list index and dict dtypes still decodes."""
+        comp = ComputationSerializer().loads(LEGACY_SHAPES_DOCUMENT)
+
+        expected = pd.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]})
+        pd.testing.assert_frame_equal(comp.v.frame, expected)
+
+    def test_legacy_series_and_array(self):
+        """Series and ndarray values in the legacy shape still decode."""
+        comp = ComputationSerializer().loads(LEGACY_SHAPES_DOCUMENT)
+
+        pd.testing.assert_series_equal(comp.v.series, pd.Series([10, 20], name="s"))
+        assert np.array_equal(comp.v.array, np.array([1.0, 2.0, 3.0]))
+
+    def test_legacy_error_without_module(self):
+        """An ERROR node written before exception_module existed still rebuilds."""
+        comp = ComputationSerializer().loads(LEGACY_SHAPES_DOCUMENT)
+
+        exc = comp["failed"].value.exception
+        assert type(exc) is ValueError
+        assert str(exc) == "old boom"
+
+    def test_current_version_is_recorded(self):
+        """A freshly written document declares the current format version."""
+        comp = Computation()
+        comp.add_node("a", value=1)
+
+        assert json.loads(ComputationSerializer().dumps(comp))["version"] == FORMAT_VERSION

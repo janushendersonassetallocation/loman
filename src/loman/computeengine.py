@@ -9,7 +9,7 @@ import types
 import warnings
 import weakref
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Executor, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -18,7 +18,9 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, BinaryIO, TextIO, TypeVar, cast, overload
 
 if TYPE_CHECKING:
+    from .serialization.blobs import BlobStore
     from .serialization.computation import ComputationSerializer
+    from .serialization.profile import SerializationProfile
     from .ui import ComputationWidget
 
 import decorator
@@ -40,7 +42,7 @@ from .exception import (
 from .graph_utils import topological_sort
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .planning import ExecutionPlan, ValidationReport, create_execution_plan, validate_graph
-from .util import AttributeView, apply1, apply_n, as_iterable, value_eq
+from .util import AttributeView, BlockFeature, RepeatedBlocks, apply1, apply_n, as_iterable, value_eq
 from .visualization import GraphView, NodeFormatter
 
 LOG = logging.getLogger("loman.computeengine")
@@ -273,6 +275,31 @@ class InputNode(Node):
 input_node = InputNode
 
 
+def _bind_self(f: Any, obj: object, ignore_self: bool) -> Any:
+    """Bind a callback to the definition object when its first parameter is 'self'.
+
+    Anything that is not callable, including ``None`` and a plain node name, is
+    returned unchanged.
+
+    Asking for ``self`` when there is no definition object to bind to is a
+    contradiction, so it is reported here rather than as the bare
+    ``TypeError: instance must not be None`` that binding would otherwise raise.
+    """
+    if not callable(f) or not ignore_self:
+        return f
+    signature = get_signature(f)
+    if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
+        if obj is None:
+            name = getattr(f, "__qualname__", repr(f))
+            msg = (
+                f"Cannot bind 'self' for {name}: no definition object was supplied. "
+                "Pass one, drop the 'self' parameter, or use ignore_self=False."
+            )
+            raise ValueError(msg)
+        return types.MethodType(f, obj)
+    return f
+
+
 @dataclass
 class CalcNode(Node):
     """A node representing a calculation in the computation graph."""
@@ -315,6 +342,16 @@ def calc_node(f: F | None = None, **kwds: Any) -> F | Callable[[F], F]:
     return wrap(f)
 
 
+def _resolve_block(block: "Callable[[], Computation] | Computation") -> "Computation":
+    """Resolve a block definition, calling computation factories to build the block."""
+    if isinstance(block, Computation):
+        return block
+    if callable(block):
+        return block()
+    msg = f"Block {block} must be callable or Computation"
+    raise TypeError(msg)
+
+
 @dataclass
 class Block(Node):
     """A node representing a computational block or subgraph."""
@@ -331,17 +368,55 @@ class Block(Node):
 
     def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
         """Add this block node to the computation graph."""
-        if isinstance(self.block, Computation):
-            comp.add_block(name, self.block, *self.args, **self.kwds)
-        elif callable(self.block):
-            block0 = self.block()
-            comp.add_block(name, block0, *self.args, **self.kwds)
-        else:
-            msg = f"Block {self.block} must be callable or Computation"
-            raise TypeError(msg)
+        comp.add_block(name, _resolve_block(self.block), *self.args, **self.kwds)
 
 
 block = Block
+
+
+@dataclass
+class RepeatedBlocksNode(Node):
+    """A node representing one keyed copy of a computation block per key.
+
+    The attribute name used in a computation factory class becomes the base path
+    for the generated blocks, so ``instruments = repeated_blocks(...)`` with keys
+    ``('AAPL', 'MSFT')`` creates the blocks ``instruments/AAPL`` and
+    ``instruments/MSFT``. ``features`` describe how data flows in and out of every
+    copy, exactly as for :class:`loman.util.RepeatedBlocks`.
+    """
+
+    block: "Callable[[], Computation] | Computation"
+    keys: tuple[Hashable, ...] = field(default_factory=tuple)
+    features: tuple[BlockFeature, ...] = field(default_factory=tuple)
+    keep_values: bool = False
+
+    def __init__(
+        self,
+        block: "Callable[[], Computation] | Computation",
+        keys: Iterable[Hashable],
+        *,
+        features: Sequence[BlockFeature] = (),
+        keep_values: bool = False,
+    ) -> None:
+        """Initialize a repeated blocks node with a block template and its keys."""
+        self.block = block
+        self.keys = tuple(keys)
+        self.features = tuple(features)
+        self.keep_values = keep_values
+
+    def add_to_comp(self, comp: "Computation", name: str, obj: object, ignore_self: bool) -> None:
+        """Add the repeated blocks and the nodes their features describe."""
+        definition: RepeatedBlocks[Hashable] = RepeatedBlocks(
+            block=_resolve_block(self.block),
+            keys=self.keys,
+            base_path=name,
+            features=self.features,
+            keep_values=self.keep_values,
+        )
+        definition.add_to(comp, definition_object=obj, ignore_self=ignore_self)
+
+
+repeated_blocks = RepeatedBlocksNode
 
 
 def populate_computation_from_class(comp: "Computation", cls: type, obj: object, ignore_self: bool = True) -> None:
@@ -742,6 +817,7 @@ class Computation:
         tags: Iterable[str] | None = None,
         style: str | None = None,
         executor: str | None = None,
+        store: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """Adds or updates a node in a computation.
@@ -764,6 +840,15 @@ class Computation:
         :type kwds: Dictionary, default None
         :param value: If given, the value is inserted into the node, and the node state set to UPTODATE.
         :type value: default None
+        :param converter: Callable applied to any value on its way into the node. The node stores what the
+            converter returns, both for values supplied by ``value``, ``insert`` and ``insert_many``, and for
+            values the node calculates with ``func``. A converter that raises leaves the node in state ERROR
+            without storing the value, which is how a validator is written: check the value and return it
+            unchanged when it is acceptable. The exception propagates to the caller when the value was
+            supplied, but not when it was calculated, where the failure is reported as node state instead.
+            A converter is saved by reference, like a node's function, so it must be importable: a
+            module-level function or builtin round-trips, while a lambda raises ``SerializationError``.
+        :type converter: Callable, default None
         :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which
             case, set serialize to False
         :type serialize: boolean, default True
@@ -778,6 +863,14 @@ class Computation:
         :type styles: String, default None
         :param executor: Name of executor to run node on
         :type executor: string
+        :param store: Name of the blob store this node's value should be saved
+            to, for values that belong somewhere other than the saved file --- a
+            bucket, a database. The store itself is supplied at save and load
+            time as ``stores={name: ...}``, so the graph names a destination
+            without holding a bucket or a credential. A profile override for the
+            same node wins over this, which is what lets one computation be
+            saved to that store in production and to a plain container in a test.
+        :type store: string, default None
         """
         node_key = to_nodekey(name)
         LOG.debug(f"Adding node {node_key}")
@@ -808,6 +901,7 @@ class Computation:
         node[NodeAttributes.FUNC] = None
         node[NodeAttributes.EXECUTOR] = executor
         node[NodeAttributes.CONVERTER] = converter
+        node[NodeAttributes.STORE] = store
 
         if func:
             node[NodeAttributes.FUNC] = func
@@ -1965,10 +2059,26 @@ class Computation:
     def write_dill_old(self, file_: str | BinaryIO) -> None:
         """Serialize a computation to a file or file-like object.
 
+        .. deprecated::
+            Superseded by :meth:`write_dill`, and by :meth:`save` in turn. Kept
+            because removing it would break callers without warning; it will go
+            in a release that says so.
+
+        .. warning::
+            Not safe to call concurrently. It removes ``__getstate__`` and
+            ``__setstate__`` from the class for the duration of the write, which
+            is process-wide, so another thread pickling a Computation at the same
+            moment gets the wrong representation. :meth:`write_dill` has no such
+            problem, and :meth:`save` supersedes both.
+
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        warnings.warn("write_dill_old is deprecated, use write_dill instead", DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "write_dill_old is deprecated and will be removed in a future release. Use save instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         original_getstate = self.__class__.__getstate__
         original_setstate = self.__class__.__setstate__
 
@@ -2047,6 +2157,92 @@ class Computation:
             msg = "Loaded object is not a Computation"
             raise ValidationError(msg)
 
+    def save(
+        self,
+        path: str,
+        *,
+        profile: "str | SerializationProfile | None" = None,
+        container: str | None = None,
+        stores: "dict[str, BlobStore] | None" = None,
+        serializer: "ComputationSerializer | None" = None,
+    ) -> None:
+        """Save this computation to *path*.
+
+        The default is a ``.loman`` file: one zip holding a ``manifest.json``
+        describing the graph, plus a ``blobs/`` directory holding large values as
+        binary. The manifest still records every value's shape, dtype and index
+        type, so the file can be inspected without decoding any of the data.
+
+        ::
+
+            comp.save('run.loman')                       # efficient, zipped
+            comp.save('run.loman', profile='readable')   # inline JSON, zipped
+            comp.save('run.json')                        # single JSON document
+            comp.save('run_dir', container='dir')        # same layout, unzipped
+
+        *profile* and *container* are independent. The profile decides whether a
+        value's bytes are written inline or out of line; the container decides
+        where they land. The one combination that cannot work is the efficient
+        profile in the ``json`` container, which raises.
+
+        Prefer ``container='dir'`` when saving repeatedly --- updating one value
+        in a zip rewrites the whole archive, at a cost that grows with its size,
+        while a directory rewrites only the file that changed.
+
+        :param path: Destination path. A ``.json`` suffix selects the single
+            document container; anything else defaults to a ``.loman`` zip.
+        :param profile: ``"readable"``, ``"efficient"`` (the default), or a
+            :class:`~loman.serialization.profile.SerializationProfile`.
+        :param container: ``"zip"``, ``"dir"`` or ``"json"``. Inferred from
+            *path* when omitted.
+        :param stores: Named
+            :class:`~loman.serialization.blobs.BlobStore` instances for values
+            that belong somewhere other than the saved file --- a bucket, a
+            database. A node is routed to one by ``add_node(store=...)`` or a
+            profile override. The same names must be supplied to :meth:`load`.
+        :param serializer: Optional custom serializer, for user-defined types.
+        """
+        from .serialization.computation import ComputationSerializer
+
+        s = serializer if serializer is not None else ComputationSerializer()
+        s.save(self, path, profile=profile, container=container, stores=stores)
+
+    @staticmethod
+    def load(
+        path: str,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        allow_code: bool = True,
+        stores: "dict[str, BlobStore] | None" = None,
+    ) -> "Computation":
+        """Load a computation saved by :meth:`save`, in any container.
+
+        The container is detected from the file itself, so a ``.loman`` archive,
+        a directory and a plain JSON document all load through this one call ---
+        including documents written by earlier format versions.
+
+        .. warning::
+            Loading restores node functions, which means importing the modules
+            the file names, or unpickling a dill blob out of it. Both run code
+            chosen by the file. Only load files you trust, or pass
+            ``allow_code=False``.
+
+        :param path: Path to a ``.loman`` file, a container directory, or a
+            JSON document.
+        :param serializer: Optional custom serializer, matching the one used to
+            save.
+        :param allow_code: When false, callables are not resolved; values,
+            structure, states and tags still load.
+        :param stores: Named stores for values held outside the file. A saved
+            file records a store's name but never its configuration, so it never
+            contains a bucket or a credential --- and cannot resolve external
+            values without the matching store being supplied here.
+        :rtype: Computation
+        """
+        from .serialization.computation import ComputationSerializer
+
+        return ComputationSerializer.load_path(path, serializer=serializer, allow_code=allow_code, stores=stores)
+
     def write_json(self, file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> None:
         """Serialize a computation to a JSON file or file-like object.
 
@@ -2069,12 +2265,28 @@ class Computation:
             s.dump(self, file_)
 
     @staticmethod
-    def read_json(file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> "Computation":
+    def read_json(
+        file_: str | TextIO,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        allow_code: bool = True,
+    ) -> "Computation":
         """Deserialize a computation from a JSON file or file-like object.
+
+        .. warning::
+            Loading a computation restores its node functions, which means
+            importing the modules the file names, or unpickling a dill blob out
+            of it. Both run code chosen by the file. Only load files from
+            sources you trust, or pass ``allow_code=False``.
 
         :param file_: Source file path (str) or text-mode file-like object.
         :param serializer: Optional custom serializer.  If ``None`` the default
             :class:`~loman.serialization.computation.ComputationSerializer` is used.
+        :param allow_code: When false, encoded callables are skipped rather than
+            resolved, so no module named by the file is imported and no dill blob
+            is unpickled. Values, structure, states and tags still load; every
+            node's function and converter comes back as ``None``, so the graph
+            can be inspected but not recalculated.
         :rtype: Computation
         """
         from .serialization.computation import ComputationSerializer
@@ -2082,9 +2294,9 @@ class Computation:
         s = serializer if serializer is not None else ComputationSerializer()
         if isinstance(file_, str):
             with open(file_, encoding="utf-8") as f:
-                return s.load(f)
+                return s.load(f, allow_code=allow_code)
         else:
-            return s.load(file_)
+            return s.load(file_, allow_code=allow_code)
 
     def copy(self) -> "Computation":
         """Create a copy of a computation.
@@ -2202,11 +2414,25 @@ class Computation:
         base_path: Name,
         block: "Computation",
         *,
-        keep_values: bool | None = True,
+        keep_values: bool = True,
         links: dict[str, Name] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """Add a computation block as a subgraph to this computation."""
+        """Add a computation block as a subgraph to this computation.
+
+        ``keep_values`` defaults to ``True``, so values already held by ``block``
+        are copied along with its structure: a block added this way is often a
+        sub-model that has already been populated or calibrated, and would not be
+        computable without them. The repeated-block utilities in
+        :mod:`loman.util` default to ``False`` instead, because they stamp out
+        many copies of one template. See :class:`loman.util.RepeatedBlocks`.
+
+        :param base_path: Parent path to add the block's nodes below
+        :param block: Computation to copy into this computation
+        :param keep_values: Whether to copy the block's current values
+        :param links: Mapping from the block's relative input names to outer nodes
+        :param metadata: Metadata to attach to the block path
+        """
         base_path_nk = to_nodekey(base_path)
         for node_name in block.nodes():
             node_key = to_nodekey(node_name)
@@ -2333,6 +2559,8 @@ class Computation:
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        buildable: bool = False,
+        namespace: dict[str, Any] | None = None,
         fit_on_render: bool = False,
         max_rendered_nodes: int = 500,
         rankdir: str = "LR",
@@ -2353,6 +2581,15 @@ class Computation:
 
         :param editable: Allow scalar input editing and computation controls.
             Expanding and collapsing blocks stays available either way.
+        :param buildable: Allow the graph itself to be built in the
+            widget: adding, redefining, renaming and deleting nodes. Off by
+            default, and needs ``editable`` too, because defining a calculation
+            node compiles and runs an expression typed in the browser inside
+            this kernel.
+        :param namespace: Globals a node built in the widget is compiled
+            against, so its expression can use the notebook's own imports.
+            Pass ``globals()``. The default is an empty namespace, in which
+            only builtins are in scope.
         :param fit_on_render: Scale the graph to fit the pane on every render,
             rather than opening at natural size. Useful when the shape of a
             large graph matters more than its labels.
@@ -2377,6 +2614,8 @@ class Computation:
             show_expansion=show_expansion,
             collapse_all=collapse_all,
             editable=editable,
+            buildable=buildable,
+            namespace=namespace,
             fit_on_render=fit_on_render,
             max_rendered_nodes=max_rendered_nodes,
             rankdir=rankdir,

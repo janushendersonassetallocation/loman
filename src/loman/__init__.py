@@ -15,10 +15,12 @@ from loman.computeengine import (
     computation_factory,
     input_node,
     node,
+    repeated_blocks,
 )
 from loman.consts import NodeTransformations, States
 from loman.exception import (
     CannotInsertToPlaceholderNodeError,
+    DeserializedError,
     FittingError,
     InvalidBlockTypeError,
     LoopDetectedError,
@@ -29,22 +31,30 @@ from loman.exception import (
 )
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.planning import ExecutionPlan, ValidationReport
-from loman.serialization import ComputationSerializer
+from loman.serialization import ComputationSerializer, SerializationProfile
+from loman.util import BlockContext, BlockFeature, FanIn, FanOut, IdNode, InputValue, PlannedNode, Positional
 from loman.visualization import GraphView
 
 # Backward compatibility alias
 ComputationFactory = computation_factory
 
 __all__ = [
+    "BlockContext",
+    "BlockFeature",
     "C",
     "CannotInsertToPlaceholderNodeError",
     "Computation",
     "ComputationEvent",
     "ComputationFactory",  # Backward compatibility
     "ComputationSerializer",
+    "DeserializedError",
     "ExecutionPlan",
+    "FanIn",
+    "FanOut",
     "FittingError",
     "GraphView",
+    "IdNode",
+    "InputValue",
     "InvalidBlockTypeError",
     "LoopDetectedError",
     "MapError",
@@ -53,7 +63,10 @@ __all__ = [
     "NodeKey",
     "NodeTransformations",
     "NonExistentNodeError",
+    "PlannedNode",
+    "Positional",
     "SerializationError",
+    "SerializationProfile",
     "States",
     "ValidationError",
     "ValidationReport",
@@ -62,6 +75,7 @@ __all__ = [
     "computation_factory",
     "input_node",
     "node",
+    "repeated_blocks",
     "to_nodekey",
     "util",
     "viz",
