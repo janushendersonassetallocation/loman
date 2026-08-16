@@ -29,6 +29,7 @@ class NodeAttributes:
     TIMING = "timing"
     EXECUTOR = "executor"
     CONVERTER = "converter"
+    STORE = "store"
 
 
 class EdgeAttributes:

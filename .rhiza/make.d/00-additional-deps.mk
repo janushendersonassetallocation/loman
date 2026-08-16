@@ -20,3 +20,4 @@ install-graphviz:  ## Install graphviz if not present, retrying transient failur
 pre-install:: ## Custom pre-install tasks for Loman
 	@printf "${BLUE}[Loman] Running custom pre-install tasks...${RESET}\n"
 	@$(MAKE) install-graphviz
+

@@ -12,7 +12,7 @@ Loman can serialize computations to a JSON file for later inspection or post-mor
 >>> comp.add_node('area', area)
 >>> comp.compute_all()
 >>> comp.to_dict()
-{'x': 4.0, 'area': 50.26548245743669}
+{NodeKey('x'): 4.0, NodeKey('area'): 50.26548245743669}
 ```
 
 To save and reload the computation:
@@ -31,17 +31,20 @@ The output is a plain JSON text file, so it is human-readable and can be inspect
 Sometimes a node holds a value that should not (or cannot) be saved — for example a database connection, a licensed dataset, or an object that does not support JSON serialization. Pass `serialize=False` when adding the node:
 
 ```pycon
->>> import sqlalchemy as sa
+>>> import threading
 >>> comp = Computation()
->>> comp.add_node('engine', sa.create_engine('sqlite://'), serialize=False)
+>>> comp.add_node('lock', value=threading.Lock(), serialize=False)
 >>> comp.add_node('result', value=42)
 >>> comp.write_json('comp.json')
 >>> comp2 = Computation.read_json('comp.json')
->>> comp2.state('engine')
+>>> comp2.state('lock')
 <States.UNINITIALIZED: 1>
 >>> comp2.v.result
 42
 ```
+
+A database engine or an open connection behaves the same way — anything whose
+value is tied to the running process rather than to the data.
 
 The excluded node is preserved in the file with `UNINITIALIZED` state and no value; all other nodes round-trip normally.
 
@@ -60,7 +63,7 @@ A lambda cannot be serialized because it has no importable module path. Use a mo
 ...     comp.write_json(io.StringIO())
 ... except SerializationError as e:
 ...     print(e)
-Cannot serialize lambda function on node NodeKey(parts=('b',)). Use a module-level importable function, serialize=False, or ComputationSerializer(use_dill_for_functions=True).
+Cannot serialize lambda function on node NodeKey('b'). Use a module-level importable function, serialize=False, or ComputationSerializer(use_dill_for_functions=True).
 ```
 
 Replace the lambda with a named function defined at module level:
@@ -106,6 +109,10 @@ Both `write_json` and `read_json` accept either a file path (string) or any text
 
 ```pycon
 >>> import io
+>>> comp = Computation()
+>>> comp.add_node('a', value=1)
+>>> comp.add_node('b', increment)
+>>> comp.compute_all()
 >>> buf = io.StringIO()
 >>> comp.write_json(buf)
 >>> _ = buf.seek(0)
@@ -125,14 +132,14 @@ Pinned nodes round-trip correctly — their `PINNED` state and value are preserv
 >>> comp.write_json('comp.json')
 >>> comp2 = Computation.read_json('comp.json')
 >>> comp2.state('a')
-<States.PINNED: 5>
+<States.PINNED: 6>
 >>> comp2.v.a
 10
 ```
 
 ## ERROR nodes
 
-If a node is in `ERROR` state, its exception type, message, and traceback are preserved as strings so they can be read back for post-mortem inspection even without the original exception class:
+If a node is in `ERROR` state, its exception type, message, and traceback are preserved so they can be read back for post-mortem inspection. Builtin exception types are rebuilt as themselves, so `except ValueError` still matches after a round-trip:
 
 ```pycon
 >>> def bad_func():
@@ -141,13 +148,37 @@ If a node is in `ERROR` state, its exception type, message, and traceback are pr
 >>> comp.add_node('result', bad_func)
 >>> comp.compute_all()
 >>> comp.state('result')
-<States.ERROR: 4>
+<States.ERROR: 5>
 >>> comp.write_json('comp.json')
 >>> comp2 = Computation.read_json('comp.json')
 >>> comp2.state('result')
-<States.ERROR: 4>
+<States.ERROR: 5>
 >>> comp2['result'].value.exception
-Exception('something went wrong')
+ValueError('something went wrong')
+```
+
+A non-builtin exception class is *not* rebuilt: doing so would mean importing
+whatever module the file names, which is running code the file chose. Those come
+back as `loman.exception.DeserializedError`, carrying the original type name and
+module as attributes so the post-mortem still tells you what was raised:
+
+```pycon
+>>> from loman.exception import DeserializedError
+>>> class MyLibraryError(Exception):
+...     pass
+>>> def also_bad():
+...     raise MyLibraryError("domain-specific failure")
+>>> comp = Computation()
+>>> comp.add_node('result', also_bad)
+>>> comp.compute_all()
+>>> comp.write_json('comp.json')
+>>> exc = Computation.read_json('comp.json')['result'].value.exception
+>>> isinstance(exc, DeserializedError)
+True
+>>> exc.exception_type
+'MyLibraryError'
+>>> str(exc)
+'domain-specific failure'
 ```
 
 ## Custom serialization for user-defined types
@@ -155,19 +186,21 @@ Exception('something went wrong')
 For types that are not handled by the default serializer, pass a custom `ComputationSerializer` instance with additional transformers registered:
 
 ```pycon
+>>> import io
 >>> from loman import Computation, ComputationSerializer
->>> from loman.serialization import CustomTransformer, Transformer
+>>> from loman.serialization import SimpleTransformer
 >>> class Point:
 ...     def __init__(self, x, y):
 ...         self.x = x
 ...         self.y = y
->>> point_transformer = CustomTransformer(
+>>> point_transformer = SimpleTransformer(
+...     'point',
 ...     Point,
-...     to_dict=lambda v: {'__point__': True, 'x': v.x, 'y': v.y},
+...     to_dict=lambda v: {'x': v.x, 'y': v.y},
 ...     from_dict=lambda d: Point(d['x'], d['y']),
 ... )
 >>> s = ComputationSerializer()
->>> s._t.register(point_transformer)
+>>> s.register(point_transformer)
 >>> comp = Computation()
 >>> comp.add_node('origin', value=Point(0, 0))
 >>> buf = io.StringIO()
@@ -176,6 +209,29 @@ For types that are not handled by the default serializer, pass a custom `Computa
 >>> comp2 = Computation.read_json(buf, serializer=s)
 >>> comp2.v.origin.x
 0
+```
+
+The first argument is the discriminator written as the value's `"type"` field, so
+it must be unique within a serializer and stable across releases — changing it
+makes previously written files unreadable.
+
+`SimpleTransformer` passes values straight to your callables without recursing.
+When the encoding needs to nest other transformable values inside it, or to write
+bytes out-of-line, subclass `CustomTransformer` instead:
+
+```pycon
+>>> from loman.serialization import CustomTransformer
+>>> class PolygonTransformer(CustomTransformer):
+...     @property
+...     def name(self):
+...         return 'polygon'
+...     def to_dict(self, transformer, o):
+...         return {'points': transformer.to_dict(o.points)}
+...     def from_dict(self, transformer, d):
+...         return Polygon(transformer.from_dict(d['points']))
+...     @property
+...     def supported_direct_types(self):
+...         return [Polygon]
 ```
 
 ## Constant arguments that cannot be encoded
@@ -189,16 +245,22 @@ the missing argument on the first recalculation:
 
 ```pycon
 >>> from loman import Computation, C, ComputationSerializer
->>> def scale(x, factor):
-...     return x * factor
 >>> comp = Computation()
->>> comp.add_node('x', value=10)
->>> comp.add_node('scaled', scale, kwds={'factor': C(object())})
+>>> comp.add_node('number', value=1.2345)
+>>> comp.add_node('rounded', round, kwds={'ndigits': C(object())})
 >>> comp.write_json(io.StringIO())
 Traceback (most recent call last):
     ...
-loman.exception.SerializationError: Cannot serialize constant argument 'factor' on node NodeKey('scaled') ...
+loman.exception.SerializationError: Cannot serialize constant argument 'ndigits' on node NodeKey('rounded') ...
 ```
+
+!!! note
+    The check only reaches a node's constants when the node's *function* could
+    itself be encoded. A function that is not importable — a lambda, a closure,
+    or anything defined interactively — is stored as `null` first, and its
+    constants are then never examined. This is why the example above uses a
+    builtin: in a module-level script your own functions are importable and
+    behave the same way, but pasted into a REPL they are not.
 
 The remedy is usually to register a transformer for the type, as in
 [Custom serialization for user-defined types](#custom-serialization-for-user-defined-types)
@@ -212,8 +274,8 @@ so, which is a step towards fixing it rather than a setting to leave in place:
 ```pycon
 >>> serializer = ComputationSerializer(on_unserializable_constant='drop')
 >>> comp.write_json(io.StringIO(), serializer=serializer)  # doctest: +SKIP
-UnserializableConstantWarning: Cannot serialize constant argument 'factor' on node
-NodeKey('scaled') ... Dropping it, because on_unserializable_constant='drop'. The
+UnserializableConstantWarning: Cannot serialize constant argument 'ndigits' on node
+NodeKey('rounded') ... Dropping it, because on_unserializable_constant='drop'. The
 saved graph will raise TypeError from the missing argument when this node is
 recalculated.
 ```
@@ -350,6 +412,35 @@ Compound types use a tagged object with a `"type"` discriminator:
 
 The `blob` field is a base64-encoded [dill](https://github.com/uqfoundation/dill) byte string. It is not portable across Python versions.
 
-!!! note
-    The JSON serialization format is not intended for long-term storage. It is designed for short-term inspection and post-mortem debugging. The format may change between releases.
+## How durable is a saved computation?
+
+The blanket answer used to be "not for long-term storage". That is no longer
+accurate, and the honest answer splits in two.
+
+**Values are durable.** The format carries a version, changes to it are additive,
+and files written by every earlier version are held as fixtures in the test suite
+and asserted to still load *and still recompute*. Arrays and frames are stored as
+`.npy` or parquet, both of which outlive this library. A file written today is
+expected to keep loading.
+
+**Functions are only as durable as your code.** A node's function is stored as a
+module path and a qualified name, so it resolves only while that module still
+exists and still exports that name — rename it, move it, or uninstall the package
+and the value still loads but the node can no longer be recalculated. A function
+stored via `use_dill_for_functions=True` is worse: dill blobs are not portable
+across Python versions.
+
+So a saved computation is a durable record of *what was computed*, and a
+best-effort record of *how*. For an archive you expect to read years later,
+prefer named functions in a stable module, and consider that being able to
+recalculate may not survive a refactor even when the numbers do.
+
+Two further caveats that are not about time:
+
+- The file is **not safe to load from an untrusted source** — see
+  [Loading untrusted files](saving_computations.md#loading-untrusted-files).
+- pandas 2 and pandas 3 differ in default datetime resolution. Each value's
+  resolution is recorded, so a file written under one loads correctly under the
+  other; loman requires pandas 2.0 or later precisely because that recording
+  depends on APIs introduced there.
 

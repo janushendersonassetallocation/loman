@@ -81,6 +81,7 @@ nav:
               - Repointing Nodes: user/features/manipulating/repointing_nodes.md
           - Other:
               - Interactive Debugging: user/features/other/interactive_debugging.md
+              - Saving Computations: user/features/other/saving_computations.md
               - Serializing Computations: user/features/other/serializing_computations.md
               - Migrating from write_dill: user/features/other/migrating_from_dill.md
   - Notebooks:
