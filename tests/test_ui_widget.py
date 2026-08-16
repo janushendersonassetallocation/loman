@@ -14,6 +14,7 @@ import re
 import weakref
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -21,6 +22,7 @@ from loman import Computation, States
 from loman.nodekey import to_nodekey
 from loman.ui import ComputationWidget
 from loman.ui.viewmodel import MIXED_STATE_LABEL
+from loman.ui.widget import MAX_NAME_SUGGESTIONS
 from loman.visualization import GraphView
 from tests.conftest import create_example_block_computation
 
@@ -849,7 +851,7 @@ class TestAssetContract:
     def test_javascript_only_writes_traits_python_owns_are_left_alone(self):
         """The frontend must not set a trait Python treats as canonical."""
         javascript = read_static("widget.js")
-        for own in ("graph_svg", "node_states", "composite_ids", "detail", "status", "revision"):
+        for own in ("graph_svg", "node_states", "composite_ids", "detail", "status", "revision", "node_names"):
             assert f'model.set("{own}"' not in javascript
 
     def test_every_state_has_a_colour_the_browser_can_use(self):
@@ -1856,10 +1858,12 @@ class TestInspectorOnDemand:
         assert 'model.set("selected_id", "")' in helper
 
     def test_escape_leaves_a_field_being_edited_alone(self):
-        """Escape in a field cancels that edit; it must not also close the panel."""
+        """Escape in a field cancels that edit; it must not also close a panel."""
         javascript = read_static("widget.js")
-        handler = javascript.split('if (event.key !== "Escape" || inspector.hidden) return;')[1]
-        assert 'event.target?.closest?.("input")' in handler.split("clearSelection();")[0]
+        handler = javascript.split('if (event.key !== "Escape") return;')[1]
+        # Both panels close on Escape, and the guard has to come before either.
+        assert 'event.target?.closest?.("input, textarea")' in handler.split("closeNodeForm();")[0]
+        assert 'event.target?.closest?.("input, textarea")' in handler.split("clearSelection();")[0]
 
 
 class TestComputingABlockYouAreInside:
@@ -2406,3 +2410,431 @@ class TestEveryNameSurfaceKeepsItsType:
             assert comp.value(twin) == "TWIN"
         finally:
             widget.close()
+
+
+def make_buildable() -> tuple[Computation, ComputationWidget]:
+    """Create a small live graph and a widget allowed to build on it."""
+    comp = Computation()
+    comp.add_node("price", value=10.0)
+    return comp, comp.widget(collapse_all=False, buildable=True)
+
+
+def build(widget: ComputationWidget, **request) -> None:
+    """Send one graph-building request, with a nonce so it is never a replay."""
+    widget.graph_request = {"request_id": f"build-{widget.ack}", **request}
+
+
+class TestBuildingTheGraph:
+    """Nodes can be defined in the widget rather than only observed in it."""
+
+    def test_an_input_node_can_be_added(self):
+        """The simplest definition there is: a name and a value."""
+        comp, widget = make_buildable()
+        try:
+            build(
+                widget,
+                action="add",
+                name="quantity",
+                kind="input",
+                value={"kind": "scalar", "type": "int", "value": 3},
+            )
+
+            assert comp.v["quantity"] == 3
+            assert widget.status == "Added quantity"
+            assert widget.status_severity == "success"
+        finally:
+            widget.close()
+
+    def test_an_input_node_can_be_added_without_a_value(self):
+        """Declaring an input to fill in later is what UNINITIALIZED means."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="add", name="quantity", kind="input")
+
+            assert comp.s["quantity"] == States.UNINITIALIZED
+        finally:
+            widget.close()
+
+    def test_a_calculation_node_can_be_added_and_computed(self):
+        """The whole feature in one test: an expression becomes a working node."""
+        comp, widget = make_buildable()
+        try:
+            quantity = {"kind": "scalar", "type": "int", "value": 3}
+            build(widget, action="add", name="quantity", kind="input", value=quantity)
+            build(
+                widget,
+                action="add",
+                name="value",
+                kind="calc",
+                inputs=["price", "quantity"],
+                expression="price * quantity",
+            )
+            comp.compute_all()
+
+            assert comp.v["value"] == 30.0
+            assert comp.s["value"] == States.UPTODATE
+        finally:
+            widget.close()
+
+    def test_a_new_node_shows_its_own_source(self):
+        """A node built here is not a black box; the panel shows what was typed."""
+        _comp, widget = make_buildable()
+        try:
+            build(widget, action="add", name="double", kind="calc", inputs=["price"], expression="price * 2")
+
+            assert "price * 2" in widget.detail["source"]
+        finally:
+            widget.close()
+
+    def test_the_new_node_is_selected(self):
+        """So the panel opens on what was just built, showing where it landed."""
+        _comp, widget = make_buildable()
+        try:
+            build(widget, action="add", name="quantity", kind="input")
+
+            assert widget.selected_name == "quantity"
+        finally:
+            widget.close()
+
+    def test_the_expression_can_use_the_notebook_namespace(self):
+        """Without one, every definition is limited to builtins."""
+        comp = Computation()
+        comp.add_node("angle", value=0.0)
+        widget = comp.widget(collapse_all=False, buildable=True, namespace={"np": np})
+        try:
+            build(widget, action="add", name="wave", kind="calc", inputs=["angle"], expression="np.cos(angle)")
+            comp.compute_all()
+
+            assert comp.v["wave"] == 1.0
+        finally:
+            widget.close()
+
+    def test_a_node_can_be_deleted(self):
+        """Building a graph includes taking part of it back out."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="delete", id=node_id(widget, "price"))
+
+            assert comp.nodes() == []
+            assert widget.status == "Deleted price"
+        finally:
+            widget.close()
+
+    def test_deleting_a_depended_on_node_says_it_became_a_placeholder(self):
+        """Loman keeps its outline, so claiming it had gone would be a lie."""
+        comp, widget = make_buildable()
+        try:
+            comp.add_node("double", lambda price: price * 2)
+
+            build(widget, action="delete", id=node_id(widget, "price"))
+
+            assert comp.s["price"] == States.PLACEHOLDER
+            assert "placeholder" in widget.status
+        finally:
+            widget.close()
+
+    def test_a_node_can_be_renamed(self):
+        """Renaming keeps the edges, which is why it is not delete-then-add."""
+        comp, widget = make_buildable()
+        try:
+            comp.add_node("double", lambda price: price * 2)
+
+            build(widget, action="rename", id=node_id(widget, "price"), name="spot")
+            comp.compute_all()
+
+            assert comp.v["double"] == 20.0
+            assert widget.status == "Renamed price to spot"
+        finally:
+            widget.close()
+
+    def test_a_definition_can_be_replaced(self):
+        """Editing a node is adding it again, which is what add_node already is."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="add", name="double", kind="calc", inputs=["price"], expression="price * 2")
+            build(
+                widget,
+                action="add",
+                name="double",
+                kind="calc",
+                inputs=["price"],
+                expression="price * 3",
+                replace=True,
+            )
+            comp.compute_all()
+
+            assert comp.v["double"] == 30.0
+            assert widget.status == "Redefined double"
+        finally:
+            widget.close()
+
+    def test_replacing_a_node_by_accident_is_refused(self):
+        """Overwriting a node's definition should be asked for, not stumbled into."""
+        comp, widget = make_buildable()
+        try:
+            replacement = {"kind": "scalar", "type": "float", "value": 1.0}
+            build(widget, action="add", name="price", kind="input", value=replacement)
+
+            assert comp.v["price"] == 10.0
+            assert "already exists" in widget.status
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_filling_in_a_placeholder_is_not_replacing_anything(self):
+        """Building a node before its inputs exist is the ordinary order.
+
+        Loman leaves a PLACEHOLDER where a node was referred to but never
+        defined, and defining it next is the obvious thing to do --- so it must
+        not be met with "that already exists".
+        """
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="add", name="value", kind="calc", inputs=["quantity"], expression="quantity * 2")
+            assert comp.s["quantity"] == States.PLACEHOLDER
+
+            build(
+                widget, action="add", name="quantity", kind="input", value={"kind": "scalar", "type": "int", "value": 4}
+            )
+            comp.compute_all()
+
+            assert comp.v["value"] == 8
+            assert widget.status == "Added quantity"
+        finally:
+            widget.close()
+
+    def test_a_node_can_be_deleted_by_name(self):
+        """Not everything worth deleting is a shape on screen to point at."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="delete", target="price")
+
+            assert comp.nodes() == []
+        finally:
+            widget.close()
+
+    def test_renaming_a_node_to_its_own_name_says_so(self):
+        """Loman would take it; reporting a rename that did nothing would not."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="rename", id=node_id(widget, "price"), name="price")
+
+            assert comp.nodes() == ["price"]
+            assert "already has that name" in widget.status
+        finally:
+            widget.close()
+
+    def test_a_rename_onto_an_existing_node_is_reported(self):
+        """Loman refuses it, and that refusal has to reach the status bar."""
+        comp, widget = make_buildable()
+        try:
+            comp.add_node("quantity", value=1)
+
+            build(widget, action="rename", id=node_id(widget, "price"), name="quantity")
+
+            assert comp.v["quantity"] == 1
+            assert "already exists" in widget.status
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+
+class TestBuildingIsOptIn:
+    """Defining a node runs code the browser wrote, so it is asked for."""
+
+    def test_it_is_off_by_default(self):
+        """A widget nobody configured must not compile anything from a browser."""
+        comp, widget = make_widget()
+        try:
+            assert widget.buildable is False
+
+            build(widget, action="add", name="extra", kind="input")
+
+            assert not comp.has_node("extra")
+            assert "buildable=True" in widget.status
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_a_read_only_widget_refuses_even_when_asked(self):
+        """``editable=False`` is the wider permission, and it still governs."""
+        comp = Computation()
+        comp.add_node("price", value=1.0)
+        widget = comp.widget(collapse_all=False, editable=False, buildable=True)
+        try:
+            build(widget, action="add", name="extra", kind="input")
+
+            assert not comp.has_node("extra")
+            assert widget.status == "Graph edit failed: this widget is read-only"
+        finally:
+            widget.close()
+
+    def test_an_unknown_action_is_refused(self):
+        """The request payload is untrusted, so the verb is checked too."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="drop_everything")
+
+            assert comp.nodes() == ["price"]
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_an_empty_request_does_nothing(self):
+        """Traits start empty, and a trait reset is not an instruction."""
+        comp, widget = make_buildable()
+        try:
+            widget.graph_request = {}
+
+            assert comp.nodes() == ["price"]
+            assert widget.status_severity != "error"
+        finally:
+            widget.close()
+
+    def test_a_replayed_request_is_ignored(self):
+        """A reconnecting front end must not build the same node twice."""
+        comp, widget = make_buildable()
+        try:
+            widget.graph_request = {"request_id": "once", "action": "add", "name": "a", "kind": "input"}
+            comp.delete_node("a")
+            widget.graph_request = {"request_id": "once", "action": "add", "name": "a", "kind": "input"}
+
+            assert not comp.has_node("a")
+        finally:
+            widget.close()
+
+    def test_a_failure_is_reported_rather_than_raised(self):
+        """A traitlets observer that raises surfaces only in the kernel log."""
+        comp, widget = make_buildable()
+        try:
+            build(widget, action="add", name="broken", kind="calc", inputs=["price"], expression="price *")
+
+            assert not comp.has_node("broken")
+            assert "does not parse" in widget.status
+            assert widget.status_severity == "error"
+        finally:
+            widget.close()
+
+    def test_a_block_cannot_be_built_on_as_though_it_were_a_node(self):
+        """A collapsed block is several nodes, and none of them is the block."""
+        comp = create_example_block_computation()
+        widget = comp.widget(buildable=True)
+        try:
+            block_id = widget._view.node_index_map[to_nodekey("foo")]
+
+            build(widget, action="delete", id=block_id)
+
+            assert comp.has_node("foo/d")
+            assert "is a block" in widget.status
+        finally:
+            widget.close()
+
+
+class TestBuildingInsideABlock:
+    """Names are read against what is on screen, so a block is where you are."""
+
+    def test_a_new_node_lands_in_the_block_in_focus(self):
+        """Typing the full path again while standing inside it is busywork."""
+        comp = create_example_block_computation()
+        widget = comp.widget(buildable=True)
+        try:
+            widget.focus_request = {"path": "foo", "request_id": "f1"}
+
+            build(widget, action="add", name="extra", kind="input")
+
+            assert comp.has_node("foo/extra")
+        finally:
+            widget.close()
+
+    def test_a_leading_slash_reaches_outside_the_block(self):
+        """Otherwise a node in a block could never depend on one outside it."""
+        comp = create_example_block_computation()
+        widget = comp.widget(buildable=True)
+        try:
+            widget.focus_request = {"path": "foo", "request_id": "f1"}
+
+            build(widget, action="add", name="echo", kind="calc", inputs=["source=/input_bar"], expression="source")
+            comp.compute_all()
+
+            assert comp.v["foo/echo"] == comp.v["input_bar"]
+        finally:
+            widget.close()
+
+    def test_the_detail_panel_names_the_node_the_way_the_form_reads_it(self):
+        """Whatever the panel shows has to be something the form would accept."""
+        comp = create_example_block_computation()
+        widget = comp.widget(buildable=True)
+        try:
+            widget.focus_request = {"path": "foo", "request_id": "f1"}
+            widget.selected_id = widget._view.node_index_map[to_nodekey("a")]
+
+            assert widget.detail["name"] == "foo/a"
+            assert widget.detail["definition"]["name"] == "a"
+        finally:
+            widget.close()
+
+
+class TestNodeNameSuggestions:
+    """The form suggests the graph's own names as an input is typed."""
+
+    def test_every_node_is_offered(self):
+        """Typing a path from memory is the part of this worth removing."""
+        comp, widget = make_buildable()
+        try:
+            comp.add_node("quantity", value=1)
+
+            assert widget.node_names == ["price", "quantity"]
+        finally:
+            widget.close()
+
+    def test_names_are_relative_to_the_view(self):
+        """A suggestion has to be acceptable exactly as it is offered."""
+        comp = create_example_block_computation()
+        widget = comp.widget(buildable=True)
+        try:
+            widget.focus_request = {"path": "foo", "request_id": "f1"}
+
+            assert "a" in widget.node_names
+            assert "/input_bar" in widget.node_names
+        finally:
+            widget.close()
+
+    def test_a_large_graph_is_not_described_name_by_name(self):
+        """This is a convenience, and it must not outweigh the picture itself."""
+        comp = Computation()
+        for index in range(MAX_NAME_SUGGESTIONS + 1):
+            comp.add_node(f"node_{index}", value=index)
+        widget = comp.widget(collapse_all=False, buildable=True, max_rendered_nodes=10_000)
+        try:
+            assert widget.node_names == []
+        finally:
+            widget.close()
+
+
+class TestGraphBuildingAssets:
+    """The form in the browser and the traits in Python must stay in step."""
+
+    def test_the_build_controls_are_hidden_rather_than_disabled_by_default(self):
+        """An opt-in feature should not advertise itself as broken."""
+        javascript = read_static("widget.js")
+        handler = javascript.split("const renderBuildControls = () => {")[1].split("};")[0]
+        assert "buildGroup.hidden = !allowed" in handler
+        assert "closeNodeForm()" in handler
+
+    def test_the_form_asks_for_permission_from_both_switches(self):
+        """``buildable`` narrows ``editable``; it does not replace it."""
+        javascript = read_static("widget.js")
+        assert 'const canBuild = canMutate && model.get("buildable");' in javascript
+
+    def test_a_rejected_definition_keeps_what_was_typed(self):
+        """The message on the status bar is about the text still in the fields."""
+        javascript = read_static("widget.js")
+        settle = javascript.split("const settleNodeForm = () => {")[1].split("};")[0]
+        assert 'model.get("status_severity") !== "error"' in settle
+
+    def test_the_form_never_writes_a_trait_python_owns(self):
+        """It reads the definition Python published and sends back a request."""
+        javascript = read_static("widget.js")
+        for own in ("node_names", "buildable"):
+            assert f'model.set("{own}"' not in javascript
+        assert 'send("graph_request"' in javascript

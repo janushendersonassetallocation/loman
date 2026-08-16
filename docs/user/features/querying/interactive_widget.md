@@ -75,6 +75,9 @@ returns the block path, and `selected_names` returns every member.
   **Compute** for the block you are standing in.
 - **Edit a scalar input** directly in the detail panel. This maps to
   `comp.insert`.
+- **Build the graph itself** — add, redefine, rename and delete nodes — when the
+  widget was created with `buildable=True`. See
+  [Building the graph](#building-the-graph).
 - **Compute** a node, a block, or the whole graph. This maps to `comp.compute`
   and `comp.compute_all`.
 - **Zoom** with the toolbar controls, and scroll to pan.
@@ -85,6 +88,98 @@ available, because navigating a graph does not mutate it.
 ```python
 comp.widget(editable=False)
 ```
+
+## Building the graph
+
+Everything above changes the *values* in a computation. With
+`buildable=True` the widget also builds the computation itself — adding
+nodes, redefining them, renaming and deleting them:
+
+```python
+comp.widget(buildable=True, namespace=globals())
+```
+
+**+ Node** in the toolbar opens a form, and a selected node grows a
+**Definition** section carrying **Edit**, **Rename** and **Delete**. A node is
+one of two things:
+
+- An **input**: a name, and optionally a scalar to start it off. With no value
+  it is created `UNINITIALIZED`, which is the ordinary way to declare an input
+  you will supply later. This is `comp.add_node(name, value=...)`.
+- A **calculation**: a name, a list of inputs and a Python expression. Each
+  input becomes a parameter of the function and an edge in the graph, and the
+  expression becomes its body. This is
+  `comp.add_node(name, func, kwds={...})`.
+
+An input is written as a node name, and the parameter is named after the node —
+`market/spot` arrives as `spot`. Where that will not do, because the last part
+of the path is not a valid Python name or because two inputs would collide,
+write `parameter=node` instead:
+
+```text
+price                  # the node "price", as the parameter `price`
+market/spot            # the node "market/spot", as the parameter `spot`
+futures=market/spot    # the same node, as the parameter `futures`
+```
+
+Editing a node is `add_node` again, which is what `add_node` already means: the
+node keeps its name and its dependents and gets a new definition. Deleting one
+that others still depend on leaves Loman's `PLACEHOLDER` behind rather than
+removing it, and the status bar says which happened.
+
+### Names are relative to where you are
+
+A name is read against the block in focus, so a name typed while inside
+`market` lands inside `market` — inputs included. Start a name with `/` to
+reach out of the block:
+
+```text
+spot                   # market/spot, when focused on market
+/rates/curve           # rates/curve, wherever you are
+```
+
+That is also how a block gets built: there is no "new block" button, because a
+block is a naming convention. Add `market/spot` and `market/vol` from the top
+level and the block appears around them.
+
+### The namespace
+
+An expression is compiled against `namespace`, so `namespace=globals()` is what
+lets it use the notebook's own imports:
+
+```python
+import numpy as np
+
+comp.widget(buildable=True, namespace=globals())   # np.sqrt(x) now works
+```
+
+Without one, only builtins are in scope. The function's globals stay pointed at
+the live mapping, so an import made after a node was built is still visible to
+it, and defining a node does not put its name into your namespace.
+
+### Things worth knowing
+
+**It runs code typed in a browser.** Defining a calculation node compiles an
+expression and runs it in the kernel, with whatever `namespace` gives it. That
+is why it is opt-in rather than part of `editable`, and why it should stay off
+wherever the front end is not yours. `editable=False` refuses it either way.
+
+**A node built here cannot be saved with its function.** Loman stores a function
+by the module path it is importable from, and one compiled from a text box has
+none — the same limitation a lambda has. `comp.save()` warns with
+`UnserializableFunctionWarning`, and the reloaded node keeps its value but
+cannot recompute. Promote a definition you mean to keep into a real function in
+a cell.
+
+**Its source is still visible.** The expression is registered where `inspect`
+looks for it, so `comp.get_source(name)` and the panel's **Source** section show
+what was typed rather than reporting that the source is unavailable.
+
+**The form only offers to edit what it could put back.** A node whose function
+was written in Python, or which takes positional or constant arguments, has no
+**Edit** button: the form has no field for those, so offering to edit one would
+be offering to replace it with something else. **Rename** and **Delete** stay
+available on every node.
 
 Pass `fit_on_render=True` to scale the graph to fit the pane on every render
 instead of opening at natural size. It only ever shrinks — blowing a small graph
