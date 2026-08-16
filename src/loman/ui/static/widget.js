@@ -56,6 +56,9 @@ function render({ model, el }) {
       <div class="loman-group">
         <button data-action="layout" title="Toggle graph direction (left-to-right or top-to-bottom)">LR</button>
       </div>
+      <div class="loman-group loman-build-group" hidden>
+        <button data-action="add-node" title="Define a new node in this computation">+ Node</button>
+      </div>
       <span class="loman-spacer"></span>
       <span class="loman-revision" title="Computation revision"></span>
     </div>
@@ -65,6 +68,7 @@ function render({ model, el }) {
         <div class="loman-stage"></div>
       </div>
       <aside class="loman-inspector" aria-label="Node inspector" hidden></aside>
+      <aside class="loman-builder" aria-label="Node definition" hidden></aside>
     </div>
     <div class="loman-status" role="status" data-severity="idle">
       <span class="loman-status-dot" aria-hidden="true"></span>
@@ -77,6 +81,8 @@ function render({ model, el }) {
   const canvas = el.querySelector(".loman-canvas");
   const stage = el.querySelector(".loman-stage");
   const inspector = el.querySelector(".loman-inspector");
+  const builder = el.querySelector(".loman-builder");
+  const buildGroup = el.querySelector(".loman-build-group");
   const statusBar = el.querySelector(".loman-status");
   const statusText = el.querySelector(".loman-status-text");
   const legendList = el.querySelector(".loman-legend");
@@ -213,6 +219,11 @@ function render({ model, el }) {
     inspector.querySelectorAll("button:not(.loman-nav)").forEach((node) => { node.disabled = !canMutate; });
     inspector.querySelectorAll("button.loman-nav").forEach((node) => { node.disabled = busy; });
     inspector.querySelectorAll("input").forEach((node) => { node.disabled = busy; });
+    // The node form writes Python into the kernel, so it needs the same
+    // permission the mutating controls do, plus `buildable` on top.
+    const canBuild = canMutate && model.get("buildable");
+    buttons("add-node").disabled = !canBuild;
+    builder.querySelectorAll("button, input, select, textarea").forEach((node) => { node.disabled = !canBuild; });
   };
 
   const setBusy = (isBusy, message) => {
@@ -907,7 +918,9 @@ function render({ model, el }) {
   const renderDetail = () => {
     const data = model.get("detail");
     inspector.replaceChildren();
-    const open = Boolean(data?.id);
+    // The node form shares this column, so while it is up the inspector waits
+    // its turn rather than fighting it for the space.
+    const open = Boolean(data?.id) && formState === null;
     inspector.hidden = !open;
     el.dataset.inspector = open ? "open" : "closed";
     if (!open) {
@@ -927,11 +940,372 @@ function render({ model, el }) {
     if (data.outputs?.length) inspector.append(section("Outputs", refList(data.outputs)));
     if (data.editable) inspector.append(section("Edit value", buildEditForm(data)));
     inspector.append(section(null, buildActions(data)));
+    // Building the graph is a separate permission, and a block is several
+    // nodes rather than one, so it has no definition of its own to change.
+    if (model.get("buildable") && !data.composite) {
+      inspector.append(section("Definition", buildGraphActions(data)));
+    }
     if (data.source) inspector.append(buildSource(data.source));
     applyEnabledState();
     repaint();
     // Likewise: opening the panel narrows the canvas.
     fitIfRequested();
+  };
+
+  /* -------------------------------------------------------- the node form */
+
+  // Everything else here asks Python to do something to a node that exists.
+  // This asks it to make one, which needs a name, a kind, and then either a
+  // value or an expression --- more than a click can carry, hence a form. It
+  // takes the inspector's column while it is open: two panels either side of
+  // the graph would leave the graph with nothing.
+  //
+  // Names are read relative to the block in focus, so a name typed while
+  // inside `market` lands inside it; a leading `/` names a node from the top.
+  // That is Python's rule, and the form only has to say so.
+
+  // Scalar types an input node can be seeded with, labelled for people rather
+  // than for Python. "unset" is first because declaring an input you will fill
+  // in later is the common case, and it is what UNINITIALIZED means.
+  const SCALAR_TYPES = [
+    ["unset", "Leave unset"],
+    ["float", "Number"],
+    ["int", "Whole number"],
+    ["str", "Text"],
+    ["bool", "True or false"],
+    ["none", "None"],
+  ];
+
+  const NODE_NAMES_ID = "loman-node-names";
+
+  // What the form was opened on: null when it is closed, otherwise the node it
+  // is defining. Kept here rather than read back out of the DOM so that a
+  // repaint of the graph underneath cannot disturb what is half typed.
+  let formState = null;
+  // A definition has been sent and Python has not answered yet. On success the
+  // form closes; on failure it stays exactly as it was, because the message on
+  // the status bar is about the text still in these fields.
+  let awaitingBuild = false;
+
+  const field = (text, control, hint) => {
+    const wrapper = document.createElement("label");
+    wrapper.className = "loman-field";
+    const caption = document.createElement("span");
+    caption.className = "loman-field-label";
+    caption.textContent = text;
+    wrapper.append(caption, control);
+    if (hint) {
+      const note = document.createElement("span");
+      note.className = "loman-note";
+      note.textContent = hint;
+      wrapper.append(note);
+    }
+    return wrapper;
+  };
+
+  const selectFrom = (options, current) => {
+    const select = document.createElement("select");
+    select.className = "loman-select";
+    for (const [value, text] of options) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      option.selected = value === current;
+      select.append(option);
+    }
+    return select;
+  };
+
+  const nodeNameList = () => {
+    const list = document.createElement("datalist");
+    list.id = NODE_NAMES_ID;
+    for (const name of model.get("node_names") ?? []) {
+      const option = document.createElement("option");
+      option.value = name;
+      list.append(option);
+    }
+    return list;
+  };
+
+  // One row per input, rather than one comma-separated field, so each can
+  // offer the graph's own node names as suggestions while it is typed.
+  const inputRow = (value) => {
+    const row = document.createElement("div");
+    row.className = "loman-input-row";
+    const input = document.createElement("input");
+    input.className = "loman-input-ref";
+    input.value = value ?? "";
+    input.placeholder = "node, or parameter=node";
+    input.setAttribute("list", NODE_NAMES_ID);
+    input.setAttribute("aria-label", "Input node");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "loman-icon";
+    remove.textContent = "×";
+    remove.title = "Remove this input";
+    remove.setAttribute("aria-label", "Remove this input");
+    remove.addEventListener("click", () => row.remove(), { signal });
+    row.append(input, remove);
+    return row;
+  };
+
+  const focusLabel = () => {
+    const trail = model.get("focus_trail") ?? [];
+    return trail.length > 1 ? trail[trail.length - 1].label : "";
+  };
+
+  const buildNodeForm = (state) => {
+    const form = document.createElement("form");
+    form.className = "loman-form";
+
+    const head = document.createElement("div");
+    head.className = "loman-node-head";
+    const title = document.createElement("h3");
+    title.className = "loman-node-name";
+    title.textContent = state.replace ? `Edit ${state.name}` : "New node";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "loman-close";
+    close.textContent = "×";
+    close.title = "Close the node form (Escape)";
+    close.setAttribute("aria-label", "Close the node form");
+    close.addEventListener("click", () => closeNodeForm(), { signal });
+    head.append(title, close);
+
+    const name = document.createElement("input");
+    name.className = "loman-text";
+    name.value = state.name ?? "";
+    name.placeholder = "name, or block/name";
+    name.setAttribute("aria-label", "Node name");
+    const inside = focusLabel();
+    const nameField = field(
+      "Name",
+      name,
+      inside ? `Goes inside ${inside}. Start with / to name one from the top.` : "Use block/name to put it in a block.",
+    );
+
+    const kind = selectFrom([["input", "Input"], ["calc", "Calculation"]], state.kind);
+    kind.setAttribute("aria-label", "Node kind");
+
+    const valueType = selectFrom(SCALAR_TYPES, state.valueType ?? "unset");
+    valueType.setAttribute("aria-label", "Value type");
+    const value = document.createElement("input");
+    value.className = "loman-text";
+    value.setAttribute("aria-label", "Value");
+    const applyValueType = () => {
+      value.type = inputTypeFor(valueType.value);
+      if (valueType.value === "float") value.step = "any";
+      value.hidden = valueType.value === "unset" || valueType.value === "none";
+    };
+    if (state.valueType === "bool") value.checked = state.value === true;
+    else if (state.value !== undefined && state.value !== null) value.value = state.value;
+    applyValueType();
+    valueType.addEventListener("change", applyValueType, { signal });
+
+    const valueRow = document.createElement("div");
+    valueRow.className = "loman-value-row";
+    valueRow.append(valueType, value);
+    const inputPane = document.createElement("div");
+    inputPane.className = "loman-form-pane";
+    inputPane.append(field("Value", valueRow, "An input node with no value starts UNINITIALIZED."));
+
+    const inputs = document.createElement("div");
+    inputs.className = "loman-input-rows";
+    for (const entry of state.inputs?.length ? state.inputs : [""]) inputs.append(inputRow(entry));
+    const addInput = document.createElement("button");
+    addInput.type = "button";
+    addInput.className = "loman-add-input";
+    addInput.textContent = "+ Input";
+    addInput.addEventListener("click", () => inputs.append(inputRow("")), { signal });
+
+    const expression = document.createElement("textarea");
+    expression.className = "loman-expression";
+    expression.rows = 3;
+    expression.value = state.expression ?? "";
+    expression.placeholder = "price * quantity";
+    expression.setAttribute("aria-label", "Expression");
+
+    const calcPane = document.createElement("div");
+    calcPane.className = "loman-form-pane";
+    calcPane.append(
+      field("Inputs", inputs, "Each becomes a parameter, named after the node unless you say otherwise."),
+      addInput,
+      field("Expression", expression, "Python, using the parameter names above."),
+    );
+
+    const applyKind = () => {
+      inputPane.hidden = kind.value !== "input";
+      calcPane.hidden = kind.value !== "calc";
+    };
+    applyKind();
+    kind.addEventListener("change", applyKind, { signal });
+
+    const actions = document.createElement("div");
+    actions.className = "loman-actions";
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "loman-primary";
+    submit.textContent = state.replace ? "Save" : "Add node";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => closeNodeForm(), { signal });
+    actions.append(submit, cancel);
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const payload = { action: "add", name: name.value, kind: kind.value, replace: Boolean(state.replace) };
+      if (kind.value === "calc") {
+        payload.inputs = [...inputs.querySelectorAll(".loman-input-ref")].map((node) => node.value);
+        payload.expression = expression.value;
+      } else if (valueType.value !== "unset") {
+        payload.value = valueType.value === "none"
+          ? { kind: "scalar", type: "none", value: null }
+          : { kind: "scalar", type: valueType.value, value: readEditedValue(value, valueType.value) };
+      }
+      awaitingBuild = true;
+      send("graph_request", payload, state.replace ? "Saving definition…" : "Adding node…");
+    }, { signal });
+
+    form.append(head, nodeNameList(), section(null, nameField, field("Kind", kind)), inputPane, calcPane);
+    // Pinned to the bottom of the panel: a definition is taller than the pane
+    // on any real graph, and hunting for the submit button by scrolling is not
+    // a thing anyone should have to do.
+    const footer = section(null, actions);
+    footer.classList.add("loman-form-actions");
+    form.append(footer);
+    return { form, name };
+  };
+
+  const renderNodeForm = () => {
+    builder.replaceChildren();
+    builder.hidden = formState === null;
+    el.dataset.builder = formState === null ? "closed" : "open";
+    if (formState === null) {
+      // The column just went back to the inspector, or to nothing at all.
+      renderDetail();
+      return;
+    }
+    const { form, name } = buildNodeForm(formState);
+    builder.append(form);
+    applyEnabledState();
+    // The inspector shares this column, so opening the form hides it.
+    inspector.hidden = true;
+    fitIfRequested();
+    name.focus();
+    name.select();
+  };
+
+  const openNodeForm = (state) => {
+    formState = { kind: "input", name: "", inputs: [], expression: "", ...state };
+    awaitingBuild = false;
+    renderNodeForm();
+  };
+
+  const closeNodeForm = () => {
+    if (formState === null) return;
+    formState = null;
+    awaitingBuild = false;
+    renderNodeForm();
+  };
+
+  // Called whenever Python answers. A rejected definition leaves the form
+  // standing, because everything the message complains about is still in it.
+  const settleNodeForm = () => {
+    if (!awaitingBuild) return;
+    awaitingBuild = false;
+    if (model.get("status_severity") !== "error") closeNodeForm();
+  };
+
+  // Prefilling the form from the node's own definition is what makes editing
+  // one editing rather than retyping. Python says whether it can be described
+  // in these fields at all --- a function written in Python is not an
+  // expression this form could put back, so it does not offer to.
+  const editDefinition = (data) => {
+    const definition = data.definition ?? {};
+    openNodeForm({
+      replace: true,
+      name: definition.name ?? data.name,
+      kind: definition.kind ?? "input",
+      inputs: definition.inputs ?? [],
+      expression: definition.expression ?? "",
+      valueType: data.value?.kind === "scalar" ? data.value.type : "unset",
+      value: data.value?.kind === "scalar" ? data.value.value : "",
+    });
+  };
+
+  // Renaming is a single field, so it opens in place in the inspector rather
+  // than taking over the column the way a whole definition does.
+  const buildRenameForm = (data) => {
+    const form = document.createElement("form");
+    form.className = "loman-edit";
+    const input = document.createElement("input");
+    input.value = data.definition?.name ?? data.name;
+    input.setAttribute("aria-label", `New name for ${data.name}`);
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.textContent = "Rename";
+    form.append(input, button);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      send("graph_request", { action: "rename", id: data.id, name: input.value }, "Renaming…");
+    }, { signal });
+    return form;
+  };
+
+  // Two presses rather than a confirm dialog: a notebook widget has no business
+  // opening a modal, and an armed button says what the next click will do.
+  const buildDeleteButton = (data) => {
+    const button = document.createElement("button");
+    button.className = "loman-danger";
+    button.textContent = "Delete";
+    button.title = `Delete ${data.name} from the computation`;
+    let armed = false;
+    button.addEventListener("click", () => {
+      if (!armed) {
+        armed = true;
+        button.textContent = "Delete, really";
+        button.dataset.armed = "true";
+        return;
+      }
+      send("graph_request", { action: "delete", id: data.id }, "Deleting…");
+    }, { signal });
+    // Looking away disarms it, so a stray click later cannot land on a button
+    // that is still counting the one before it.
+    button.addEventListener("blur", () => {
+      armed = false;
+      button.textContent = "Delete";
+      delete button.dataset.armed;
+    }, { signal });
+    return button;
+  };
+
+  const buildGraphActions = (data) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "loman-actions";
+    if (data.definition?.editable) {
+      const edit = document.createElement("button");
+      edit.textContent = "Edit";
+      edit.title = "Change this node's definition";
+      edit.addEventListener("click", () => editDefinition(data), { signal });
+      wrapper.append(edit);
+    }
+    const rename = document.createElement("button");
+    rename.textContent = "Rename";
+    let renameForm = null;
+    rename.addEventListener("click", () => {
+      if (renameForm) {
+        renameForm.remove();
+        renameForm = null;
+        return;
+      }
+      renameForm = buildRenameForm(data);
+      wrapper.after(renameForm);
+      applyEnabledState();
+      renameForm.querySelector("input").focus();
+    }, { signal });
+    wrapper.append(rename, buildDeleteButton(data));
+    return wrapper;
   };
 
   /* ------------------------------------------------------------- wiring */
@@ -947,6 +1321,17 @@ function render({ model, el }) {
     statusBar.dataset.severity = model.get("status_severity") || "idle";
     statusText.textContent =
       model.get("status") || (model.get("graph_svg") ? IDLE_HINT : "No graph to show.");
+    settleNodeForm();
+  };
+
+  // The graph builder is opt-in, so its controls do not merely go inert when
+  // it is off --- they are not there at all.
+  const renderBuildControls = () => {
+    const allowed = model.get("buildable");
+    buildGroup.hidden = !allowed;
+    if (!allowed) closeNodeForm();
+    renderDetail();
+    applyEnabledState();
   };
 
   const renderRevision = () => {
@@ -1050,10 +1435,16 @@ function render({ model, el }) {
   // Escape closes the inspector, the same as its × button. Bound on the widget
   // rather than the canvas, so it still works from inside the panel itself.
   el.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || inspector.hidden) return;
-    // Escape in a field cancels that edit. Closing the panel out from under
+    if (event.key !== "Escape") return;
+    // Escape in a field cancels that edit. Closing a panel out from under
     // someone mid-keystroke would throw away what they were typing.
-    if (event.target?.closest?.("input")) return;
+    if (event.target?.closest?.("input, textarea")) return;
+    if (formState !== null) {
+      event.preventDefault();
+      closeNodeForm();
+      return;
+    }
+    if (inspector.hidden) return;
     event.preventDefault();
     clearSelection();
   }, { signal });
@@ -1072,6 +1463,7 @@ function render({ model, el }) {
     const next = model.get("rankdir") === "LR" ? "TB" : "LR";
     send("layout_request", { rankdir: next }, "Changing layout…");
   }, { signal });
+  buttons("add-node").addEventListener("click", () => openNodeForm({}), { signal });
 
   model.on("change:graph_svg", onGraphChanged);
   model.on("change:expanded_paths", wireOpenBlocks);
@@ -1088,6 +1480,7 @@ function render({ model, el }) {
   model.on("change:ack", renderStatus);
   model.on("change:revision", renderRevision);
   model.on("change:editable", renderEditable);
+  model.on("change:buildable", renderBuildControls);
   model.on("change:rankdir", renderLayout);
   model.on("change:focus_trail", renderBreadcrumb);
   model.on("change:fit_on_render", fitIfRequested);
@@ -1107,6 +1500,7 @@ function render({ model, el }) {
     model.off("change:ack", renderStatus);
     model.off("change:revision", renderRevision);
     model.off("change:editable", renderEditable);
+    model.off("change:buildable", renderBuildControls);
     model.off("change:rankdir", renderLayout);
     model.off("change:focus_trail", renderBreadcrumb);
     model.off("change:fit_on_render", fitIfRequested);
@@ -1123,6 +1517,7 @@ function render({ model, el }) {
   renderGraph();
   // clientWidth is 0 until the widget is laid out, so the first fit waits a frame.
   requestAnimationFrame(fitIfRequested);
+  renderBuildControls();
   renderEditable();
   renderStatus();
   renderRevision();

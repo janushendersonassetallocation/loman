@@ -9,6 +9,7 @@ from loman.consts import NodeAttributes, States
 from loman.nodekey import NodeKey
 from loman.visualization import ColorByState, GraphView, aggregate_states
 
+from .builder import describe_definition
 from .value import to_wire
 
 if TYPE_CHECKING:
@@ -77,7 +78,12 @@ def _safe_source(computation: Computation, node_key: NodeKey) -> str:
 
 
 def build_detail(
-    view: GraphView, node_id: str, *, editable: bool, id_to_visible: Mapping[str, NodeKey] | None = None
+    view: GraphView,
+    node_id: str,
+    *,
+    editable: bool,
+    id_to_visible: Mapping[str, NodeKey] | None = None,
+    root: NodeKey | None = None,
 ) -> dict[str, Any]:
     """Build the lazily populated detail panel for one rendered node.
 
@@ -86,6 +92,8 @@ def build_detail(
     :param editable: Whether the widget permits edits at all.
     :param id_to_visible: Reverse of ``view.node_index_map``. The widget keeps
         one and passes it in; omit it and this rebuilds it.
+    :param root: The block the view is rooted on, so the node's definition is
+        described in the same relative names the node form accepts.
     :return: The detail payload, or an empty dict for an unknown ID.
     """
     if id_to_visible is None:
@@ -132,6 +140,7 @@ def build_detail(
             "source": _safe_source(computation, node_key),
             "inputs": [str(name) for name in computation.get_inputs(node_key)],
             "outputs": [str(name) for name in computation.get_outputs(node_key)],
+            "definition": describe_definition(computation, node_key, root),
         }
     )
     if isinstance(value, Error):

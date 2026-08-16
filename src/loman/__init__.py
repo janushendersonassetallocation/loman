@@ -20,6 +20,7 @@ from loman.computeengine import (
 from loman.consts import NodeTransformations, States
 from loman.exception import (
     CannotInsertToPlaceholderNodeError,
+    DeserializedError,
     FittingError,
     InvalidBlockTypeError,
     LoopDetectedError,
@@ -30,7 +31,7 @@ from loman.exception import (
 )
 from loman.nodekey import Name, Names, NodeKey, to_nodekey
 from loman.planning import ExecutionPlan, ValidationReport
-from loman.serialization import ComputationSerializer
+from loman.serialization import ComputationSerializer, SerializationProfile
 from loman.util import BlockContext, BlockFeature, FanIn, FanOut, IdNode, InputValue, PlannedNode, Positional
 from loman.visualization import GraphView
 
@@ -46,6 +47,7 @@ __all__ = [
     "ComputationEvent",
     "ComputationFactory",  # Backward compatibility
     "ComputationSerializer",
+    "DeserializedError",
     "ExecutionPlan",
     "FanIn",
     "FanOut",
@@ -64,6 +66,7 @@ __all__ = [
     "PlannedNode",
     "Positional",
     "SerializationError",
+    "SerializationProfile",
     "States",
     "ValidationError",
     "ValidationReport",
