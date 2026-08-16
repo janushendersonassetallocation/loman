@@ -1,17 +1,6 @@
 # Change Log
 
 ## [unreleased]
-- BUGFIX: `make book` failed with `module 'mkdocs_graphviz' has no attribute 'makeExtension'`, taking
-  the docs build down. mkdocs_graphviz 2.0 stopped being a Markdown extension and became an MkDocs
-  plugin, so the `markdown_extensions` entry could no longer load it. It is pinned below 2 rather than
-  migrated: the book is built by zensical, which shims only a fixed set of MkDocs plugins and would
-  have silently ignored the graphviz plugin, rendering every graph as a plain code fence instead
-- Documented node converters, which had been supported since 2024 but appeared in no
-  documentation, docstring or example. Added a user guide page and a Marimo notebook covering
-  coercion, the converter-as-validator pattern, where a conversion failure raises versus where it
-  only marks the node ERROR, and the fact that a converter is saved by reference and so must be
-  importable. The `converter` parameter is now described in the `add_node` docstring, so it also
-  reaches the API reference
 - Calc nodes declared on a `@ComputationFactory` class now round-trip, so a saved computation can be reloaded and recomputed. They are methods bound to the definition object, which has no importable path --- after decoration the class's name refers to the factory function --- so the function used to be dropped and the reloaded graph could never update again. It is now stored as the class and method name and rebuilt by constructing a fresh definition object. State set in `__init__` is therefore reconstructed; state mutated on `self` at run time is not, and a definition class that cannot be constructed without arguments still falls back to being stored without a function
 - Serialization format version restarts at 1. The shapes written by pre-release versions are still read on a best-effort basis; they were never covered by a published guarantee, so continuing their numbering would have implied one
 - `make test-compat` runs the version-sensitive tests against the oldest supported pandas. It lives in its own repo-owned makefile rather than alongside the graphviz install hook, and depends on `install-uv` rather than `install`, since `uv run --isolated` resolves its own environment and does not need the project venv
@@ -122,9 +111,6 @@
   `SerializationError` instead. Pass the dill profile to keep serializing them as before, with the
   same portability caveats. `write_dill` and `read_dill` still work but are deprecated and emit a
   `DeprecationWarning` — see "Migrating from write_dill to write_json" for the move
-
-## [0.5.5] (2026-04-12)
-- No user-facing changes; template and tooling synchronisation only
 
 ## [0.5.4] (2026-04-10)
 - Added type hints on ComputationFactory
