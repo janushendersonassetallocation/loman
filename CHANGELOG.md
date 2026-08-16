@@ -65,8 +65,6 @@
   Chocolatey and winget, and fails loudly when `dot` is still missing rather than letting
   the test run report it as a hundred unrelated failures
 - Allow `Computation.compute` to compute one or more blocks
-- Added type hints on ComputationFactory
-- BUGFIX: `compute_and_get_value` sets error state on exception
 - Added utilities for repeated blocks and keyed fan-in/fan-out computations
 - Added `repeated_blocks` to declare repeated blocks within a `@ComputationFactory` class
 - Repeated blocks are now described by an ordered list of features (`FanOut`, `FanIn`, `IdNode`, `InputValue`), replacing the separate `fan_out` and `fan_in` arguments
@@ -114,6 +112,25 @@
   node key, and `full_view_name` reports the name with its original type, as
   `selected_name` does
 - Added `fit_on_render` to scale the graph to the pane on every render
+
+## [0.6.0] (2026-04-26)
+- Added JSON serialization as the replacement for the dill-based format. `Computation.write_json`
+  and `Computation.read_json` are backed by a `ComputationSerializer` built on the Transformer
+  framework, with transformers for enums, importable callables, NodeKeys, numpy arrays, and pandas
+  DataFrames and Series. The default profile stores functions by reference, so a saved graph no
+  longer embeds a dill blob and is portable across Python versions; lambdas and closures raise
+  `SerializationError` instead. Pass the dill profile to keep serializing them as before, with the
+  same portability caveats. `write_dill` and `read_dill` still work but are deprecated and emit a
+  `DeprecationWarning` — see "Migrating from write_dill to write_json" for the move
+
+## [0.5.5] (2026-04-12)
+- No user-facing changes; template and tooling synchronisation only
+
+## [0.5.4] (2026-04-10)
+- Added type hints on ComputationFactory
+- BUGFIX: `compute_and_get_value` sets error state on exception
+- BUGFIX: `ComputationFactory` preserves the decorated class's metadata rather than replacing it
+- Improved type safety across the codebase
 
 ## [0.5.3] (2025-06-20)
 
