@@ -15,8 +15,6 @@ Names = list[Name]
 class PathNotFoundError(Exception):
     """Exception raised when a node path cannot be found."""
 
-    pass
-
 
 def quote_part(part: Hashable) -> str:
     """Quote a node key part for safe representation in paths."""
@@ -184,7 +182,9 @@ def _parse_nodekey(path_str: str, end: int) -> NodeKey:
         if nextchar == "":
             break
         if nextchar == '"':
-            part, end = json.decoder.scanstring(path_str, end + 1)  # type: ignore[attr-defined]
+            # json.decoder.scanstring is rebound at import time to the C
+            # implementation, so it is present at runtime but absent from the stubs.
+            part, end = getattr(json.decoder, "scanstring")(path_str, end + 1)  # noqa: B009
             parts_append(part)
             nextchar = path_str[end : end + 1]
             if nextchar != "" and nextchar != "/":

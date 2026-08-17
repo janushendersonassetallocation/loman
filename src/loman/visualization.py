@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, cast, runtime_checkable
 
 import matplotlib as mpl
 import networkx as nx
@@ -63,12 +63,12 @@ class NodeFormatter(ABC):
     @abstractmethod
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @abstractmethod
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node appearance returning dict of graphviz attributes."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @staticmethod
     def create(
@@ -151,7 +151,6 @@ class ColorByState(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node color based on computation state."""
@@ -201,7 +200,6 @@ class ShapeByType(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with type-based shape styling."""
@@ -232,7 +230,6 @@ class RectBlocks(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return rectangle shape for composite nodes."""
@@ -246,7 +243,6 @@ class StandardLabel(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return standard label for node."""
@@ -268,7 +264,6 @@ class StandardGroup(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard group styling."""
@@ -287,7 +282,6 @@ class StandardStylingOverrides(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard styling overrides."""
@@ -481,14 +475,16 @@ class GraphView:
         """Generate SVG representation of the visualization."""
         if self.viz_dot is None:
             return None
-        svg_bytes: bytes = self.viz_dot.create_svg()  # type: ignore[attr-defined]
+        # pydotplus synthesises a create_<format> method per output format at import
+        # time, so `create_svg` exists at runtime but on no class a checker can see.
+        svg_bytes: bytes = getattr(self.viz_dot, "create_svg")()  # noqa: B009
         return svg_bytes.decode("utf-8")
 
     def view(self) -> None:  # pragma: no cover
         """Open the visualization in a PDF viewer."""
         assert self.viz_dot is not None  # noqa: S101
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-            f.write(self.viz_dot.create_pdf())  # type: ignore[attr-defined]
+            f.write(getattr(self.viz_dot, "create_pdf")())  # noqa: B009  # see svg() above
             if sys.platform == "win32":
                 os.startfile(f.name)  # pragma: no cover  # nosec B606  # noqa: S606
             else:
@@ -715,5 +711,9 @@ def create_root_graph(
 def create_subgraph(group: NodeKey) -> pydotplus.Subgraph:
     """Create a Graphviz subgraph for a node group."""
     c = pydotplus.Subgraph("cluster_" + str(group))
-    c.obj_dict["attributes"]["label"] = str(group)
+    # obj_dict is pydotplus's untyped bag of graph state; its values are a union
+    # wide enough that indexing into one is unresolvable without saying which
+    # branch this key holds.
+    attributes = cast("dict[str, Any]", c.obj_dict["attributes"])
+    attributes["label"] = str(group)
     return c
