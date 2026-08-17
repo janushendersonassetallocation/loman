@@ -18,7 +18,9 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, BinaryIO, TextIO, TypeVar, cast, overload
 
 if TYPE_CHECKING:
+    from .serialization.blobs import BlobStore
     from .serialization.computation import ComputationSerializer
+    from .serialization.profile import SerializationProfile
     from .ui import ComputationWidget
 
 import decorator
@@ -815,6 +817,7 @@ class Computation:
         tags: Iterable[str] | None = None,
         style: str | None = None,
         executor: str | None = None,
+        store: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """Adds or updates a node in a computation.
@@ -837,6 +840,15 @@ class Computation:
         :type kwds: Dictionary, default None
         :param value: If given, the value is inserted into the node, and the node state set to UPTODATE.
         :type value: default None
+        :param converter: Callable applied to any value on its way into the node. The node stores what the
+            converter returns, both for values supplied by ``value``, ``insert`` and ``insert_many``, and for
+            values the node calculates with ``func``. A converter that raises leaves the node in state ERROR
+            without storing the value, which is how a validator is written: check the value and return it
+            unchanged when it is acceptable. The exception propagates to the caller when the value was
+            supplied, but not when it was calculated, where the failure is reported as node state instead.
+            A converter is saved by reference, like a node's function, so it must be importable: a
+            module-level function or builtin round-trips, while a lambda raises ``SerializationError``.
+        :type converter: Callable, default None
         :param serialize: Whether the node should be serialized. Some objects cannot be serialized, in which
             case, set serialize to False
         :type serialize: boolean, default True
@@ -851,6 +863,14 @@ class Computation:
         :type styles: String, default None
         :param executor: Name of executor to run node on
         :type executor: string
+        :param store: Name of the blob store this node's value should be saved
+            to, for values that belong somewhere other than the saved file --- a
+            bucket, a database. The store itself is supplied at save and load
+            time as ``stores={name: ...}``, so the graph names a destination
+            without holding a bucket or a credential. A profile override for the
+            same node wins over this, which is what lets one computation be
+            saved to that store in production and to a plain container in a test.
+        :type store: string, default None
         """
         node_key = to_nodekey(name)
         LOG.debug(f"Adding node {node_key}")
@@ -881,6 +901,7 @@ class Computation:
         node[NodeAttributes.FUNC] = None
         node[NodeAttributes.EXECUTOR] = executor
         node[NodeAttributes.CONVERTER] = converter
+        node[NodeAttributes.STORE] = store
 
         if func:
             node[NodeAttributes.FUNC] = func
@@ -2038,10 +2059,26 @@ class Computation:
     def write_dill_old(self, file_: str | BinaryIO) -> None:
         """Serialize a computation to a file or file-like object.
 
+        .. deprecated::
+            Superseded by :meth:`write_dill`, and by :meth:`save` in turn. Kept
+            because removing it would break callers without warning; it will go
+            in a release that says so.
+
+        .. warning::
+            Not safe to call concurrently. It removes ``__getstate__`` and
+            ``__setstate__`` from the class for the duration of the write, which
+            is process-wide, so another thread pickling a Computation at the same
+            moment gets the wrong representation. :meth:`write_dill` has no such
+            problem, and :meth:`save` supersedes both.
+
         :param file_: If string, writes to a file
         :type file_: File-like object, or string
         """
-        warnings.warn("write_dill_old is deprecated, use write_dill instead", DeprecationWarning, stacklevel=2)
+        warnings.warn(
+            "write_dill_old is deprecated and will be removed in a future release. Use save instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         original_getstate = self.__class__.__getstate__
         original_setstate = self.__class__.__setstate__
 
@@ -2120,6 +2157,92 @@ class Computation:
             msg = "Loaded object is not a Computation"
             raise ValidationError(msg)
 
+    def save(
+        self,
+        path: str,
+        *,
+        profile: "str | SerializationProfile | None" = None,
+        container: str | None = None,
+        stores: "dict[str, BlobStore] | None" = None,
+        serializer: "ComputationSerializer | None" = None,
+    ) -> None:
+        """Save this computation to *path*.
+
+        The default is a ``.loman`` file: one zip holding a ``manifest.json``
+        describing the graph, plus a ``blobs/`` directory holding large values as
+        binary. The manifest still records every value's shape, dtype and index
+        type, so the file can be inspected without decoding any of the data.
+
+        ::
+
+            comp.save('run.loman')                       # efficient, zipped
+            comp.save('run.loman', profile='readable')   # inline JSON, zipped
+            comp.save('run.json')                        # single JSON document
+            comp.save('run_dir', container='dir')        # same layout, unzipped
+
+        *profile* and *container* are independent. The profile decides whether a
+        value's bytes are written inline or out of line; the container decides
+        where they land. The one combination that cannot work is the efficient
+        profile in the ``json`` container, which raises.
+
+        Prefer ``container='dir'`` when saving repeatedly --- updating one value
+        in a zip rewrites the whole archive, at a cost that grows with its size,
+        while a directory rewrites only the file that changed.
+
+        :param path: Destination path. A ``.json`` suffix selects the single
+            document container; anything else defaults to a ``.loman`` zip.
+        :param profile: ``"readable"``, ``"efficient"`` (the default), or a
+            :class:`~loman.serialization.profile.SerializationProfile`.
+        :param container: ``"zip"``, ``"dir"`` or ``"json"``. Inferred from
+            *path* when omitted.
+        :param stores: Named
+            :class:`~loman.serialization.blobs.BlobStore` instances for values
+            that belong somewhere other than the saved file --- a bucket, a
+            database. A node is routed to one by ``add_node(store=...)`` or a
+            profile override. The same names must be supplied to :meth:`load`.
+        :param serializer: Optional custom serializer, for user-defined types.
+        """
+        from .serialization.computation import ComputationSerializer
+
+        s = serializer if serializer is not None else ComputationSerializer()
+        s.save(self, path, profile=profile, container=container, stores=stores)
+
+    @staticmethod
+    def load(
+        path: str,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        allow_code: bool = True,
+        stores: "dict[str, BlobStore] | None" = None,
+    ) -> "Computation":
+        """Load a computation saved by :meth:`save`, in any container.
+
+        The container is detected from the file itself, so a ``.loman`` archive,
+        a directory and a plain JSON document all load through this one call ---
+        including documents written by earlier format versions.
+
+        .. warning::
+            Loading restores node functions, which means importing the modules
+            the file names, or unpickling a dill blob out of it. Both run code
+            chosen by the file. Only load files you trust, or pass
+            ``allow_code=False``.
+
+        :param path: Path to a ``.loman`` file, a container directory, or a
+            JSON document.
+        :param serializer: Optional custom serializer, matching the one used to
+            save.
+        :param allow_code: When false, callables are not resolved; values,
+            structure, states and tags still load.
+        :param stores: Named stores for values held outside the file. A saved
+            file records a store's name but never its configuration, so it never
+            contains a bucket or a credential --- and cannot resolve external
+            values without the matching store being supplied here.
+        :rtype: Computation
+        """
+        from .serialization.computation import ComputationSerializer
+
+        return ComputationSerializer.load_path(path, serializer=serializer, allow_code=allow_code, stores=stores)
+
     def write_json(self, file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> None:
         """Serialize a computation to a JSON file or file-like object.
 
@@ -2142,12 +2265,28 @@ class Computation:
             s.dump(self, file_)
 
     @staticmethod
-    def read_json(file_: str | TextIO, *, serializer: "ComputationSerializer | None" = None) -> "Computation":
+    def read_json(
+        file_: str | TextIO,
+        *,
+        serializer: "ComputationSerializer | None" = None,
+        allow_code: bool = True,
+    ) -> "Computation":
         """Deserialize a computation from a JSON file or file-like object.
+
+        .. warning::
+            Loading a computation restores its node functions, which means
+            importing the modules the file names, or unpickling a dill blob out
+            of it. Both run code chosen by the file. Only load files from
+            sources you trust, or pass ``allow_code=False``.
 
         :param file_: Source file path (str) or text-mode file-like object.
         :param serializer: Optional custom serializer.  If ``None`` the default
             :class:`~loman.serialization.computation.ComputationSerializer` is used.
+        :param allow_code: When false, encoded callables are skipped rather than
+            resolved, so no module named by the file is imported and no dill blob
+            is unpickled. Values, structure, states and tags still load; every
+            node's function and converter comes back as ``None``, so the graph
+            can be inspected but not recalculated.
         :rtype: Computation
         """
         from .serialization.computation import ComputationSerializer
@@ -2155,9 +2294,9 @@ class Computation:
         s = serializer if serializer is not None else ComputationSerializer()
         if isinstance(file_, str):
             with open(file_, encoding="utf-8") as f:
-                return s.load(f)
+                return s.load(f, allow_code=allow_code)
         else:
-            return s.load(file_)
+            return s.load(file_, allow_code=allow_code)
 
     def copy(self) -> "Computation":
         """Create a copy of a computation.
@@ -2420,6 +2559,8 @@ class Computation:
         show_expansion: bool = False,
         collapse_all: bool = True,
         editable: bool = True,
+        buildable: bool = False,
+        namespace: dict[str, Any] | None = None,
         fit_on_render: bool = False,
         max_rendered_nodes: int = 500,
         rankdir: str = "LR",
@@ -2440,6 +2581,15 @@ class Computation:
 
         :param editable: Allow scalar input editing and computation controls.
             Expanding and collapsing blocks stays available either way.
+        :param buildable: Allow the graph itself to be built in the
+            widget: adding, redefining, renaming and deleting nodes. Off by
+            default, and needs ``editable`` too, because defining a calculation
+            node compiles and runs an expression typed in the browser inside
+            this kernel.
+        :param namespace: Globals a node built in the widget is compiled
+            against, so its expression can use the notebook's own imports.
+            Pass ``globals()``. The default is an empty namespace, in which
+            only builtins are in scope.
         :param fit_on_render: Scale the graph to fit the pane on every render,
             rather than opening at natural size. Useful when the shape of a
             large graph matters more than its labels.
@@ -2464,6 +2614,8 @@ class Computation:
             show_expansion=show_expansion,
             collapse_all=collapse_all,
             editable=editable,
+            buildable=buildable,
+            namespace=namespace,
             fit_on_render=fit_on_render,
             max_rendered_nodes=max_rendered_nodes,
             rankdir=rankdir,
