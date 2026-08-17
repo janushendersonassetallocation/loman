@@ -97,3 +97,16 @@ skips = ["B301", "B403", "B404"]
 # @overload stubs delegate their documentation to the concrete implementation,
 # so they should not count against docstring coverage.
 ignore-overloaded-functions = true
+
+[tool.check_test_layout]
+# Tests live flat under tests/ and are grouped by behaviour rather than
+# mirroring the src/loman/ package path — tests/test_serialization.py covers
+# the whole serialization package, and tests/test_typing.py exercises the
+# annotated public surface and so has no single source counterpart.
+#
+# The guarantee that filename parity is a proxy for is enforced directly
+# instead: `make test` runs with a coverage gate and the suite has full
+# coverage of every module in src/loman/, so a source module cannot go
+# untested.
+enforce = false
+reason = "Tests are grouped by behaviour; per-module coverage is enforced by the full coverage gate in `make test`."
