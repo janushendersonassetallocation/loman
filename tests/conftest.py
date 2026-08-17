@@ -5,7 +5,23 @@ Security Notes:
 - S603/S607 (subprocess usage): Any subprocess calls use controlled inputs in test environments
 """
 
+import shutil
+
+import pytest
+
 from loman import Computation, ComputationFactory, calc_node, input_node
+
+# Rendering a graph or a widget goes through pydotplus, which shells out to
+# graphviz's `dot`. `make install` provisions that binary via the pre-install hook
+# in .rhiza/make.d/00-additional-deps.mk, so it is always there for `make test` and
+# for local work -- but CI jobs that call `uv run pytest` directly never trigger
+# make, and every render-dependent assertion then fails on the same
+# InvocationException. Skip those modules rather than reporting a missing system
+# package as ~106 test failures.
+requires_dot = pytest.mark.skipif(
+    shutil.which("dot") is None,
+    reason="graphviz 'dot' is not on PATH; install it with scripts/install-graphviz.sh",
+)
 
 
 @ComputationFactory

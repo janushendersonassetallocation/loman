@@ -54,7 +54,7 @@ from loman.computeengine import (
 from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
 from loman.nodekey import to_nodekey
 from loman.visualization import GraphView
-from tests.conftest import BasicFourNodeComputation
+from tests.conftest import BasicFourNodeComputation, requires_dot
 
 
 def test_computation_subscription_batches_public_mutations():
@@ -2003,6 +2003,7 @@ class _InstrumentBlock:
 
     @calc_node
     def value(self, data, scale):
+        """Scale the block's input, giving each repeated block a distinct result."""
         return data * scale
 
 
@@ -4215,6 +4216,7 @@ class TestGetDescendentsInternal:
         assert to_nodekey("c") in descendents
 
 
+@requires_dot
 class TestReprSvg:
     """Tests for Computation._repr_svg_."""
 
@@ -4333,6 +4335,11 @@ class TestUnsubscribedComputationsPayNothing:
 
     @staticmethod
     def _chain(length: int) -> Computation:
+        """Build a linear chain of ``length`` nodes, each incrementing its predecessor.
+
+        Only ``x0`` carries a value; the rest stay uncomputed, so inserting into
+        ``x0`` makes every descendant stale in one propagation pass.
+        """
         comp = Computation()
         comp.add_node("x0", value=0.0)
         for i in range(1, length):
@@ -4341,6 +4348,12 @@ class TestUnsubscribedComputationsPayNothing:
 
     @staticmethod
     def _count_hashes(action) -> int:
+        """Count how many times ``NodeKey.__hash__`` runs while ``action`` executes.
+
+        Patches the dunder for the duration of the call and restores it in a
+        ``finally``, so an exception in ``action`` cannot leak the counter into
+        later tests.
+        """
         original = NodeKey.__hash__
         calls = [0]
 
