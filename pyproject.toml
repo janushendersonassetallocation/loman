@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loman"
-version = "0.6.1-alpha.6"
+version = "0.7.0"
 authors = [
   { name="Ed Parcell", email="edparcell@gmail.com" },
 ]
@@ -27,8 +27,18 @@ dependencies = [
     "pydotplus",
     "dill >= 0.2.5",
     "networkx >= 2.0",
-    "pandas >= 0.19.2",
-    "attrs >= 25.0"
+    # 2.0 is the real floor: serialization records each datetime value's
+    # resolution using Timestamp.unit / DatetimeIndex.unit and restores it with
+    # as_unit(), all of which arrived with non-nanosecond support in pandas 2.0.
+    # Without them a microsecond index would be reread as nanoseconds, which is
+    # wrong timestamps rather than an import error.
+    "pandas >= 2.0",
+    "attrs >= 25.0",
+    # Required, not optional. Saving compresses by default, and that is only a
+    # sensible default because zstd rejects incompressible data at ~1 GB/s ---
+    # 25x faster than zlib, which is what let the arbitrary "sample the first
+    # 256 KiB and guess" heuristic be deleted rather than fixed.
+    "zstandard >= 0.22"
 ]
 
 [project.optional-dependencies]
@@ -36,11 +46,16 @@ ui = [
     "anywidget>=0.9",
     "traitlets>=5.14",
 ]
+# Optional: parquet storage for DataFrames, for readability by other tools.
+# Not required --- without it, frames are stored as .npy, which is numpy's own
+# format and needs no extra package.
+efficient = [
+    "pyarrow>=15",
+]
 
 [dependency-groups]
 dev = [
     "ruff>=0.12.0",
-    "mypy>=1.0",
     "marimo>=0.15",
     "scipy>=1.16.3",
 ]
@@ -51,7 +66,16 @@ Homepage = "https://github.com/janusassetallocation/loman"
 [tool.hatch.build.targets.wheel]
 packages = ["src/loman"]
 
+[tool.deptry.per_rule_ignores]
+# pyarrow is loaded by name through loman._extras.require, so there is no import
+# statement for deptry's static analysis to find. It is genuinely used --- see
+# transformer.py --- and genuinely optional, which is the point of resolving it
+# at run time.
+DEP002 = ["pyarrow"]
+
 [tool.deptry.package_module_name_map]
+pyarrow = "pyarrow"
+zstandard = "zstandard"
 matplotlib = "matplotlib"
 pydotplus = "pydotplus"
 decorator = "decorator"
@@ -63,7 +87,6 @@ attrs = "attrs"
 anywidget = "anywidget"
 traitlets = "traitlets"
 numpy = "numpy"
-mypy = "mypy"
 ruff = "ruff"
 dill = "dill"
 
