@@ -8,7 +8,7 @@ LICENSE_FAIL_ON ?= GPL;LGPL;AGPL
 .PHONY: all deptry fmt license todos suppression-audit semgrep
 
 ##@ Quality and Formatting
-all: fmt deptry test docs-coverage security license typecheck rhiza-test ## run all CI targets locally
+all: fmt deptry test docs-coverage security license typecheck ## run all CI targets locally
 
 deptry: install-uv ## Run deptry
 	@if [ -d ${SOURCE_FOLDER} ]; then \
