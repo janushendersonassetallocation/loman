@@ -12,7 +12,14 @@ description = "Loman tracks state of computations, and the dependencies between 
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
+    # The CI test and typecheck matrices are generated from these `Python :: 3.x`
+    # classifiers. With only the bare `Python :: 3` below, that list came out empty,
+    # both matrices expanded to zero jobs, and the CI gate then reported "test:
+    # failure / typecheck: failure" for jobs that had never run at all.
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -20,19 +27,27 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 license-files = ["LICEN[CS]E*"]
+# Lower bounds must hold for every interpreter this package is tested on, not
+# just the oldest one it supports. The --resolution lowest-direct CI job installs
+# exactly these versions, so a floor predating wheels for the newest tested
+# Python makes uv fall back to building from source -- which fails on 3.12+,
+# where distutils is gone. The extension modules therefore floor at their first
+# release with cp312 wheels *and* NumPy 2 support; the pure-Python ones only
+# need to be new enough to build under modern setuptools.
 dependencies = [
-    "decorator",
-    "matplotlib",
-    "numpy",
-    "pydotplus",
-    "dill >= 0.2.5",
-    "networkx >= 2.0",
-    # 2.0 is the real floor: serialization records each datetime value's
+    "decorator >= 5.1.1",
+    "matplotlib >= 3.9.0",
+    "numpy >= 2.2",
+    "pydotplus >= 2.0.2",
+    "dill >= 0.3.6",
+    "networkx >= 3.2.1",
+    # 2.0 is the semantic floor: serialization records each datetime value's
     # resolution using Timestamp.unit / DatetimeIndex.unit and restores it with
     # as_unit(), all of which arrived with non-nanosecond support in pandas 2.0.
     # Without them a microsecond index would be reread as nanoseconds, which is
-    # wrong timestamps rather than an import error.
-    "pandas >= 2.0",
+    # wrong timestamps rather than an import error. The floor sits higher still
+    # for the wheel-availability reason above.
+    "pandas >= 2.2.2",
     "attrs >= 25.0",
     # Required, not optional. Saving compresses by default, and that is only a
     # sensible default because zstd rejects incompressible data at ~1 GB/s ---
@@ -58,6 +73,19 @@ dev = [
     "ruff>=0.12.0",
     "marimo>=0.15",
     "scipy>=1.16.3",
+    # test_ui_value, test_ui_viewmodel and test_visualization import hypothesis at
+    # module scope, so plain `make test` cannot collect them without it. The
+    # hypothesis-test target passes `--with hypothesis`, which only covers itself.
+    # Floored at 3.12 support: 6.0 still calls EntryPoints.get(), removed in 3.12.
+    "hypothesis>=6.98.0",
+    # The make targets provision the test runner ad-hoc with `uv run --with pytest`,
+    # which leaves it undeclared for anything that does not go through them --
+    # notably the CI job running `uv run --all-groups ... pytest`, where it fails
+    # with "Failed to spawn: pytest". pytest-mock supplies the `mocker` fixture and
+    # pytest-timeout backs the `timeout` setting in pytest.ini.
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+    "pytest-timeout>=2.3",
 ]
 
 [project.urls]
@@ -97,6 +125,13 @@ skips = ["B301", "B403", "B404"]
 # @overload stubs delegate their documentation to the concrete implementation,
 # so they should not count against docstring coverage.
 ignore-overloaded-functions = true
+
+# Functions and classes defined *inside* another function are local scaffolding,
+# not API: the tests build computation graphs from inline node functions such as
+# `def b(a): return a + 1`, and documenting those only restates the body. The
+# enclosing test keeps its docstring, which is where the intent belongs.
+ignore-nested-functions = true
+ignore-nested-classes = true
 
 [tool.check_test_layout]
 # Tests live flat under tests/ and are grouped by behaviour rather than
