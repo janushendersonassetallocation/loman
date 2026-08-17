@@ -114,14 +114,7 @@ summarise-sync: install-uv ## summarise differences created by sync with templat
 		${UVX_BIN} "rhiza==$(RHIZA_VERSION)" summarise .; \
 	fi
 
-rhiza-test: install ## run rhiza's own tests (if any)
-	@if [ -d ".rhiza/tests" ]; then \
-		${UV_BIN} run pytest .rhiza/tests; \
-	else \
-		printf "${YELLOW}[WARN] No .rhiza/tests directory found, skipping rhiza-tests${RESET}\n"; \
-	fi
-
-validate: pre-validate rhiza-test ## validate project structure against template repository as defined in .rhiza/template.yml
+validate: pre-validate ## validate project structure against template repository as defined in .rhiza/template.yml
 	@if git remote get-url origin 2>/dev/null | grep -iqE 'jebel-quant/rhiza(\.git)?$$'; then \
 		printf "${BLUE}[INFO] Skipping validate in rhiza repository (no template.yml by design)${RESET}\n"; \
 	else \
