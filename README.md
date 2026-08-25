@@ -159,11 +159,11 @@ make check
 
 ## 📖 Documentation
 
-- 📚 [Complete Documentation](http://loman.readthedocs.io/): Comprehensive guides and API reference
-- 🚀 [Quickstart Guide](http://loman.readthedocs.io/en/latest/user/quickstart.html): Get up and running in minutes
-- 💡 [User Guide](http://loman.readthedocs.io/en/latest/user/intro.html): In-depth concepts and strategies
+- 📚 [Complete Documentation](https://janushendersonassetallocation.github.io/loman/): Comprehensive guides and API reference
+- 🚀 [Quickstart Guide](https://janushendersonassetallocation.github.io/loman/user/quickstart/): Get up and running in minutes
+- 💡 [User Guide](https://janushendersonassetallocation.github.io/loman/user/intro/): In-depth concepts and strategies
 - 📊 [Interactive Examples](examples/): Real-world financial modeling examples
-- 🔧 [API Reference](http://loman.readthedocs.io/en/latest/api.html): Complete function and class documentation
+- 🔧 [API Reference](https://janushendersonassetallocation.github.io/loman/api/): Complete function and class documentation
 
 ## ☁️ Try Loman in Codespaces
 
