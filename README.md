@@ -162,8 +162,13 @@ make check
 - 📚 [Complete Documentation](https://janushendersonassetallocation.github.io/loman/): Comprehensive guides and API reference
 - 🚀 [Quickstart Guide](https://janushendersonassetallocation.github.io/loman/user/quickstart/): Get up and running in minutes
 - 💡 [User Guide](https://janushendersonassetallocation.github.io/loman/user/intro/): In-depth concepts and strategies
-- 📊 [Interactive Examples](examples/): Real-world financial modeling examples
+- 📊 [Interactive Examples](https://janushendersonassetallocation.github.io/loman/notebooks/): Real-world financial modeling examples
 - 🔧 [API Reference](https://janushendersonassetallocation.github.io/loman/api/): Complete function and class documentation
+
+### Run Locally with Marimo
+```bash
+make marimo
+```
 
 ## ☁️ Try Loman in Codespaces
 
