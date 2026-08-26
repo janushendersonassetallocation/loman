@@ -122,6 +122,7 @@ Loman transforms how you build and maintain complex data processing pipelines by
 ```bash
 pip install loman
 ```
+More detailed instructions can be found at: [User Guide-Installation](https://janushendersonassetallocation.github.io/loman/user/install/)
 
 ### From source (development)
 
@@ -131,11 +132,6 @@ cd loman
 pip install -e .
 ```
 **Note**: Use `-e` flag for editable installation during development
-
-### Installation of Graphviz
-```bash
-(https://vscode.dev/github/nikjascrazzy/MyLoman/blob/feature/improve-documents/docs/user/install.md)
-```
 
 ## 🛠️ Development
 
