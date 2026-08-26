@@ -12,34 +12,58 @@ If you don't have [pip](https://pip.pypa.io) installed (tisk tisk!),
 [this Python installation guide](http://docs.python-guide.org/en/latest/starting/installation/)
 can guide you through the process.
 
-## Dependency on graphviz
+## Installing Graphviz
 
-Loman uses the [graphviz](http://www.graphviz.org/) tool, and the Python [graphviz library](https://pypi.python.org/pypi/graphviz) to draw dependency graphs. If you are using Continuum's excellent [Anaconda Python](https://www.continuum.io/downloads) distribution (recommended), then you can install them by running these commands:
+Loman draws dependency graphs by shelling out to [Graphviz](https://graphviz.org/)'s
+`dot` command. The Python glue (`pydotplus`) is installed automatically with Loman,
+but the Graphviz binaries themselves are a separate, non-Python program that you
+need to install yourself — `pip install loman` cannot do it for you.
+
+Everything else in Loman works without Graphviz; you only need it for the
+visualization features (for example `Computation.draw()` and the graph widgets).
+
+### Install the binaries
+
+Graphviz publishes packages for every major platform. Its
+[official download page](https://graphviz.org/download/) has full instructions,
+but for most people one of these one-liners is enough:
+
+| Platform            | Command                                       |
+| ------------------- | --------------------------------------------- |
+| macOS (Homebrew)    | `brew install graphviz`                       |
+| Debian / Ubuntu     | `sudo apt-get install graphviz`               |
+| Fedora / RHEL       | `sudo dnf install graphviz`                   |
+| Windows (Chocolatey)| `choco install graphviz`                      |
+| Windows (winget)    | `winget install Graphviz.Graphviz`            |
+
+After installing, confirm the `dot` binary is on your `PATH`:
 
 ```bash
-$ conda install graphviz
-$ python install graphviz
+$ dot -V
+dot - graphviz version 12.0.0 (...)
 ```
+
+If that prints a version, Loman's visualization features are ready to use. If it
+reports that `dot` cannot be found, see the section below.
 
 ### Windows users: Adding the graphviz binary to your PATH
 
-Under Windows, Anaconda's graphviz package installs the graphviz tool's binaries in a subdirectory under the bin directory, but only the bin directory is on the PATH. So we will need to add the subdirectory to the path. To find out where the bin directory is in your installation, use the where command:
+On Windows, some Graphviz installers place `dot.exe` in a directory that is not on
+your `PATH`, so Loman cannot find it even though Graphviz is installed. To fix this,
+locate `dot.exe` and add its directory to your `PATH`.
+
+To find where `dot.exe` was installed, use the `where` command (it may not find it
+if the directory isn't yet on your `PATH`, in which case look under your Graphviz
+installation directory, typically `C:\Program Files\Graphviz\bin`):
 
 ```
 C:\>where dot
-C:\ProgramData\Anaconda3\Library\bin\dot.bat
-C:\>dir C:\ProgramData\Anaconda3\Library\bin\graphviz\dot.exe
- Volume in drive C has no label.
- Volume Serial Number is XXXX-XXXX
-
- Directory of C:\ProgramData\Anaconda3\Library\bin\graphviz
-
-01/03/2017  04:16 PM             7,680 dot.exe
-           1 File(s)          7,680 bytes
-           0 Dir(s)  xx bytes free
+C:\Program Files\Graphviz\bin\dot.exe
 ```
 
-You can then add the subdirectory graphviz to your PATH. You can either do this through the Windows Control Panel, or in an interactive session, by running this code:
+You can then add that `bin` directory to your `PATH`. The permanent fix is to add
+it through the Windows *Environment Variables* control panel. To set it just for
+the current Python session, you can run:
 
 ```python
 import sys, os
@@ -48,5 +72,5 @@ def ensure_path(path):
     if path not in paths:
         paths.append(path)
         os.environ['PATH'] = ';'.join(paths)
-ensure_path(r'C:\ProgramData\Anaconda3\Library\bin\graphviz')
+ensure_path(r'C:\Program Files\Graphviz\bin')
 ```
