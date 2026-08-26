@@ -179,7 +179,6 @@ make check
 - ⚡ **Zero Setup** - Everything configured ready to go
 - 🎯 **VS Code Extensions** - Python, testing, and productivity extensions pre-installed
 
-
 ## 👥 Contributing
 
 We welcome contributions! 🎉
