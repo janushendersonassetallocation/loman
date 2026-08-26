@@ -130,8 +130,12 @@ git clone https://github.com/janusassetallocation/loman.git
 cd loman
 pip install -e .
 ```
-
 **Note**: Use `-e` flag for editable installation during development
+
+### Installation of Graphviz
+```bash
+(https://vscode.dev/github/nikjascrazzy/MyLoman/blob/feature/improve-documents/docs/user/install.md)
+```
 
 ## 🛠️ Development
 
