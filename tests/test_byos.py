@@ -125,8 +125,8 @@ class TestNodeDeclaredStore:
         assert restored.v.prices.equals(frame)
         assert store.reads
 
-    def test_roundtrip_through_an_external_store2(self, tmp_path):
-        """A node marked for a store round-trips through it."""
+    def test_roundtrip_through_a_memoryblobstore(self, tmp_path):
+        """A node aiming to achieve code coverage for the in-memory store."""
         frame = _frame()
         comp = Computation()
         comp.add_node("prices", value=frame, store="warehouse")
