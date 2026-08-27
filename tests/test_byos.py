@@ -15,8 +15,8 @@ import pytest
 
 from loman import Computation
 from loman.exception import SerializationError
-from loman.serialization import SerializationProfile
-from loman.serialization.blobs import MANIFEST_NAME, BlobStore
+from loman.serialization import MemoryBlobStore, SerializationProfile
+from loman.serialization.blobs import MANIFEST_NAME, BlobStore, _require_parent
 
 LARGE = 20_000
 
@@ -84,6 +84,29 @@ def _manifest(path, container="zip"):
         return json.loads(zf.read(MANIFEST_NAME))
 
 
+def test_payload_to_bytes_accepts_bytes():
+    """Accept byte payloads without converting their contents."""
+    from loman.serialization.blobs import _payload_to_bytes
+
+    assert _payload_to_bytes(b"hello") == b"hello"
+
+
+def test_read_blob_missing_key():
+    """Raise a serialization error when a blob key is absent."""
+    store = MemoryBlobStore()
+
+    with pytest.raises(SerializationError, match="No blob stored under"):
+        store.read_blob("missing")
+
+
+def test_require_parent_missing_directory(tmp_path):
+    """Report an error when the output parent directory is missing."""
+    path = tmp_path / "does-not_exist" / "file.loman"
+
+    with pytest.raises(SerializationError, match="does-not_exist"):
+        _require_parent(path)
+
+
 class TestNodeDeclaredStore:
     """A node names its store; save and load supply the implementation."""
 
@@ -101,6 +124,18 @@ class TestNodeDeclaredStore:
         restored = Computation.load(str(tmp_path / "c.loman"), stores={"warehouse": store})
         assert restored.v.prices.equals(frame)
         assert store.reads
+
+    def test_roundtrip_through_an_external_store2(self, tmp_path):
+        """A node marked for a store round-trips through it."""
+        frame = _frame()
+        comp = Computation()
+        comp.add_node("prices", value=frame, store="warehouse")
+
+        store = MemoryBlobStore()
+        comp.save(str(tmp_path / "c.loman"), stores={"warehouse": store})
+
+        restored = Computation.load(str(tmp_path / "c.loman"), stores={"warehouse": store})
+        assert restored.v.prices.equals(frame)
 
     def test_bytes_are_not_in_the_container(self, tmp_path):
         """The archive holds the manifest only; the data went elsewhere."""
