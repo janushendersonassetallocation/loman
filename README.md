@@ -122,6 +122,7 @@ Loman transforms how you build and maintain complex data processing pipelines by
 ```bash
 pip install loman
 ```
+More detailed instructions can be found at: [User Guide-Installation](https://janushendersonassetallocation.github.io/loman/user/install/)
 
 ### From source (development)
 
@@ -130,7 +131,6 @@ git clone https://github.com/janusassetallocation/loman.git
 cd loman
 pip install -e .
 ```
-
 **Note**: Use `-e` flag for editable installation during development
 
 ## 🛠️ Development
@@ -159,11 +159,16 @@ make check
 
 ## 📖 Documentation
 
-- 📚 [Complete Documentation](http://loman.readthedocs.io/): Comprehensive guides and API reference
-- 🚀 [Quickstart Guide](http://loman.readthedocs.io/en/latest/user/quickstart.html): Get up and running in minutes
-- 💡 [User Guide](http://loman.readthedocs.io/en/latest/user/intro.html): In-depth concepts and strategies
-- 📊 [Interactive Examples](examples/): Real-world financial modeling examples
-- 🔧 [API Reference](http://loman.readthedocs.io/en/latest/api.html): Complete function and class documentation
+- 📚 [Complete Documentation](https://janushendersonassetallocation.github.io/loman/): Comprehensive guides and API reference
+- 🚀 [Quickstart Guide](https://janushendersonassetallocation.github.io/loman/user/quickstart/): Get up and running in minutes
+- 💡 [User Guide](https://janushendersonassetallocation.github.io/loman/user/intro/): In-depth concepts and strategies
+- 📊 [Interactive Examples](https://janushendersonassetallocation.github.io/loman/notebooks/): Real-world financial modeling examples
+- 🔧 [API Reference](https://janushendersonassetallocation.github.io/loman/api/): Complete function and class documentation
+
+### Run Locally with Marimo
+```bash
+make marimo
+```
 
 ## ☁️ Try Loman in Codespaces
 
@@ -178,7 +183,6 @@ make check
 - 📓 **Interactive Notebooks** - Marimo notebooks for exploring examples
 - ⚡ **Zero Setup** - Everything configured ready to go
 - 🎯 **VS Code Extensions** - Python, testing, and productivity extensions pre-installed
-
 
 ## 👥 Contributing
 
