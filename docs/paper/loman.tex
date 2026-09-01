@@ -84,12 +84,13 @@ redefined, only the affected part of the graph is invalidated and only the
 part actually required by a requested output is recomputed. The library
 additionally provides hierarchical node namespaces and composable sub-graphs
 (\emph{blocks}), non-mutating validation and execution planning, pluggable
-executors, JSON and \code{dill} serialization of an entire computation
-including intermediate values, and GraphViz-based visualization in which node
-colour encodes state. This document describes the computation model, the
-state machine that drives partial recalculation, the public API, the internal
-architecture of the repository, and the engineering practices that surround
-it.
+executors, serialization of an entire computation --- including intermediate
+values --- into a self-describing \code{.loman} container with pluggable value
+storage, GraphViz-based visualization in which node colour encodes state, and
+an optional AnyWidget-based interactive view of a live computation. This
+document describes the computation model, the state machine that drives partial
+recalculation, the public API, the internal architecture of the repository, and
+the engineering practices that surround it.
 \end{abstract}
 
 \tableofcontents
@@ -132,11 +133,12 @@ dependency tree behind a spreadsheet.
 The remainder of this document is organised as follows. Section~\ref{sec:model}
 introduces the computation model. Section~\ref{sec:states} describes the state
 machine that makes partial recalculation possible. Section~\ref{sec:api}
-surveys the public API. Sections~\ref{sec:hierarchy}--\ref{sec:viz} cover
+surveys the public API. Sections~\ref{sec:hierarchy}--\ref{sec:ui} cover
 hierarchical namespaces and blocks, validation and planning, execution,
-serialization, and visualization. Section~\ref{sec:repo} describes the
-repository layout and engineering practices, and Section~\ref{sec:limits}
-discusses limitations and directions for future work.
+serialization, visualization and the interactive widget.
+Section~\ref{sec:repo} describes the repository layout and engineering
+practices, and Section~\ref{sec:limits} discusses limitations and directions
+for future work.
 
 %==================================================================
 \section{The computation model}\label{sec:model}
@@ -189,6 +191,7 @@ Attribute & Meaning \\
 \code{timing}    & Start, end and elapsed time of the most recent evaluation. \\
 \code{executor}  & Name of the executor on which the node should run. \\
 \code{converter} & Optional callable applied to a value on insertion. \\
+\code{store}     & Name of the blob store the value is written to on save (Section~\ref{sec:serial}). \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -390,7 +393,19 @@ The primary constructor is \code{add\_node}. Beyond \code{func}, \code{args},
 inserted values), \code{serialize} (whether the node participates in
 serialization), \code{group} and \code{style} (rendering hints), \code{tags}
 (arbitrary labels, queryable via \code{nodes\_by\_tag}), \code{executor} (the
-name of the executor to run on) and \code{metadata}.
+name of the executor to run on), \code{store} (the named blob store its value
+is written to, Section~\ref{sec:serial}) and \code{metadata}.
+
+The \code{converter} deserves a note, because it does double duty. It is
+applied to every value entering the node --- whether supplied by \code{value},
+\code{insert} or \code{insert\_many}, or produced by the node's own function
+--- and the node stores what the converter returns. That makes it the natural
+place for a type coercion, and equally the natural place for a
+\emph{validator}: a callable that checks its argument and returns it unchanged,
+raising otherwise. Because a converter that raises leaves the node in
+\code{ERROR} rather than propagating, a validation failure is recorded in the
+graph in the same shape as any other node failure, and blocks exactly the
+descendants that depend on it.
 
 For larger graphs, a declarative class-based form avoids repeated
 \code{add\_node} calls. A class decorated with \code{@computation\_factory}
@@ -579,25 +594,104 @@ out of failure containment for callers who prefer to propagate.
 %==================================================================
 
 A computation can be written whole --- structure, functions, states and
-values --- and read back. Two formats are supported.
+values --- and read back. The current interface is a single pair of methods,
+\code{save(path)} and \code{load(path)}, beneath which two independent choices
+are made: a \emph{profile}, deciding how each value is encoded, and a
+\emph{container}, deciding where the encoded bytes land.
 
-\code{write\_dill} / \code{read\_dill} use \code{dill} \cite{dill} to pickle the
-graph. This handles almost any Python object, including closures, at the cost
-of a binary, version-sensitive format that requires trusting the source of the
-file.
+\begin{lstlisting}
+comp.save('run.loman')                      # efficient, zipped (default)
+comp.save('run.loman', profile='readable')  # inline JSON, zipped
+comp.save('run.json')                       # single JSON document
+comp.save('run_dir', container='dir')       # same layout, unzipped
 
-\code{write\_json} / \code{read\_json} use a transformer framework in
-\code{loman/serialization/}. A \code{Transformer} holds a registry of type
-handlers, and dispatch is by exact type or registered subtype, with classes
-ordered so that the most specific handler wins. Handlers ship for
-\code{numpy} \cite{numpy} arrays, enumerations, \code{attrs} classes and
-dataclasses, and user types can register by implementing a
-\code{CustomTransformer} or the \code{Transformable} protocol. Functions are
-stored by importable module path, which means a lambda cannot be serialized
-and raises \code{SerializationError} --- a deliberate constraint that pushes
-users towards module-level functions that a reader can actually resolve. The
-result is a plain, human-readable JSON document that can be inspected in a text
-editor without running any code.
+comp = Computation.load('run.loman')        # container detected from the file
+\end{lstlisting}
+
+\subsection{Containers}
+
+The default container is a \code{.loman} file: a zip holding a
+\code{manifest.json} that describes the graph, alongside a \code{blobs/}
+directory holding large values as binary. \code{container='dir'} writes the same
+layout unzipped, which matters when saving repeatedly --- updating one value in
+a zip rewrites the whole archive at a cost that grows with its size, while a
+directory rewrites only the file that changed. A \code{.json} path selects a
+single self-contained document. \code{load} detects the container from the file
+itself, so all three --- and documents written by earlier format versions ---
+come back through one call.
+
+\subsection{Profiles}
+
+A \code{SerializationProfile} decides whether a value is inlined into the
+manifest or written out of line as a blob, and how blobs are encoded. Two ship.
+\code{READABLE} keeps everything inline, so the artefact is JSON that can be
+read end to end. \code{EFFICIENT}, the default, inlines values up to 8~KiB ---
+about a 1024-element \code{float64} array, below which a separate container
+member costs more than the JSON it saves --- and writes larger ones as
+compressed blobs. Compression is named rather than inferred (\code{zstd:1} by
+default), and whichever of the compressed and raw payloads is smaller is what
+gets stored, so nothing is ever written larger than it started.
+
+The property that makes the efficient profile usable in practice is that the
+manifest still records every value's shape, dtype and index type. A saved graph
+can therefore be inspected --- what is in it, how large, of what type --- without
+decoding any of the data.
+
+Profiles carry \emph{overrides} keyed by node-path glob or by tag, so one save
+can treat parts of the graph differently: \code{market\_data/**} out of line and
+compressed, everything else inline.
+
+The two axes are genuinely independent, and only one combination is refused.
+The efficient profile in a single JSON document has nowhere to put blobs, and
+base64-inlining them would inflate them by a third and force a read-all, so it
+raises and points at the zip container.
+
+\subsection{Pluggable value storage}
+
+Values need not live in the saved file at all. A \code{BlobStore} is a named
+sink; \code{DirBlobStore}, \code{ZipBlobStore} and \code{MemoryBlobStore} ship,
+and a user-supplied store might be an object bucket or a database. A node is
+routed to one by \code{add\_node(store=\ldots)} or by a profile override, and the
+matching store must be supplied again to \code{load}.
+
+The security property here is deliberate. A saved file records a store's
+\emph{name} and never its configuration, so an artefact can reference values in
+a private bucket without ever containing a credential --- and cannot resolve
+those values unless the reader supplies the store.
+
+\subsection{Values and functions}
+
+Value encoding is handled by a transformer registry in
+\code{loman/serialization/}. A \code{Transformer} holds type handlers and
+dispatches by exact type or registered subtype, with classes ordered so the
+most specific handler wins. Handlers ship for \code{numpy} \cite{numpy} arrays,
+\code{pandas} \cite{pandas} frames, series and indexes, enumerations,
+\code{attrs} classes and dataclasses; user types register by implementing a
+\code{CustomTransformer} or the \code{Transformable} protocol.
+
+The value model aims to be lossless in the details that are usually lost. A
+datetime index's resolution, for instance, is recorded on write and restored
+with \code{as\_unit} on read --- which is why \code{pandas}~2.0 is a hard
+dependency floor rather than a preference: without non-nanosecond support a
+microsecond index silently returns as nanoseconds, which is wrong timestamps
+rather than an error. Frames are stored as \code{.npy} by default, or as
+Parquet when the \code{efficient} extra supplies \code{pyarrow}, which makes
+them readable by other tools.
+
+Functions are stored by importable module path wherever possible, which is what
+lets a reader resolve them; where that is impossible they can be pickled into a
+dill blob instead. Loading consequently runs code the file chose --- importing
+the modules it names, or unpickling one of its blobs --- so \code{load} takes an
+explicit \code{allow\_code=False} for reading a file that is not trusted, under
+which values, structure, states and tags still load but callables do not.
+
+The older entry points remain. \code{write\_dill} / \code{read\_dill} pickle the
+whole graph with \code{dill} \cite{dill}: maximally permissive, including
+closures, at the cost of a binary, version-sensitive format that must not be
+loaded from an untrusted source. \code{write\_json} / \code{read\_json} are the
+direct single-document interface beneath \code{save}.
+
+\subsection{Excluding nodes from the artefact}
 
 The \code{serialize=False} flag on \code{add\_node} excludes a node from
 serialization while preserving it structurally: the node reappears
@@ -638,33 +732,95 @@ the state colouring then makes the current condition of a large pipeline
 readable at a glance.
 
 %==================================================================
+\section{The interactive widget}\label{sec:ui}
+%==================================================================
+
+The \code{loman[ui]} extra provides \code{ComputationWidget}, an AnyWidget view
+of a \emph{live} computation for Jupyter and Marimo. Where \code{draw()}
+produces a picture of the graph as it was, the widget renders a graph that goes
+on tracking the object it was given.
+
+Two mechanisms make that work. \code{Computation} publishes a
+\code{ComputationEvent} after each outermost public mutation, carrying a
+monotonic revision counter, the set of nodes whose state changed, and a flag
+for whether the structure itself changed; the widget subscribes. Batching at
+the outermost operation rather than at each internal transition is what keeps
+this cheap: a \code{compute\_all} over a large graph yields one redraw, not one
+per node. Events deliberately carry no values, so a large intermediate is never
+copied into a notification --- a consumer fetches lazily from the computation
+the event points at. A structural event is explicitly \emph{not} a complete
+description of the change, since adding, deleting or renaming nodes need not
+alter any node's state; consumers are told to re-read the graph instead.
+
+The widget is not read-only. A user can inspect and edit value cells, expand
+and contract blocks, focus a subgraph, request computation of a node, and ---
+most recently --- define new nodes from the browser. A definition arrives as
+text: either an input node with an optional seed value, or a calculation node
+given a name, a list of inputs and a Python expression, where the inputs become
+the function's parameters and the graph's edges and the expression becomes its
+body. Names resolve relative to whatever the widget is focused on, with a
+leading \code{/} escaping to the root of the computation, which is how a node
+inside a block depends on something outside it. The compiled function has real
+source: the text is registered with \code{linecache} under the node's own
+filename, so \code{get\_source} shows the user what they typed rather than
+reporting that no source is available.
+
+One consequence deserves stating plainly, because it interacts with
+Section~\ref{sec:serial}: a function compiled from text typed into a browser is
+a lambda by another name. It has no importable module path, so a computation
+containing one cannot round-trip its functions through \code{save}.
+
+%==================================================================
 \section{Repository structure and engineering practice}\label{sec:repo}
 %==================================================================
 
 The distributable package lives under \code{src/loman/} and comprises roughly
-3{,}700 lines of Python across the modules in Table~\ref{tab:modules}. It
-targets Python 3.11 and above and depends on \code{networkx}, \code{pandas},
-\code{numpy}, \code{matplotlib}, \code{pydotplus}, \code{dill}, \code{attrs}
-and \code{decorator}.
+10{,}400 lines of Python across the modules in Table~\ref{tab:modules}. It
+targets Python 3.11 and above. The required dependencies are \code{networkx},
+\code{pandas}~($\geq$~2.0), \code{numpy}, \code{matplotlib}, \code{pydotplus},
+\code{dill}, \code{attrs}~($\geq$~25), \code{decorator} and
+\code{zstandard}~($\geq$~0.22). Two extras are optional: \code{ui} pulls in
+\code{anywidget} and \code{traitlets} for the widget of
+Section~\ref{sec:ui}, and \code{efficient} pulls in \code{pyarrow} so that
+frames can be stored as Parquet rather than \code{.npy}.
+
+The shape of the package has changed markedly as the serialization and UI work
+has landed: those two subpackages now account for slightly over half of it,
+against a core engine that has grown more slowly.
 
 \begin{table}[t]
 \centering
-\caption{Modules of the \code{loman} package.}
+\caption{Modules of the \code{loman} package, by line count.}
 \label{tab:modules}
-\begin{tabular}{@{}llp{7.4cm}@{}}
+\begin{tabular}{@{}llp{6.9cm}@{}}
 \toprule
 Module & Lines & Responsibility \\
 \midrule
-\code{computeengine.py}   & 2084 & \code{Computation}, node definition, state transitions, execution, blocks, decorators. \\
-\code{visualization.py}   &  675 & \code{GraphView}, node formatters, GraphViz output. \\
-\code{nodekey.py}         &  286 & \code{NodeKey}, path parsing and hierarchy navigation. \\
-\code{planning.py}        &  252 & Non-mutating validation and execution planning. \\
-\code{serialization/}     & ---  & Transformer registry, JSON reader and writer. \\
-\code{util.py}            &  147 & Attribute views, signature inspection helpers. \\
-\code{graph\_utils.py}    &   68 & Graph helper routines. \\
-\code{exception.py}       &   72 & Exception hierarchy rooted at \code{ComputationError}. \\
-\code{consts.py}          &   52 & \code{States} and attribute-name constants. \\
-\code{compat.py}          &   38 & Compatibility shims. \\
+\multicolumn{3}{@{}l}{\emph{Core engine} --- 5{,}108 lines} \\
+\quad\code{computeengine.py}   & 2672 & \code{Computation}, node definition, state transitions, execution, blocks, decorators. \\
+\quad\code{util.py}            &  828 & Attribute views, block and fan-out helpers, signature inspection. \\
+\quad\code{visualization.py}   &  719 & \code{GraphView}, node formatters, GraphViz output. \\
+\quad\code{nodekey.py}         &  286 & \code{NodeKey}, path parsing and hierarchy navigation. \\
+\quad\code{planning.py}        &  252 & Non-mutating validation and execution planning. \\
+\quad\code{exception.py}       &   97 & Exception hierarchy rooted at \code{ComputationError}. \\
+\quad\code{graph\_utils.py}    &   68 & Graph helper routines. \\
+\quad\code{consts.py}          &   53 & \code{States}, node and edge attribute names, system tags. \\
+\quad\code{compat.py}          &   38 & Compatibility shims. \\
+\quad\code{\_extras.py}        &   13 & Run-time resolution of optional extras. \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{\code{serialization/}} --- 3{,}436 lines} \\
+\quad\code{transformer.py}     & 1213 & Type-handler registry and dispatch. \\
+\quad\code{computation.py}     &  902 & \code{ComputationSerializer}; manifest, containers, save and load. \\
+\quad\code{values.py}          &  510 & Handlers for \code{numpy}, \code{pandas} and standard types. \\
+\quad\code{blobs.py}           &  461 & \code{BlobStore} protocol; dir, zip and memory stores. \\
+\quad\code{compression.py}     &  143 & Named codecs; zstd and zlib. \\
+\quad\code{profile.py}         &  120 & \code{SerializationProfile}, \code{READABLE} and \code{EFFICIENT}. \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{\code{ui/}} --- 1{,}901 lines} \\
+\quad\code{widget.py}          & 1043 & \code{ComputationWidget}; AnyWidget model and request handling. \\
+\quad\code{value.py}           &  353 & Value marshalling to and from the browser; cell edits. \\
+\quad\code{builder.py}         &  334 & Compiling a browser-typed definition into a node. \\
+\quad\code{viewmodel.py}       &  155 & Node detail and state colouring for the front end. \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -679,9 +835,14 @@ without breaking existing callers, as with \code{ComputationFactory} aliasing
 \code{computation\_factory}.
 
 The project is managed with \code{uv} and \code{hatch}, linted and formatted
-with \code{ruff}, type-checked with \code{mypy}, and security-scanned with
-\code{bandit}. Tests are written with \code{pytest} across thirteen modules
-that mirror the source layout, including a dedicated typing test. Pre-commit
+with \code{ruff}, type-checked with \code{ty}, and security-scanned with
+\code{bandit} and \code{pip-audit}. Dependency hygiene is checked with
+\code{deptry} and licences are scanned for copyleft terms; a documentation
+coverage gate requires every public object to carry a docstring. Tests are
+written with \code{pytest} across twenty-seven modules that mirror the source
+layout, including a dedicated typing test, property-based and behavioural
+serialization suites, a pandas-compatibility run against the oldest supported
+version, and separate benchmark and stress trees. Pre-commit
 hooks, a devcontainer, GitHub Codespaces support and Marimo notebooks for the
 worked examples --- interest rate swap pricing, portfolio valuation and CDO
 modelling --- round out the developer environment. Documentation is built with
@@ -706,9 +867,10 @@ Dagster also model pipelines as DAGs, but they are oriented towards scheduled,
 distributed, long-running tasks with durable state in an external store.
 \loman{} is a library, not a service: a computation is an ordinary Python
 object that lives in a process, can be held in a notebook, and can be pickled
-to a file. The repository does contain design plans for an Airflow integration
-and for an AnyWidget-based UI, positioning \loman{} as the in-process
-calculation kernel underneath such systems rather than a replacement for them.
+to a file. The \code{ui} extra now ships an AnyWidget front end
+(Section~\ref{sec:ui}), and the repository carries design plans for an Airflow
+integration --- positioning \loman{} as the in-process calculation kernel
+underneath such systems rather than a replacement for them.
 
 \paragraph{Parallel computing frameworks.} Dask \cite{dask} builds task graphs
 to schedule large computations across cores and clusters. Its graphs are
@@ -750,9 +912,12 @@ follow from its design.
   is no built-in distributed execution and no persistent cache shared across
   runs; recovery across process boundaries goes through serialization.
 
-  \item \textbf{Serialization constraints.} JSON serialization cannot capture
-  lambdas or closures, and \code{dill} trades that flexibility for a binary
-  format that must not be loaded from untrusted sources.
+  \item \textbf{Serialization constraints.} Functions are resolved by
+  importable module path, so a lambda, a closure or a node defined through the
+  widget has no portable representation; it can be pickled into a dill blob
+  instead, but that reintroduces the version sensitivity and the requirement to
+  trust the file. Loading a saved computation runs code the file names, which
+  \code{allow\_code=False} suppresses at the cost of the functions.
 
   \item \textbf{Introspection-based binding.} Binding parameters by name is
   concise but couples a function's parameter names to node names. Refactoring
@@ -760,11 +925,12 @@ follow from its design.
   which is a real hazard in a large graph.
 \end{itemize}
 
-The changelog and design documents point at the active directions: an Airflow
-extra that would let a \loman{} graph be driven by an external scheduler, and a
-\code{loman[ui]} extra providing an interactive AnyWidget view of a live
-computation. Both extend the same idea --- an explicit, inspectable graph ---
-outward to the systems around it.
+Of the two directions the design documents identified, one has landed: the
+\code{loman[ui]} extra now provides an interactive AnyWidget view of a live
+computation, and has since grown from a viewer into an editor that can define
+nodes. The other remains open --- an Airflow extra that would let a \loman{}
+graph be driven by an external scheduler. Both extend the same idea, an
+explicit and inspectable graph, outward to the systems around it.
 
 %==================================================================
 \section{Conclusion}\label{sec:conclusion}
