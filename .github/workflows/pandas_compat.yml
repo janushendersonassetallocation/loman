@@ -1,10 +1,14 @@
 # Repo-owned: not listed in .rhiza/template.lock, so `make sync` leaves it alone.
 #
 # Loman supports pandas 2 and 3. The main CI matrix tests whichever pandas the
-# lock file resolves to, which is the newest; this job pins the other end. The
-# two versions differ in default datetime resolution, which the serialization
-# format records rather than assumes --- so this guards against that recording
-# quietly regressing and producing timestamps at the wrong scale.
+# lock file resolves to; this job pins each end explicitly --- 2.3, the oldest
+# series the declared floor admits, and 3.0, the current major. The two majors
+# differ in default datetime resolution, which the serialization format records
+# rather than assumes --- so this guards against that recording quietly
+# regressing and producing timestamps at the wrong scale.
+#
+# Each entry must be an exact series: the pin in the make target is
+# `pandas==<entry>.*`, so "2.3" means the 2.3 series and nothing else.
 name: pandas compatibility
 
 on:
@@ -23,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pandas: ["2.0", "2.3"]
+        pandas: ["2.3", "3.0"]
 
     steps:
       - uses: actions/checkout@v6.1.0

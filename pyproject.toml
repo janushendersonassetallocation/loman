@@ -12,7 +12,16 @@ description = "Loman tracks state of computations, and the dependencies between 
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
+    # CI runs the test matrix on every version listed here. The generator
+    # currently derives that matrix from requires-python rather than these
+    # classifiers, so they are metadata rather than a control -- but they are
+    # the only place a user or a resolver can read which interpreters are
+    # actually supported, and they must not disagree with what CI runs.
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -20,25 +29,43 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 license-files = ["LICEN[CS]E*"]
+# A floor is a version a user can actually install on every interpreter this
+# package is tested on, which is 3.11 through 3.14. It is therefore set by the
+# NEWEST tested interpreter, not the oldest supported one: pinning to a floor
+# that predates wheels for 3.14 makes the resolver fall back to building from
+# source, which fails where distutils is gone. The extension modules below are
+# floored at their first release shipping cp314 wheels; the pure-Python ones
+# (networkx, decorator, dill, attrs) publish a single py3-none-any wheel that
+# installs anywhere, so their floors express runtime compatibility rather than
+# packaging -- dill is the live example: 0.3.9 installs fine on 3.14 and then
+# fails at run time, because CPython 3.14 changed the signature of
+# _Pickler._batch_setitems(). Installability is necessary, not sufficient.
+# pydotplus ships no wheel at any version and has had one release since 2016.
+#
+# Raising the tested range later means raising these with it. The
+# lowest-direct job in .github/workflows/lowest_direct.yml is what catches it.
 dependencies = [
-    "decorator",
-    "matplotlib",
-    "numpy",
-    "pydotplus",
-    "dill >= 0.2.5",
-    "networkx >= 2.0",
-    # 2.0 is the real floor: serialization records each datetime value's
+    "decorator >= 5.1.1",
+    "matplotlib >= 3.10.5",
+    "numpy >= 2.3.2",
+    "pydotplus >= 2.0.2",
+    # 0.4.0 is the first release that works on 3.14; see the note above.
+    "dill >= 0.4.0",
+    "networkx >= 3.2.1",
+    # 2.0 is the semantic floor: serialization records each datetime value's
     # resolution using Timestamp.unit / DatetimeIndex.unit and restores it with
     # as_unit(), all of which arrived with non-nanosecond support in pandas 2.0.
     # Without them a microsecond index would be reread as nanoseconds, which is
-    # wrong timestamps rather than an import error.
-    "pandas >= 2.0",
+    # wrong timestamps rather than an import error. The declared floor sits
+    # higher for the wheel-availability reason above: 2.3.3 is the first release
+    # with cp314 wheels.
+    "pandas >= 2.3.3",
     "attrs >= 25.0",
     # Required, not optional. Saving compresses by default, and that is only a
     # sensible default because zstd rejects incompressible data at ~1 GB/s ---
     # 25x faster than zlib, which is what let the arbitrary "sample the first
     # 256 KiB and guess" heuristic be deleted rather than fixed.
-    "zstandard >= 0.22"
+    "zstandard >= 0.24"
 ]
 
 [project.optional-dependencies]
@@ -50,7 +77,8 @@ ui = [
 # Not required --- without it, frames are stored as .npy, which is numpy's own
 # format and needs no extra package.
 efficient = [
-    "pyarrow>=15",
+    # 22.0.0 is the first release with cp314 wheels; see the floors comment above.
+    "pyarrow>=22",
 ]
 
 [dependency-groups]
@@ -58,6 +86,18 @@ dev = [
     "ruff>=0.12.0",
     "marimo>=0.15",
     "scipy>=1.16.3",
+    # test_ui_value, test_ui_viewmodel and test_visualization import hypothesis at
+    # module scope, so plain `make test` cannot collect them without it. The
+    # hypothesis-test target passes `--with hypothesis`, which only covers itself.
+    "hypothesis>=6.98.0",
+    # The make targets provision the runner ad-hoc with `uv run --with pytest`,
+    # which leaves it undeclared for anything not going through them -- notably
+    # `uv run --all-groups ... pytest`, which fails with "Failed to spawn:
+    # pytest". pytest-mock supplies the `mocker` fixture and pytest-timeout backs
+    # the `timeout` setting in pytest.ini.
+    "pytest>=8.0",
+    "pytest-mock>=3.14",
+    "pytest-timeout>=2.3",
 ]
 
 [project.urls]
@@ -74,6 +114,10 @@ packages = ["src/loman"]
 DEP002 = ["pyarrow"]
 
 [tool.deptry.package_module_name_map]
+# Declared so deptry stops guessing at the dash-to-underscore mapping and
+# reporting it on every run; the guesses were right, the noise was not.
+pytest-mock = "pytest_mock"
+pytest-timeout = "pytest_timeout"
 pyarrow = "pyarrow"
 zstandard = "zstandard"
 matplotlib = "matplotlib"
@@ -97,6 +141,13 @@ skips = ["B301", "B403", "B404"]
 # @overload stubs delegate their documentation to the concrete implementation,
 # so they should not count against docstring coverage.
 ignore-overloaded-functions = true
+
+# Functions and classes defined *inside* another function are local scaffolding,
+# not API: the tests build computation graphs from inline node functions such as
+# `def b(a): return a + 1`, and documenting those only restates the body. The
+# enclosing test keeps its docstring, which is where the intent belongs.
+ignore-nested-functions = true
+ignore-nested-classes = true
 
 [tool.check_test_layout]
 # Tests live flat under tests/ and are grouped by behaviour rather than

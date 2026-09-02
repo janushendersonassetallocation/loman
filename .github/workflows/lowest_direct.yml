@@ -1,0 +1,51 @@
+# Repo-owned: not listed in .rhiza/template.lock, so `make sync` leaves it alone.
+#
+# The declared dependency floors in pyproject.toml are otherwise never exercised.
+# Every other job resolves from uv.lock, which pins the newest compatible
+# release, so a floor can be wrong for years without any job noticing --- which
+# is exactly what happened: floors chosen for cp312 wheels sat unverified while
+# CI moved on to testing 3.14.
+#
+# This job resolves with --resolution lowest-direct, which installs each direct
+# dependency at exactly its declared floor, on the NEWEST interpreter the matrix
+# tests. That is the binding case: a floor predating wheels for that interpreter
+# falls back to a source build, which fails where distutils is gone.
+name: lowest direct resolution
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lowest-direct:
+    name: floors on Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The newest tested interpreter sets the floors; the oldest confirms they
+        # are not so high that they exclude it.
+        python: ["3.11", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v6.1.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          version: "0.11.7"
+          python-version: ${{ matrix.python }}
+
+      # benchmarks/ and stress/ are excluded to match `make test`: the benchmark
+      # suite needs pytest-benchmark, which the benchmark target installs ad-hoc
+      # rather than declaring, and stress tests are opt-in via their marker.
+      - name: Resolve and test at the declared floors
+        run: |
+          uv run --isolated --resolution lowest-direct --all-extras \
+            --with pytest --with pytest-mock --with pytest-timeout --with hypothesis \
+            pytest tests -q --ignore=tests/benchmarks --ignore=tests/stress

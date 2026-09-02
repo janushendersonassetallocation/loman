@@ -9,14 +9,20 @@
 # assumes, so it needs a check that actually runs against the other end of the
 # range; otherwise the support is accidental and breaks silently.
 #
+# The pin below is an exact series glob, not a lower bound. `--with "pandas>=2.0"`
+# reads like "test the old one" and is not: uv resolves the newest version
+# satisfying it, so both legs of the matrix installed the same pandas 2.3.3 and
+# the job reported green while testing one version twice.
+#
 # Kept out of `make test` deliberately. It builds a separate environment, so
 # folding it into the default target would roughly double the time of the loop
 # people run most often. CI runs it as its own job (.github/workflows/pandas_compat.yml).
 
 .PHONY: test-compat
 
-# Oldest supported pandas. Matches the floor declared in pyproject.toml.
-PANDAS_MIN ?= 2.0
+# Oldest supported pandas series. Matches the floor declared in pyproject.toml,
+# which is 2.3.3; this names the series so the pin below stays a two-part glob.
+PANDAS_MIN ?= 2.3
 
 # Only the modules whose behaviour depends on the pandas version. The rest of
 # the suite is version-independent and already covered by `make test`. The
@@ -43,8 +49,7 @@ COMPAT_TESTS = \
 test-compat: install-uv ## run the version-sensitive tests against the oldest supported pandas
 	@printf "${BLUE}[Loman] Testing against pandas ~=$(PANDAS_MIN)...${RESET}\n"
 	@$(UV_BIN) run --isolated \
-	  --with "pandas>=$(PANDAS_MIN),<3.0" \
-	  --with "numpy<2.3" \
+	  --with "pandas==$(PANDAS_MIN).*" \
 	  --with pytest \
 	  --with hypothesis \
 	  pytest $(COMPAT_TESTS) -q
