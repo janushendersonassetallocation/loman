@@ -1,0 +1,93 @@
+# Repo-owned: not listed in .rhiza/template.lock, so `make sync` leaves it alone.
+#
+# Two things rhiza does not cover. Its weekly job tests the *newest* compatible
+# dependencies; nothing upstream tests the other end, at any template version.
+# Both jobs here guard a lower bound, so they live together.
+name: compatibility
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The declared floors in pyproject.toml are otherwise unverifiable: every other
+  # job resolves from uv.lock, which pins the newest compatible release, so a
+  # wrong floor stays silent indefinitely. --resolution lowest-direct installs
+  # each direct dependency at exactly its declared floor and runs the suite
+  # against them, turning the floors from a claim into a tested one.
+  #
+  # 3.11 only, and only when the declared dependencies change. 3.11 is the one
+  # interpreter where the whole floor set is installable -- on newer ones the
+  # wheel tags already force the resolver's hand, so there is nothing
+  # distinctive left to enforce. Floors change rarely, hence the paths filter.
+  floors:
+    name: floors resolve and pass on 3.11
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v6.1.0
+
+      - name: Check whether the declared dependencies changed
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only origin/${{ github.base_ref }}...HEAD \
+               | grep -qE '^(pyproject\.toml|uv\.lock)$'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Neither pyproject.toml nor uv.lock changed; floors cannot have moved."
+          fi
+
+      - name: Install uv
+        if: steps.changed.outputs.run == 'true'
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          version: "0.11.7"
+          python-version: "3.11"
+
+      # benchmarks/ and stress/ are excluded to match `make test`: the benchmark
+      # suite needs pytest-benchmark, which the benchmark target installs ad-hoc
+      # rather than declaring, and stress tests are opt-in via their marker.
+      - name: Resolve and test at the declared floors
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          uv run --isolated --resolution lowest-direct --all-extras \
+            --with pytest --with pytest-mock --with pytest-timeout --with hypothesis \
+            pytest tests -q --ignore=tests/benchmarks --ignore=tests/stress
+
+  # Loman supports pandas 2 and 3, which differ in default datetime resolution.
+  # The serialization format records that rather than assuming it, so it needs a
+  # check that actually runs at both ends; otherwise the support is accidental
+  # and breaks silently.
+  pandas:
+    name: pandas ${{ matrix.pandas }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each entry is an exact series: the make target pins `pandas==<x>.*`.
+        # 2.2 is the declared floor, 3.0 the current major.
+        pandas: ["2.2", "3.0"]
+
+    steps:
+      - uses: actions/checkout@v6.1.0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          version: "0.11.7"
+          python-version: "3.11"
+
+      # The target lives in .rhiza/make.d/20-compat-tests.mk, so the list of
+      # version-sensitive modules is defined once rather than here as well.
+      - name: Run the version-sensitive tests against pandas ${{ matrix.pandas }}
+        run: |
+          make test-compat PANDAS_MIN=${{ matrix.pandas }}
