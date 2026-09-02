@@ -29,43 +29,48 @@ classifiers = [
 ]
 license = "BSD-3-Clause"
 license-files = ["LICEN[CS]E*"]
-# A floor is a version a user can actually install on every interpreter this
-# package is tested on, which is 3.11 through 3.14. It is therefore set by the
-# NEWEST tested interpreter, not the oldest supported one: pinning to a floor
-# that predates wheels for 3.14 makes the resolver fall back to building from
-# source, which fails where distutils is gone. The extension modules below are
-# floored at their first release shipping cp314 wheels; the pure-Python ones
-# (networkx, decorator, dill, attrs) publish a single py3-none-any wheel that
-# installs anywhere, so their floors express runtime compatibility rather than
-# packaging -- dill is the live example: 0.3.9 installs fine on 3.14 and then
-# fails at run time, because CPython 3.14 changed the signature of
-# _Pickler._batch_setitems(). Installability is necessary, not sufficient.
-# pydotplus ships no wheel at any version and has had one release since 2016.
+# A floor states the oldest version this code actually works with. It is NOT a
+# statement about wheel availability: whether numpy 1.23 has a wheel for 3.14 is
+# already encoded in numpy's own wheel tags, and a resolver on 3.14 will simply
+# not select it. Duplicating that here would raise the floor for everyone,
+# including the 3.11 users for whom the older version is both installable and
+# correct.
 #
-# Raising the tested range later means raising these with it. The
-# lowest-direct job in .github/workflows/lowest_direct.yml is what catches it.
+# The exception is a runtime incompatibility that tags cannot express, because
+# the distribution is pure Python and installs anywhere: dill below 0.4.0
+# installs cleanly on 3.14 and then fails, since CPython 3.14 changed the
+# signature of _Pickler._batch_setitems(). That has to be declared.
+#
+# These are verified, not assumed: the floors job in
+# .github/workflows/compatibility.yml resolves every direct dependency at
+# exactly these versions on 3.11 -- the oldest supported interpreter, and the
+# only one where the whole floor set is installable -- and runs the suite
+# against them.
 dependencies = [
     "decorator >= 5.1.1",
-    "matplotlib >= 3.10.5",
-    "numpy >= 2.3.2",
+    "matplotlib >= 3.6.0",
+    "numpy >= 1.23.2",
     "pydotplus >= 2.0.2",
-    # 0.4.0 is the first release that works on 3.14; see the note above.
+    # 0.4.0 is not a behaviour floor but a 3.14 one; see the note above.
     "dill >= 0.4.0",
-    "networkx >= 3.2.1",
-    # 2.0 is the semantic floor: serialization records each datetime value's
-    # resolution using Timestamp.unit / DatetimeIndex.unit and restores it with
-    # as_unit(), all of which arrived with non-nanosecond support in pandas 2.0.
-    # Without them a microsecond index would be reread as nanoseconds, which is
-    # wrong timestamps rather than an import error. The declared floor sits
-    # higher for the wheel-availability reason above: 2.3.3 is the first release
-    # with cp314 wheels.
-    "pandas >= 2.3.3",
+    "networkx >= 3.0",
+    # 2.0 is the floor: serialization records each datetime value's resolution
+    # using Timestamp.unit / DatetimeIndex.unit and restores it with as_unit(),
+    # all of which arrived with non-nanosecond support in pandas 2.0. Without
+    # them a microsecond index would be reread as nanoseconds, which is wrong
+    # timestamps rather than an import error.
+    #
+    # 2.2, not 2.0, because the format records a DatetimeIndex's freq verbatim
+    # and pandas renamed the minute alias from "T" to "min" in 2.2 -- pandas 3
+    # no longer parses "T" at all, so a file written under an older pandas can
+    # carry a freq string a current reader rejects.
+    "pandas >= 2.2",
     "attrs >= 25.0",
     # Required, not optional. Saving compresses by default, and that is only a
     # sensible default because zstd rejects incompressible data at ~1 GB/s ---
     # 25x faster than zlib, which is what let the arbitrary "sample the first
     # 256 KiB and guess" heuristic be deleted rather than fixed.
-    "zstandard >= 0.24"
+    "zstandard >= 0.22"
 ]
 
 [project.optional-dependencies]
@@ -77,8 +82,7 @@ ui = [
 # Not required --- without it, frames are stored as .npy, which is numpy's own
 # format and needs no extra package.
 efficient = [
-    # 22.0.0 is the first release with cp314 wheels; see the floors comment above.
-    "pyarrow>=22",
+    "pyarrow>=15",
 ]
 
 [dependency-groups]

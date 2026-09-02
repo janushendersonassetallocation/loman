@@ -20,9 +20,9 @@
 
 .PHONY: test-compat
 
-# Oldest supported pandas series. Matches the floor declared in pyproject.toml,
-# which is 2.3.3; this names the series so the pin below stays a two-part glob.
-PANDAS_MIN ?= 2.3
+# Oldest supported pandas series, matching the floor declared in pyproject.toml.
+# Names the series only: the pin below turns it into an exact `==2.2.*`.
+PANDAS_MIN ?= 2.2
 
 # Only the modules whose behaviour depends on the pandas version. The rest of
 # the suite is version-independent and already covered by `make test`. The

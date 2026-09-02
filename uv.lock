@@ -673,14 +673,14 @@ requires-dist = [
     { name = "attrs", specifier = ">=25.0" },
     { name = "decorator", specifier = ">=5.1.1" },
     { name = "dill", specifier = ">=0.4.0" },
-    { name = "matplotlib", specifier = ">=3.10.5" },
-    { name = "networkx", specifier = ">=3.2.1" },
-    { name = "numpy", specifier = ">=2.3.2" },
-    { name = "pandas", specifier = ">=2.3.3" },
-    { name = "pyarrow", marker = "extra == 'efficient'", specifier = ">=22" },
+    { name = "matplotlib", specifier = ">=3.6.0" },
+    { name = "networkx", specifier = ">=3.0" },
+    { name = "numpy", specifier = ">=1.23.2" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "pyarrow", marker = "extra == 'efficient'", specifier = ">=15" },
     { name = "pydotplus", specifier = ">=2.0.2" },
     { name = "traitlets", marker = "extra == 'ui'", specifier = ">=5.14" },
-    { name = "zstandard", specifier = ">=0.24" },
+    { name = "zstandard", specifier = ">=0.22" },
 ]
 provides-extras = ["ui", "efficient"]
 
