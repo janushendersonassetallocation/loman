@@ -6,7 +6,7 @@ from collections.abc import Hashable, Iterable
 from dataclasses import dataclass
 from typing import ClassVar, Optional, Union
 
-from loman.util import as_iterable
+from loman.iterables import as_iterable
 
 Name = Union[str, "NodeKey", Hashable]
 Names = list[Name]
