@@ -12,6 +12,7 @@ of the compressed and raw payloads is smaller is the one stored.
 
 import json
 import os
+import warnings
 import zipfile
 
 import numpy as np
@@ -30,6 +31,7 @@ from loman.serialization.compression import (
     parse_spec,
     register_codec,
 )
+from loman.serialization.transformer import FrameEncodingFallbackWarning
 
 # A blob-sized threshold so test values do not have to be huge to exercise the
 # out-of-line path.
@@ -461,17 +463,61 @@ class TestParquet:
 
         Duplicate column names are the easy example. Falling back matters more
         than the encoding does: a save must not fail because an optional codec
-        has a limitation.
+        has a limitation. It says so, though --- a caller who asked for parquet
+        and got npy has no other way to find out.
         """
         frame = pd.DataFrame(np.arange(40_000, dtype="float64").reshape(20_000, 2), columns=["a", "a"])
         comp = Computation()
         comp.add_node("frame", value=frame)
         path = tmp_path / "c.loman"
 
-        comp.save(str(path), profile=_parquet_profile())
+        with pytest.warns(FrameEncodingFallbackWarning, match="20000x2"):
+            comp.save(str(path), profile=_parquet_profile())
 
         assert _manifest(path)["nodes"][0]["value"].get("encoding") != "parquet"
         assert Computation.load(str(path)).v.frame.equals(frame)
+
+    def test_broken_pyarrow_is_not_reported_as_an_absent_extra(self, tmp_path, monkeypatch):
+        """A conversion that fails is warned about, not treated as "no pyarrow".
+
+        An install present but built against a different numpy raises from
+        ``Table.from_pandas`` --- and raises ``ImportError``, which is exactly
+        the exception the absent-extra path is allowed to swallow. What
+        separates the two cases is where the failure comes from, not what type
+        it is, so the dependency lookup and the conversion need their own
+        handlers.
+        """
+
+        class _BrokenTable:
+            @staticmethod
+            def from_pandas(*args, **kwargs):
+                msg = "numpy.dtype size changed, may indicate binary incompatibility"
+                raise ImportError(msg)
+
+        monkeypatch.setattr(pyarrow, "Table", _BrokenTable)
+
+        frame = PARQUET_FRAMES["mixed_dtypes"]
+        comp = Computation()
+        comp.add_node("frame", value=frame)
+        path = tmp_path / "c.loman"
+
+        with pytest.warns(FrameEncodingFallbackWarning, match="binary incompatibility"):
+            comp.save(str(path), profile=_parquet_profile())
+
+        assert _manifest(path)["nodes"][0]["value"].get("encoding") != "parquet"
+        assert Computation.load(str(path)).v.frame.equals(frame)
+
+    def test_a_frame_parquet_can_take_warns_about_nothing(self, tmp_path):
+        """The happy path stays quiet, so the warning means something."""
+        comp = Computation()
+        comp.add_node("frame", value=PARQUET_FRAMES["mixed_dtypes"])
+        path = tmp_path / "c.loman"
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FrameEncodingFallbackWarning)
+            comp.save(str(path), profile=_parquet_profile())
+
+        assert _manifest(path)["nodes"][0]["value"]["encoding"] == "parquet"
 
     def test_small_frames_stay_inline(self, tmp_path):
         """Below the threshold, parquet is not used even when selected."""
@@ -517,7 +563,11 @@ class TestOptionalDependencyFallback:
         comp.add_node("frame", value=frame)
         path = tmp_path / "c.loman"
 
-        comp.save(str(path), profile=_parquet_profile())
+        # Silently, and deliberately so: nothing was promised and nothing is
+        # broken, which is what makes the warning on a real failure worth having.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FrameEncodingFallbackWarning)
+            comp.save(str(path), profile=_parquet_profile())
 
         assert _manifest(path)["nodes"][0]["value"].get("encoding") != "parquet"
         assert Computation.load(str(path)).v.frame.equals(frame)
