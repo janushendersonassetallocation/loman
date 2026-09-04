@@ -1,9 +1,21 @@
 template-repository: "jebel-quant/rhiza"
 template-branch: "v1.7.2"
 
+# rhiza 1.x replaced the flat bundle list with two layers: profiles, which name a
+# stable intent, and bundles, which own files. `github-project` expands to exactly
+# what the old list meant --- core, python-core, github, book, github-book,
+# github-marimo, github-tests --- so the four entries that used to be spelled out
+# here are covered by the profile rather than dropped.
+#
+# The rename that forced this: 1.x split each feature into a platform-neutral
+# bundle and a `github-`/`gitlab-` overlay carrying its workflow files, so the old
+# `marimo` and `tests` names no longer exist. Syncing v1.7.2 against the 0.x list
+# failed with "Bundle 'marimo' does not exist".
+profiles:
+  - github-project
+
+# Not in the profile, but this repo has a .devcontainer and the workflow that
+# builds it, so both are kept as explicit extras.
 templates:
   - devcontainer
-  - github
-  - book
-  - marimo
-  - tests
+  - github-devcontainer
