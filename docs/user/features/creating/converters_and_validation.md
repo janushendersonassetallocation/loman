@@ -5,8 +5,8 @@ into the node. The node stores what the converter returns, not what was supplied
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', converter=float)
->>> comp.insert('a', '3.5')
+>>> comp.add_node("a", converter=float)
+>>> comp.insert("a", "3.5")
 >>> comp.v.a
 3.5
 ```
@@ -20,11 +20,11 @@ The converter runs every time a value is set on the node, whichever way it arriv
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1, converter=float)      # value passed to add_node
+>>> comp.add_node("a", value=1, converter=float)  # value passed to add_node
 >>> comp.v.a
 1.0
 
->>> comp.insert('a', 2, force=True)                   # insert
+>>> comp.insert("a", 2, force=True)  # insert
 >>> comp.v.a
 2.0
 ```
@@ -34,8 +34,8 @@ lambda returns an `int`, but the node holds a `float`:
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a + 1, converter=float)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a + 1, converter=float)
 >>> comp.compute_all()
 >>> comp.v.b
 2.0
@@ -57,8 +57,8 @@ state and never stores the value:
 ...     return x
 
 >>> comp = Computation()
->>> comp.add_node('size', converter=positive)
->>> comp.insert('size', -5)
+>>> comp.add_node("size", converter=positive)
+>>> comp.insert("size", -5)
 Traceback (most recent call last):
     ...
 ValueError: must be positive, got -5
@@ -84,8 +84,8 @@ assert the result is usable:
 ...     return value
 
 >>> comp = Computation()
->>> comp.add_node('notional', converter=positive_float)
->>> comp.insert('notional', '1000')
+>>> comp.add_node("notional", converter=positive_float)
+>>> comp.insert("notional", "1000")
 >>> comp.v.notional
 1000.0
 ```
@@ -109,9 +109,9 @@ and the run continues so that unrelated branches still make progress.
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a - 10, converter=positive)
->>> comp.compute_all()          # does not raise
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a - 10, converter=positive)
+>>> comp.compute_all()  # does not raise
 >>> comp.s.b
 <States.ERROR: 5>
 >>> comp.v.b.exception

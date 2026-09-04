@@ -29,12 +29,12 @@ To access databases, we recommend [SQLAlchemy](http://www.sqlalchemy.org/) Core.
 ```pycon
 >>> import sqlalchemy as sa
 >>> comp = Computation()
->>> comp.add_node('engine', sa.create_engine(...), serialize=False)
->>> comp.add_node('metadata', lambda engine: sa.MetaData(engine), serialize=False)
+>>> comp.add_node("engine", sa.create_engine(...), serialize=False)
+>>> comp.add_node("metadata", lambda engine: sa.MetaData(engine), serialize=False)
 >>> def get_some_data(engine, ...):
 ...   [...]
 ...
->>> comp.add_node('some_data', get_some_data)
+>>> comp.add_node("some_data", get_some_data)
 ```
 
 Accessing other data sources such as scraped websites, or vendor systems can be accessed similarly. For example, here is code to create a logged in browser under the control of Selenium to scrape data from a website:
@@ -43,14 +43,16 @@ Accessing other data sources such as scraped websites, or vendor systems can be 
 >>> from selenium import webdriver
 >>> comp = Computation()
 >>> def get_logged_in_browser():
-...   browser = webdriver.Chrome()
-...   browser.get('http://somewebsite.com')
-...   elem = browser.find_element_by_id('userid')
-...   elem.send_keys('user@id.com')
-...   elem = browser.find_element_by_id('password')
-...   elem.send_keys('secret')
-...   elem = browser.find_element_by_name('_submit')
-...   elem.click()
-...   return browser
-... comp.add_node('browser', get_logged_in_browser)
+...     browser = webdriver.Chrome()
+...     browser.get("http://somewebsite.com")
+...     elem = browser.find_element_by_id("userid")
+...     elem.send_keys("user@id.com")
+...     elem = browser.find_element_by_id("password")
+...     elem.send_keys("secret")
+...     elem = browser.find_element_by_name("_submit")
+...     elem.click()
+...     return browser
+...
+...
+... comp.add_node("browser", get_logged_in_browser)
 ```

@@ -6,10 +6,10 @@
 >>> from loman import *
 
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a + 1)
->>> comp.add_node('c', lambda a: 2 * a)
->>> comp.add_node('d', lambda b, c: b + c)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a + 1)
+>>> comp.add_node("c", lambda a: 2 * a)
+>>> comp.add_node("d", lambda b, c: b + c)
 >>> comp.compute_all()
 
 >>> comp.to_df()
@@ -25,6 +25,6 @@
 !!! tip
     If your values are not scalars, it can be useful to drop the value column.
     ```pycon
-    >>> comp.to_df().drop(columns='value')
+    >>> comp.to_df().drop(columns="value")
     ```
 :::

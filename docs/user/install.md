@@ -43,10 +43,14 @@ You can then add the subdirectory graphviz to your PATH. You can either do this 
 
 ```python
 import sys, os
+
+
 def ensure_path(path):
-    paths = os.environ['PATH'].split(';')
+    paths = os.environ["PATH"].split(";")
     if path not in paths:
         paths.append(path)
-        os.environ['PATH'] = ';'.join(paths)
-ensure_path(r'C:\ProgramData\Anaconda3\Library\bin\graphviz')
+        os.environ["PATH"] = ";".join(paths)
+
+
+ensure_path(r"C:\ProgramData\Anaconda3\Library\bin\graphviz")
 ```
