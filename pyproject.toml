@@ -111,6 +111,14 @@ test = [
 # caller had to change when the group above was carved out.
 dev = [
     { include-group = "test" },
+    # Pinned, and the pin is the point. rhiza-task's typecheck task provisions the
+    # checker with `uv run --with ty`, unpinned, so CI resolved whatever ty was newest
+    # at job time -- 36 diagnostics on 0.0.78 against code that had not changed, where
+    # the version the 0.x template installed reports one warning. Declaring it here
+    # constrains that resolution, so the gate measures the code rather than ty's release
+    # schedule. Raise it deliberately, with the diagnostics it brings: see #405, and
+    # Jebel-Quant/rhiza#1667 for the same fix proposed in the task itself.
+    "ty==0.0.18",
     "ruff>=0.12.0",
     "marimo>=0.15",
     # Imported by the notebooks under docs/notebooks/, not by the suite.
