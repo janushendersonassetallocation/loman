@@ -162,6 +162,29 @@ allow_dirty = false
 commit = false
 tag = false
 
+# rhiza-task reads this table, and it is where settings live that used to mean editing
+# a synced file. The root Makefile carried this one until rhiza 1.x replaced it with the
+# template shim, taking `MKDOCS_EXTRA_PACKAGES` with it -- so the book build lost both
+# entries below and failed with `ModuleNotFoundError: No module named 'mkdocs_graphviz'`.
+#
+# The list replaces rhiza-task's default of ["mkdocstrings[python]"] rather than adding
+# to it, so mkdocstrings has to be restated here or docs/api.md's `:::` directives stop
+# resolving.
+#
+# mkdocs_graphviz is pinned below 2: in 2.0 it stopped being a Markdown extension and
+# became an MkDocs plugin, dropping the makeExtension entry point that
+# `markdown_extensions` needs. We build with zensical, which only shims a fixed set of
+# MkDocs plugins (autorefs, mkdocstrings, glightbox, macros, search) and would silently
+# ignore the graphviz plugin, rendering every ```dot block as a plain code fence --
+# silently, which is why the pin is worth more than the upgrade. Unpin once zensical can
+# run it.
+#
+# "." is the project itself, which mkdocstrings imports to document. The 0.x Makefile
+# spelled it `--with-editable .`; rhiza-task passes these as plain `--with`, and a
+# non-editable install of the source tree serves the same purpose for a one-shot build.
+[tool.rhiza-task]
+mkdocs-extra-packages = ["mkdocstrings[python]", "mkdocs_graphviz<2", "."]
+
 [tool.deptry.per_rule_ignores]
 # pyarrow is loaded by name through loman._extras.require, so there is no import
 # statement for deptry's static analysis to find. It is genuinely used --- see
