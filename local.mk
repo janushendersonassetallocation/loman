@@ -79,3 +79,64 @@ test-compat: $(UV)  ## Run the version-sensitive tests against the oldest suppor
 	  --with pytest \
 	  --with hypothesis \
 	  pytest $(COMPAT_TESTS) -q
+
+##@ Releasing and Versioning
+
+# Restored from the deleted .rhiza/make.d/releasing.mk. rhiza 1.x dropped these
+# targets: the task runner has no release task at all, and the flow moved to a
+# Claude Code skill (`/rhiza:release`). The underlying tool did not move --- it is
+# still the `rhiza-tools` CLI these targets call --- so the local flow stays
+# reproducible from a shell, without an editor in the loop.
+#
+# .github/workflows/rhiza_release.yml did NOT need excluding from the sync. Its
+# trigger is unchanged from 0.x (`push: tags: v*`, plus a new workflow_call entry
+# point that does not alter it), so a tag pushed by `make release` starts the same
+# workflow it always did.
+
+# Pinned, not floored. The 0.x file asked for `rhiza-tools>=0.3.3`, which resolves
+# to whatever is newest --- the same unpinned-tool trap that had the typecheck gate
+# reporting ty's release date rather than the code. 0.8.1 renamed a flag these
+# targets pass (`--with-bump` became `--bump TYPE`), so an open floor would have
+# broken `make publish` silently somewhere between 0.3.3 and now.
+RHIZA_TOOLS ?= rhiza-tools==0.8.1
+
+# `-c pyproject.toml`, because rhiza-tools still defaults to `.rhiza/.cfg.toml`,
+# which 1.x deletes. Without it every target fails with a bare ENOENT naming a path
+# nothing in the repo mentions any more. The bumpversion config is the
+# [tool.bumpversion] table in pyproject.toml now.
+RHIZA_TOOLS_ARGS = -c pyproject.toml
+
+# DRY_RUN=1 previews without applying, as before.
+_DRY_RUN := $(if $(DRY_RUN),--dry-run,)
+
+# Bump type for `publish`; 0.8.1 wants it explicitly where the old CLI prompted.
+BUMP ?= PATCH
+
+.PHONY: bump release publish rollback release-status
+
+# Prompts for the bump type and has no flag to supply one, so it needs a terminal
+# --- as it did under 0.x. `publish BUMP=...` is the scriptable path.
+bump: $(UVX)  ## Bump the project version, prompting for the type (DRY_RUN=1)
+	@$(UVX) "$(RHIZA_TOOLS)" bump $(RHIZA_TOOLS_ARGS) $(_DRY_RUN)
+	@[ -n "$(DRY_RUN)" ] || $(UV) lock
+
+# One behaviour did change, and it is the tool's doing rather than the template's.
+# Under rhiza-tools 0.3.3 `release` tagged the version already in pyproject.toml and
+# `publish` was the bump-then-tag variant. 0.8.1 states that "a release always bumps
+# the version before tagging" and offers no way to tag without bumping, so the two
+# targets below are now the same command: `release` lets it ask for the bump type,
+# `publish` passes one. Tagging an unbumped version means tagging a commit by hand.
+release: $(UVX)  ## Bump (prompting for the type), tag and push (DRY_RUN=1)
+	@$(UVX) "$(RHIZA_TOOLS)" release $(RHIZA_TOOLS_ARGS) $(_DRY_RUN)
+
+publish: $(UVX)  ## Bump, tag and push without prompting (BUMP=PATCH|MINOR|MAJOR, DRY_RUN=1)
+	@$(UVX) "$(RHIZA_TOOLS)" release --bump $(BUMP) -y $(RHIZA_TOOLS_ARGS) $(_DRY_RUN)
+
+rollback: $(UVX)  ## Undo a release tag and/or version bump (DRY_RUN=1)
+	@$(UVX) "$(RHIZA_TOOLS)" rollback $(RHIZA_TOOLS_ARGS) $(_DRY_RUN)
+
+# The two halves the 0.x target paged together. Both are rhiza-task tasks now, so
+# they come from the shim's catch-all rather than being reimplemented here.
+release-status:  ## Show the release workflow status and the latest release
+	@{ $(MAKE) --no-print-directory workflow-status; printf '\n'; \
+	   $(MAKE) --no-print-directory latest-release; } 2>&1 | $${PAGER:-cat}

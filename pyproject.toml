@@ -138,14 +138,22 @@ packages = ["src/loman"]
 # Without this table bump-my-version finds no config in any of the four filenames
 # it searches, and does not fail: it falls back to `git describe` and reports the
 # newest reachable tag as the current version. A release is then cut relative to
-# that number rather than the one in this file -- which is how a project sitting
-# at 0.7.0 gets offered "minor -> v0.7.0", a version it has already published.
+# that tag rather than the number in this file, so a project whose declared
+# version is already published gets offered a bump to a version that exists.
 #
 # Deliberately three flags and no `current_version`: once the table exists,
 # bump-my-version reads and rewrites PEP 621 [project].version natively, so
-# restating the number here would only give it somewhere to go stale. There are no
-# [[tool.bumpversion.files]] entries for the same reason -- 0.7.0 appears in
-# exactly one place in this repo, seven lines up.
+# restating the number here would only give it somewhere to go stale. There are
+# no [[tool.bumpversion.files]] entries for the same reason.
+#
+# Nothing in this comment spells a version number out, and that is load-bearing
+# rather than style. With no [[files]] entries bump-my-version searches the whole
+# of pyproject.toml for the current version string and rewrites every occurrence,
+# so a literal example written here would be rewritten too, and each release would
+# edit the prose into something untrue. Write X.Y.Z, never a real number.
+# Verified with `rhiza-tools release --dry-run`, which reported exactly that on
+# two comment lines before this rewrite -- and again on the rewrite's own first
+# draft, which had made the same mistake.
 [tool.bumpversion]
 allow_dirty = false
 # The release flow folds the changelog into the bump commit and tags that commit
