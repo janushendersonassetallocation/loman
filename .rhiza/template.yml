@@ -1,5 +1,5 @@
 template-repository: "jebel-quant/rhiza"
-template-branch: "v1.7.2"
+template-branch: "v1.7.3"
 
 # rhiza 1.x replaced the flat bundle list with two layers: profiles, which name a
 # stable intent, and bundles, which own files. `github-project` expands to exactly
