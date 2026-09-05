@@ -8,10 +8,10 @@ By default, in a Jupyter notebook, when a graph is evaluated, it will show a gra
 >>> from loman import *
 
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a + 1)
->>> comp.add_node('c', lambda a: 2 * a)
->>> comp.add_node('d', lambda b, c: b + c)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a + 1)
+>>> comp.add_node("c", lambda a: 2 * a)
+>>> comp.add_node("d", lambda b, c: b + c)
 >>> comp.compute_all()
 
 >>> comp
@@ -55,12 +55,12 @@ And the `.view()` method will produce a graphical representation as a pdf,and di
 The following example has been contrived to show every state currently supported by Loman:
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('e', lambda a: 1)
->>> comp.add_node('b', lambda a, doesnotexist: 1)
->>> comp.add_node('c', lambda a: a / 0.)
->>> comp.add_node('d', lambda b, c: b + c)
->>> comp.compute('c')
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("e", lambda a: 1)
+>>> comp.add_node("b", lambda a, doesnotexist: 1)
+>>> comp.add_node("c", lambda a: a / 0.0)
+>>> comp.add_node("d", lambda b, c: b + c)
+>>> comp.compute("c")
 ```
 
 ```dot
@@ -97,6 +97,7 @@ Loman can also draw graph nodes to show timing information. In the following exa
 from loman import *
 import time
 
+
 @ComputationFactory
 class ExampleComputation:
     a = input_node()
@@ -119,9 +120,9 @@ class ExampleComputation:
 
 ```pycon
 >>> comp = ExampleComputation()
->>> comp.insert('a', 3)
+>>> comp.insert("a", 3)
 >>> comp.compute_all()
->>> comp.draw(colors='timing')
+>>> comp.draw(colors="timing")
 ```
 
 ```dot
@@ -143,10 +144,10 @@ You can control how nodes are rendered using the `style` keyword of the `add_nod
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1, style='small')
->>> comp.add_node('b', lambda a: a + 1, style='dot')
->>> comp.add_node('c', lambda a: 2 * a, style='dot')
->>> comp.add_node('d', lambda b, c: b + c)
+>>> comp.add_node("a", value=1, style="small")
+>>> comp.add_node("b", lambda a: a + 1, style="dot")
+>>> comp.add_node("c", lambda a: 2 * a, style="dot")
+>>> comp.add_node("d", lambda b, c: b + c)
 >>> comp.compute_all()
 >>> comp
 ```
@@ -171,16 +172,16 @@ You can ask loman to graphically show type information for nodes by calling `dra
 ```pycon
 >>> import numpy as np, pandas as pd
 >>> comp = Computation()
->>> comp.add_node('scalar', value=1)
->>> comp.add_node('array', lambda scalar: np.array([scalar]))
->>> comp.add_node('dataframe', lambda scalar: pd.DataFrame([[1]], columns=['A']))
->>> comp.add_node('list', lambda scalar: [scalar])
->>> comp.add_node('tuple', lambda scalar: (scalar,))
->>> comp.add_node('dict', lambda scalar: {'a': scalar})
->>> comp.add_node('computation', lambda scalar: Computation())
->>> comp.add_node('other', lambda scalar: object())
+>>> comp.add_node("scalar", value=1)
+>>> comp.add_node("array", lambda scalar: np.array([scalar]))
+>>> comp.add_node("dataframe", lambda scalar: pd.DataFrame([[1]], columns=["A"]))
+>>> comp.add_node("list", lambda scalar: [scalar])
+>>> comp.add_node("tuple", lambda scalar: (scalar,))
+>>> comp.add_node("dict", lambda scalar: {"a": scalar})
+>>> comp.add_node("computation", lambda scalar: Computation())
+>>> comp.add_node("other", lambda scalar: object())
 >>> comp.compute_all()
->>> comp.draw(shapes='type')
+>>> comp.draw(shapes="type")
 ```
 
 ```dot

@@ -429,7 +429,7 @@ What still does not survive is the block template's *own* calculations.
 copies, so their functions are not retained:
 
 ```python
-block.add_node("doubled", double)   # calculated inside every generated block
+block.add_node("doubled", double)  # calculated inside every generated block
 ```
 
 After a roundtrip, `instruments/AAPL/doubled` keeps its stored value but has no
