@@ -1,5 +1,5 @@
 
-<div align="center">
+<div align="center" markdown="1">
 
 # Loman
 
@@ -211,7 +211,7 @@ Whether you're fixing bugs, adding features, or improving documentation, your he
 
 ---
 
-<div align="center">
+<div align="center" markdown="1">
 
 ⭐ **If you find Loman useful, please consider giving it a star!** ⭐
 
