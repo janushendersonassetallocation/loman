@@ -49,7 +49,7 @@ That is what makes it a dashboard component rather than a walled garden. Read th
 selection back and use the ordinary API:
 
 ```python
-widget.selected_name          # the real Loman name, not a browser ID
+widget.selected_name  # the real Loman name, not a browser ID
 comp.v[widget.selected_name]  # the real value, of its real type
 ```
 
@@ -150,7 +150,7 @@ lets it use the notebook's own imports:
 ```python
 import numpy as np
 
-comp.widget(buildable=True, namespace=globals())   # np.sqrt(x) now works
+comp.widget(buildable=True, namespace=globals())  # np.sqrt(x) now works
 ```
 
 Without one, only builtins are in scope. The function's globals stay pointed at
@@ -229,7 +229,7 @@ depend on marimo and drop Jupyter support — so it publishes the node name for
 the notebook to render:
 
 ```python
-_ = widget_ui.value            # react to the button
+_ = widget_ui.value  # react to the button
 mo.ui.table(widget.full_view_value) if widget.full_view else None
 ```
 
@@ -248,8 +248,9 @@ The widget is built on a public API you can use directly:
 def on_change(event):
     print(event.revision, event.changed_nodes, event.graph_changed)
 
+
 unsubscribe = comp.subscribe(on_change)
-comp.compute_all()      # one event, not one per node
+comp.compute_all()  # one event, not one per node
 unsubscribe()
 ```
 
@@ -311,7 +312,7 @@ a background thread. For long computations, drive them from an ordinary cell and
 let the widget observe the result:
 
 ```python
-comp.compute_all()   # widget updates when this returns
+comp.compute_all()  # widget updates when this returns
 ```
 
 ### Large graphs

@@ -15,8 +15,6 @@ Names = list[Name]
 class PathNotFoundError(Exception):
     """Exception raised when a node path cannot be found."""
 
-    pass
-
 
 def quote_part(part: Hashable) -> str:
     """Quote a node key part for safe representation in paths."""
