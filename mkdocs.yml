@@ -40,6 +40,14 @@ plugins:
             show_signature_annotations: true
 
 markdown_extensions:
+  # Required for README.md to render on the Home page. docs/index.md pulls the README
+  # in with a pymdownx snippet, and the README wraps its header and footer in
+  # <div align="center"> for GitHub. Python-Markdown leaves markdown inside a
+  # block-level HTML element alone unless md_in_html is enabled *and* the element
+  # carries markdown="1" -- so without this the whole block rendered as literal text,
+  # badges and headings included. GitHub parses it either way, which is why the same
+  # file looked right there and wrong in the book.
+  - md_in_html
   - mkdocs_graphviz:
       node_color: "000000"
       node_fontcolor: "000000"
