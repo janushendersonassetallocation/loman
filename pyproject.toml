@@ -111,14 +111,10 @@ test = [
 # caller had to change when the group above was carved out.
 dev = [
     { include-group = "test" },
-    # Pinned, and the pin is the point. rhiza-task's typecheck task provisions the
-    # checker with `uv run --with ty`, unpinned, so CI resolved whatever ty was newest
-    # at job time -- 36 diagnostics on 0.0.78 against code that had not changed, where
-    # the version the 0.x template installed reports one warning. Declaring it here
-    # constrains that resolution, so the gate measures the code rather than ty's release
-    # schedule. Raise it deliberately, with the diagnostics it brings: see #405, and
-    # Jebel-Quant/rhiza#1667 for the same fix proposed in the task itself.
-    "ty==0.0.18",
+    # The `ty` pin that lived here has moved to `ty-version` under [tool.rhiza-task].
+    # rhiza v1.7.3 took Jebel-Quant/rhiza#1667 and now provisions the checker at an
+    # exact version of its own, so a second constraint in this group would be a
+    # resolution conflict rather than a belt-and-braces pin.
     "ruff>=0.12.0",
     "marimo>=0.15",
     # Imported by the notebooks under docs/notebooks/, not by the suite.
@@ -184,6 +180,24 @@ tag = false
 # non-editable install of the source tree serves the same purpose for a one-shot build.
 [tool.rhiza-task]
 mkdocs-extra-packages = ["mkdocstrings[python]", "mkdocs_graphviz<2", "."]
+
+# rhiza v1.7.3 pins the type checker itself (Jebel-Quant/rhiza#1667) and defaults to
+# ty ==0.0.78. On this codebase that version reports 36 diagnostics -- 20
+# invalid-argument-type, 10 unresolved-attribute, 4 invalid-assignment and two others
+# -- none of which is new code: they are the checker's inference having moved on across
+# roughly sixty pre-1.0 releases.
+#
+# So the pin is held at the version the 0.x template installed, which reports one
+# warning, and the diagnostics are deferred rather than dismissed. Some look like real
+# gaps worth fixing -- `Attribute 'parts' is not defined on 'None' in union
+# 'NodeKey | None'` is a genuine possible-None access -- so raising this is triage work
+# with its own issue (#405), not a number to nudge.
+#
+# Setting it here rather than in a dependency group is the difference between a
+# configured pin and a resolution conflict: the task passes its own `--with ty==<x>`,
+# so a competing constraint in [dependency-groups] would make the gate fail to install
+# rather than fail to typecheck.
+ty-version = "==0.0.18"
 
 [tool.deptry.per_rule_ignores]
 # pyarrow is loaded by name through loman._extras.require, so there is no import
