@@ -1,0 +1,54 @@
+# Repo-owned lint deltas. Ruff reads `.ruff.toml` in preference to `ruff.toml`, and
+# `ruff.toml` is template-owned --- synced from rhiza and overwritten on every update ---
+# so this file is the only place Loman's own lint decisions can live.
+#
+# `extend` rather than a copy. The template's rule selection stays in force and keeps
+# arriving with each sync; what follows is only where this repo departs from it, which is
+# what makes the divergence reviewable. Excluding `ruff.toml` from the sync would have
+# reached the same error count today and then silently frozen the selection forever.
+extend = "ruff.toml"
+
+# rhiza 1.x added A, ARG, BLE, PIE and ANN to a selection that previously stopped at
+# D/E/F/I/N/W/UP plus B, C4, SIM, PT, RUF, S, TRY and ICN. That surfaced 108 hits in code
+# that had not changed. PIE and RUF were fixed rather than ignored (33 redundant
+# placeholders removed, two `None` unions reordered); the three below are ignored, each
+# scoped to where the shape is deliberate rather than blanket-disabled.
+#
+# `extend-per-file-ignores`, not `per-file-ignores`. `extend` inherits the parent's
+# settings, but a table restated here *replaces* the parent's rather than merging into it
+# --- spelling this one `per-file-ignores` silently discarded the template's own
+# exemptions for `**/tests/**` and `**/notebooks/*.py` and took the count from 0 to 5884.
+[lint.extend-per-file-ignores]
+
+# ARG002 --- unused method arguments. These are interface signatures, not oversights: the
+# transformer and value-encoder methods take a fixed argument list because the dispatcher
+# calls every one of them the same way, and a node formatter is handed the whole context
+# whether or not a given formatter reads all of it. Renaming the parameters to `_x` would
+# satisfy the rule by making the call sites lie about what they pass.
+"src/loman/serialization/values.py" = ["ARG002"]
+"src/loman/serialization/transformer.py" = ["ARG002", "BLE001"]
+"src/loman/visualization.py" = ["ARG002"]
+"src/loman/computeengine.py" = ["ARG002"]
+"src/loman/serialization/blobs.py" = ["ARG002"]
+
+# BLE001 --- `except Exception`. Deliberate at these four sites, which convert an
+# arbitrary user-supplied callable's failure into a reported node state rather than
+# letting it escape; catching narrowly would mean predicting what someone else's function
+# raises. Narrowing where it is *not* deliberate is tracked separately in #392, and this
+# list shrinks as that lands. `transformer.py` is listed with its ARG002 entry above,
+# since per-file-ignores keys are paths and a file gets one entry.
+"src/loman/serialization/computation.py" = ["BLE001"]
+"src/loman/ui/value.py" = ["BLE001"]
+"src/loman/util.py" = ["BLE001"]
+
+# Notebooks are exploratory: a broad catch that prints and moves on is the point, and a
+# parameter named `input` in a demo cell reads better than one renamed to dodge a lint.
+# The template already relaxes several rules for this tree; these two are the rules 1.x
+# newly applies to it.
+"docs/notebooks/*.py" = ["BLE001", "A002"]
+
+# A002/A006 --- builtins shadowed by test-local names. Every one is a node called "input"
+# in a fixture graph, reaching the lambda that computes from it as a parameter of the same
+# name. The node name is the fixture's subject, so renaming the parameter would leave the
+# test describing a graph it no longer builds.
+"tests/*.py" = ["A002", "A006"]

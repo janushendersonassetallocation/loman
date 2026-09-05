@@ -2002,6 +2002,7 @@ class _InstrumentBlock:
 
     @calc_node
     def value(self, data, scale):
+        """The block's single calculation: the instrument's scaled data."""
         return data * scale
 
 
@@ -4332,6 +4333,12 @@ class TestUnsubscribedComputationsPayNothing:
 
     @staticmethod
     def _chain(length: int) -> Computation:
+        """A linear chain of `length` nodes, each adding one to its predecessor.
+
+        A chain rather than a wider shape because the measurement is a slope
+        against the number of descendants a single insert makes stale, and in a
+        chain that number is exactly the length.
+        """
         comp = Computation()
         comp.add_node("x0", value=0.0)
         for i in range(1, length):
@@ -4340,6 +4347,12 @@ class TestUnsubscribedComputationsPayNothing:
 
     @staticmethod
     def _count_hashes(action) -> int:
+        """How many times `action` hashes a NodeKey.
+
+        Counted by swapping in a wrapper around `NodeKey.__hash__` for the
+        duration, and restored in a `finally` so a failing action cannot leave
+        the counting version installed for the rest of the session.
+        """
         original = NodeKey.__hash__
         calls = [0]
 

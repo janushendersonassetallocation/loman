@@ -8,13 +8,13 @@ graph, plus large values stored beside it as binary.
 >>> import numpy as np, pandas as pd
 >>> from loman import Computation
 >>> prices = pd.DataFrame(
-...     {'px': np.arange(100_000, dtype='float64')},
-...     index=pd.date_range('2020-01-01', periods=100_000, freq='min'),
+...     {"px": np.arange(100_000, dtype="float64")},
+...     index=pd.date_range("2020-01-01", periods=100_000, freq="min"),
 ... )
 >>> comp = Computation()
->>> comp.add_node('prices', value=prices)
->>> comp.save('run.loman')
->>> comp2 = Computation.load('run.loman')
+>>> comp.add_node("prices", value=prices)
+>>> comp.save("run.loman")
+>>> comp2 = Computation.load("run.loman")
 >>> comp2.v.prices.equals(prices)
 True
 ```
@@ -30,10 +30,10 @@ Two independent choices. The **profile** decides how a value is encoded; the
 | `efficient` | *not possible* | **the default** | folder + binary blobs |
 
 ```pycon
->>> comp.save('run.loman')                      # efficient + zip (the default)
->>> comp.save('run.loman', profile='readable')  # inline JSON, still zipped
->>> comp.save('run.json')                       # single JSON document
->>> comp.save('run_dir', container='dir')       # same layout, unzipped
+>>> comp.save("run.loman")  # efficient + zip (the default)
+>>> comp.save("run.loman", profile="readable")  # inline JSON, still zipped
+>>> comp.save("run.json")  # single JSON document
+>>> comp.save("run_dir", container="dir")  # same layout, unzipped
 ```
 
 The container is inferred from the path — `.json` means a single document,
@@ -51,12 +51,12 @@ decoding any of it:
 
 ```pycon
 >>> import json, zipfile
->>> comp.save('run.loman')          # the default: efficient
->>> manifest = json.loads(zipfile.ZipFile('run.loman').read('manifest.json'))
->>> value = manifest['nodes'][0]['value']
->>> value['index']['kind'], value['index']['freq']
+>>> comp.save("run.loman")  # the default: efficient
+>>> manifest = json.loads(zipfile.ZipFile("run.loman").read("manifest.json"))
+>>> value = manifest["nodes"][0]["value"]
+>>> value["index"]["kind"], value["index"]["freq"]
 ('datetime', 'min')
->>> manifest['blobs'][0]['codec']
+>>> manifest["blobs"][0]["codec"]
 'npy'
 ```
 
@@ -79,12 +79,12 @@ nothing is inferred from the data.
 
 ```pycon
 >>> comp2 = Computation()
->>> comp2.add_node('rounded', value=np.round(np.arange(200_000) * 0.01, 2))
->>> comp2.save('rounded.loman')
->>> entry = json.loads(zipfile.ZipFile('rounded.loman').read('manifest.json'))['blobs'][0]
->>> entry['compression']
+>>> comp2.add_node("rounded", value=np.round(np.arange(200_000) * 0.01, 2))
+>>> comp2.save("rounded.loman")
+>>> entry = json.loads(zipfile.ZipFile("rounded.loman").read("manifest.json"))["blobs"][0]
+>>> entry["compression"]
 'zstd:1'
->>> entry['stored_size'] < entry['size'] // 5
+>>> entry["stored_size"] < entry["size"] // 5
 True
 ```
 
@@ -92,10 +92,10 @@ To choose something else, pass a profile:
 
 ```pycon
 >>> from loman import SerializationProfile
->>> archive = SerializationProfile('archive', inline_max_bytes=8192, compression='zstd:19')
->>> comp.save('small.loman', profile=archive)
->>> fast = SerializationProfile('fast', inline_max_bytes=8192, compression='none')
->>> comp.save('fast.loman', profile=fast)
+>>> archive = SerializationProfile("archive", inline_max_bytes=8192, compression="zstd:19")
+>>> comp.save("small.loman", profile=archive)
+>>> fast = SerializationProfile("fast", inline_max_bytes=8192, compression="none")
+>>> comp.save("fast.loman", profile=fast)
 ```
 
 `compression` accepts `"none"`, or a codec and optional level: `"zstd:1"` to
@@ -127,9 +127,9 @@ and recorded as `"none"`:
 ```pycon
 >>> import os
 >>> comp3 = Computation()
->>> comp3.add_node('noise', value=np.frombuffer(os.urandom(500_000), dtype=np.uint8))
->>> comp3.save('noise.loman')
->>> json.loads(zipfile.ZipFile('noise.loman').read('manifest.json'))['blobs'][0]['compression']
+>>> comp3.add_node("noise", value=np.frombuffer(os.urandom(500_000), dtype=np.uint8))
+>>> comp3.save("noise.loman")
+>>> json.loads(zipfile.ZipFile("noise.loman").read("manifest.json"))["blobs"][0]["compression"]
 'none'
 ```
 
@@ -158,8 +158,8 @@ pip install 'loman[efficient]'
 adds `pyarrow`, for storing DataFrames as parquet:
 
 ```pycon
->>> parquet = SerializationProfile('pq', inline_max_bytes=8192, frame_encoding='parquet')
->>> comp.save('run_pq.loman', profile=parquet)
+>>> parquet = SerializationProfile("pq", inline_max_bytes=8192, frame_encoding="parquet")
+>>> comp.save("run_pq.loman", profile=parquet)
 ```
 
 Parquet's value is that other tools can read the blobs directly. It is not
@@ -176,10 +176,10 @@ land in a bucket as parquet, or a result that belongs in a warehouse table. Mark
 the node with a store name, and supply the implementation when you save and load:
 
 ```python
-comp.add_node('prices', value=frame, store='warehouse')
+comp.add_node("prices", value=frame, store="warehouse")
 
-comp.save('run.loman', stores={'warehouse': S3Store(bucket='my-bucket')})
-comp2 = Computation.load('run.loman', stores={'warehouse': S3Store(bucket='my-bucket')})
+comp.save("run.loman", stores={"warehouse": S3Store(bucket="my-bucket")})
+comp2 = Computation.load("run.loman", stores={"warehouse": S3Store(bucket="my-bucket")})
 ```
 
 The archive then holds only the manifest; `prices` lives in your bucket, and the
@@ -195,8 +195,10 @@ blob table are all handled for you:
 >>> class DictStore(BlobStore):
 ...     def __init__(self):
 ...         self.blobs = {}
+...
 ...     def write_blob(self, key, data):
 ...         self.blobs[key] = data
+...
 ...     def read_blob(self, key):
 ...         return self.blobs[key]
 ```
@@ -204,13 +206,13 @@ blob table are all handled for you:
 ```pycon
 >>> store = DictStore()
 >>> comp5 = Computation()
->>> comp5.add_node('prices', value=prices, store='warehouse')
->>> comp5.save('remote.loman', stores={'warehouse': store})
+>>> comp5.add_node("prices", value=prices, store="warehouse")
+>>> comp5.save("remote.loman", stores={"warehouse": store})
 >>> len(store.blobs) > 0
 True
->>> zipfile.ZipFile('remote.loman').namelist()
+>>> zipfile.ZipFile("remote.loman").namelist()
 ['manifest.json']
->>> Computation.load('remote.loman', stores={'warehouse': store}).v.prices.equals(prices)
+>>> Computation.load("remote.loman", stores={"warehouse": store}).v.prices.equals(prices)
 True
 ```
 
@@ -225,8 +227,8 @@ A manifest records a store's **name**, never its configuration. No bucket, no
 connection string, no key ever reaches the file:
 
 ```pycon
->>> manifest = json.loads(zipfile.ZipFile('remote.loman').read('manifest.json'))
->>> manifest['blobs'][0]['store']
+>>> manifest = json.loads(zipfile.ZipFile("remote.loman").read("manifest.json"))
+>>> manifest["blobs"][0]["store"]
 'warehouse'
 ```
 
@@ -247,10 +249,9 @@ same computation can go to a bucket in production and to a plain container in a
 test:
 
 ```pycon
->>> local = SerializationProfile('local', inline_max_bytes=8192,
-...                              overrides={'prices': {'store': None}})
->>> comp5.save('local.loman', profile=local)
->>> 'blobs/0000.npy' in zipfile.ZipFile('local.loman').namelist()
+>>> local = SerializationProfile("local", inline_max_bytes=8192, overrides={"prices": {"store": None}})
+>>> comp5.save("local.loman", profile=local)
+>>> "blobs/0000.npy" in zipfile.ZipFile("local.loman").namelist()
 True
 ```
 
@@ -264,7 +265,7 @@ Because an external store is independent of the container, you can combine a
 plain JSON manifest with out-of-line values:
 
 ```python
-comp.save('run.json', profile=efficient, stores={'warehouse': S3Store(...)})
+comp.save("run.json", profile=efficient, stores={"warehouse": S3Store(...)})
 ```
 
 The result is a manifest you can read in a text editor, describing values that
@@ -275,12 +276,12 @@ live in your bucket.
 Two nodes holding the same object store one blob:
 
 ```pycon
->>> shared = np.arange(50_000, dtype='float64')
+>>> shared = np.arange(50_000, dtype="float64")
 >>> comp3 = Computation()
->>> comp3.add_node('a', value=shared)
->>> comp3.add_node('b', value=shared)
->>> comp3.save('shared.loman')
->>> len(json.loads(zipfile.ZipFile('shared.loman').read('manifest.json'))['blobs'])
+>>> comp3.add_node("a", value=shared)
+>>> comp3.add_node("b", value=shared)
+>>> comp3.save("shared.loman")
+>>> len(json.loads(zipfile.ZipFile("shared.loman").read("manifest.json"))["blobs"])
 1
 ```
 
@@ -298,7 +299,7 @@ format is not safe against a hostile file, and never was.
 and tags still load, so the graph can be inspected but not recalculated:
 
 ```pycon
->>> comp4 = Computation.load('run.loman', allow_code=False)
+>>> comp4 = Computation.load("run.loman", allow_code=False)
 >>> comp4.v.prices.shape
 (100000, 1)
 ```

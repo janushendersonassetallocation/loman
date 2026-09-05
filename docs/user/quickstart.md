@@ -10,8 +10,8 @@ Let's start by creating a computation object and adding a couple of nodes to it:
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a')
->>> comp.add_node('b', lambda a: a + 1)
+>>> comp.add_node("a")
+>>> comp.add_node("b", lambda a: a + 1)
 ```
 
 Loman's computations have a method `draw` which lets us easily see a visualization of the computation we just created:
@@ -58,9 +58,9 @@ Now **b** is up-to-date, and is also colored dark green.
 Loman gives us several ways of inspecting nodes. We can use the `value` and `state` methods:
 
 ```pycon
->>> comp.value('b')
+>>> comp.value("b")
 2
->>> comp.state('b')
+>>> comp.state("b")
 <States.UPTODATE: 4>
 ```
 Or we can use `v` and `s` to access values and states with attribute-style access. This method of access works well with the auto-complete feature in IPython and Jupyter Notebook, but it is only able to access nodes with valid alphanumeric names:
@@ -74,18 +74,18 @@ Or we can use `v` and `s` to access values and states with attribute-style acces
 The \[\]-operator provides both the state and value:
 
 ```pycon
->>> comp['b']
+>>> comp["b"]
 NodeData(state=<States.UPTODATE: 4>, value=2)
 ```
 
 The `value` and `state` methods and `v` and `s` accessors can also take lists of nodes, and will return corresponding lists of values and states:
 
 ```pycon
->>> comp.value(['a', 'b'])
+>>> comp.value(["a", "b"])
 [1, 2]
->>> comp.state(['a', 'b'])
+>>> comp.state(["a", "b"])
 [<States.UPTODATE: 4>, <States.UPTODATE: 4>]
->>> comp.v[['a', 'b']]
+>>> comp.v[["a", "b"]]
 [1, 2]
 >> comp.s[['a', 'b']]
 [<States.UPTODATE: 4>, <States.UPTODATE: 4>]
@@ -108,12 +108,11 @@ In our first example, we used a lambda expression to provide a function to calcu
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('input_node')
+>>> comp.add_node("input_node")
 >>> def foo(input_node):
-...   return input_node + 1
-...
->>> comp.add_node('result_node', foo)
->>> comp.insert('input_node', 1)
+...     return input_node + 1
+>>> comp.add_node("result_node", foo)
+>>> comp.insert("input_node", 1)
 >>> comp.compute_all()
 >>> comp.v.result_node
 2
@@ -123,14 +122,13 @@ We can explicitly specify the mapping from parameter names to node names if we r
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('x')
->>> comp.add_node('y')
+>>> comp.add_node("x")
+>>> comp.add_node("y")
 >>> def add(a, b):
-...   return a + b
-...
->>> comp.add_node('result', add, kwds={'a': 'x', 'b': 'y'})
->>> comp.insert('x', 20)
->>> comp.insert('y', 22)
+...     return a + b
+>>> comp.add_node("result", add, kwds={"a": "x", "b": "y"})
+>>> comp.insert("x", 20)
+>>> comp.insert("y", 22)
 >>> comp.compute_all()
 >>> comp.v.result
 42
@@ -140,8 +138,8 @@ For input nodes, the `add_node` method can optionally take a value, rather than 
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a + 1)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a + 1)
 >>> comp.compute_all()
 >>> comp.v.result
 2
@@ -151,11 +149,11 @@ Finally, the function supplied to **add_node** can have `*args` or `**kwargs` ar
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('x', value=1)
->>> comp.add_node('y', value=2)
->>> comp.add_node('z', value=3)
->>> comp.add_node('args', lambda *args: args, args=['x', 'y', 'z'])
->>> comp.add_node('kwargs', lambda **kwargs: kwargs, kwds={'a': 'x', 'b': 'y', 'c': 'z'})
+>>> comp.add_node("x", value=1)
+>>> comp.add_node("y", value=2)
+>>> comp.add_node("z", value=3)
+>>> comp.add_node("args", lambda *args: args, args=["x", "y", "z"])
+>>> comp.add_node("kwargs", lambda **kwargs: kwargs, kwds={"a": "x", "b": "y", "c": "z"})
 >>> comp.compute_all()
 >>> comp.v.args
 (1, 2, 3)
@@ -169,13 +167,13 @@ For these examples, we define a more complex Computation:
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('input1')
->>> comp.add_node('input2')
->>> comp.add_node('intermediate1', lambda input1: 2 * input1)
->>> comp.add_node('intermediate2', lambda input1, input2: input1 + input2)
->>> comp.add_node('intermediate3', lambda input2: 3 * input2)
->>> comp.add_node('result1', lambda intermediate1, intermediate2: intermediate1 + intermediate2)
->>> comp.add_node('result2', lambda intermediate2, intermediate3: intermediate2 + intermediate3)
+>>> comp.add_node("input1")
+>>> comp.add_node("input2")
+>>> comp.add_node("intermediate1", lambda input1: 2 * input1)
+>>> comp.add_node("intermediate2", lambda input1, input2: input1 + input2)
+>>> comp.add_node("intermediate3", lambda input2: 3 * input2)
+>>> comp.add_node("result1", lambda intermediate1, intermediate2: intermediate1 + intermediate2)
+>>> comp.add_node("result2", lambda intermediate2, intermediate3: intermediate2 + intermediate3)
 >>> comp.draw()
 ```
 
@@ -203,7 +201,7 @@ We insert values into **input1** and **input2**:
 
 ```pycon
 >>> comp.insert('input1, 1)
->>> comp.insert('input2', 2)
+>>> comp.insert("input2", 2)
 >>> comp.draw()
 ```
 
@@ -232,7 +230,7 @@ As before, we see that the nodes we have just inserted data for are colored dark
 We saw before that we can use the `compute_all` method to calculate nodes. We can also specify exactly which nodes we would like calculated using the `compute` method. This method will calculate any upstream dependencies that are not up-to-date, but it will not calculate nodes that do not need to be calculated. For example, if we request the **result1** be calculated, **intermediate1** and **intermedate2** will be calculated first, but **intermediate3** and **result2** will not be calculated:
 
 ```pycon
->>> comp.compute('result1')
+>>> comp.compute("result1")
 >>> comp.v.result1
 5
 >>> comp.draw()
@@ -263,7 +261,7 @@ We saw before that we can use the `compute_all` method to calculate nodes. We ca
 Often, in real-time systems, updates will come periodically for one or more of the inputs to a computation. We can insert this updated data into a computation and Loman will corresponding mark any downstream nodes as stale or computable i.e. no longer up-to-date. Continuing from the previous example, we insert a new value into **input1**:
 
 ```pycon
->>> comp.insert('input1', 2)
+>>> comp.insert("input1", 2)
 >>> comp.draw()
 ```
 
@@ -300,8 +298,8 @@ And again we can ask Loman to calculate nodes in the computation, and give us re
 In fact, we are not restricted to inserting data into input nodes. It is perfectly possible to use the `insert` method to override the value of a calculated node also. The overridden value will remain in place until the node is recalculated (which will happen after one of its upstreams is updated causing it to be marked stale, or when it is explicitly marked as stale, and then recalculated). Here we override **intermediate2** and calculate **result2** (note that **result1** is not recalculated, because we didn't ask anything that required it to be):
 
 ```pycon
->>> comp.insert('intermediate2', 100)
->>> comp.compute('result2')
+>>> comp.insert("intermediate2", 100)
+>>> comp.compute("result2")
 >>> comp.v.result2
 106
 >>> comp.draw()
@@ -332,7 +330,7 @@ In fact, we are not restricted to inserting data into input nodes. It is perfect
 As well as inserting data into nodes, we can update the computation they perform by re-adding the node. Node states get updated appropriately automatically. For example, continuing from the previous example, we can change how **intermediate2** is calculated, and we see that nodes **intermediate2**, **result1** and **result2** are no longer marked up-to-date:
 
 ```pycon
->>> comp.add_node('intermediate2', lambda input1, input2: 5 * input1 + 2 * input2)
+>>> comp.add_node("intermediate2", lambda input1, input2: 5 * input1 + 2 * input2)
 >>> comp.draw()
 ```
 
@@ -393,8 +391,8 @@ As well as inserting data into nodes, we can update the computation they perform
 We can even add new nodes, and change the dependencies of existing calculations. So for example, we can create a new node called **new_node**, and have **intermediate2** depend on that, rather than **input1**. It's confusing when I describe it with words, but Loman's visualization helps us keep tabs on everything - that's its purpose:
 
 ```pycon
->>> comp.add_node('new_node', lambda input1, input2: input1 / input2)
->>> comp.add_node('intermediate2', lambda new_nod, input2: 5 * new_nod + 2 * input2)
+>>> comp.add_node("new_node", lambda input1, input2: input1 / input2)
+>>> comp.add_node("intermediate2", lambda new_nod, input2: 5 * new_nod + 2 * input2)
 >>> comp.draw()
 ```
 
@@ -462,10 +460,10 @@ If trying to calculate a node causes an exception, then Loman will mark its stat
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a + 1)
->>> comp.add_node('c', lambda a: a / 0) # This will cause an exception
->>> comp.add_node('d', lambda b, c: b + c)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a + 1)
+>>> comp.add_node("c", lambda a: a / 0)  # This will cause an exception
+>>> comp.add_node("d", lambda b, c: b + c)
 >>> comp.compute_all()
 >>> comp.draw()
 ```
@@ -499,7 +497,7 @@ ZeroDivisionError: division by zero
 We can use Loman's facilities of changing calculations or overriding values to quickly correct errors in-place, and without having to recompute upstreams, or wait to redownload large data-sets:
 
 ```pycon
->>> comp.add_node('c', lambda a: a / 1)
+>>> comp.add_node("c", lambda a: a / 1)
 >>> comp.compute_all()
 >>> comp.draw()
 ```
@@ -523,7 +521,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('b', lambda a: a)
+>>> comp.add_node("b", lambda a: a)
 >>> comp.draw()
 ```
 
@@ -549,7 +547,7 @@ Loman has a special state, "Placeholder" for missing upstream nodes. This can oc
 ```
 
 ```pycon
->>> comp.delete_node('a')
+>>> comp.delete_node("a")
 ```
 
 ```dot

@@ -53,6 +53,23 @@ jobs:
           version: "0.11.7"
           python-version: "3.11"
 
+      # This job runs the whole suite, which includes the visualization and
+      # widget tests, and those shell out to Graphviz's `dot`. Everywhere else
+      # that runs them goes through `make test`, which reaches Graphviz through
+      # rhiza-task: `test` needs `install`, which needs `setup`, which runs the
+      # repo's `local-setup.sh`. This job deliberately bypasses make, because
+      # `make test` resolves from uv.lock and the whole point here is to resolve
+      # from the declared floors instead. Bypassing make dropped the
+      # provisioning with it, so the binary was never installed and 121 tests
+      # failed with "GraphViz's executables not found" -- an environment gap
+      # reported as if the floors were broken.
+      #
+      # The pandas job below needs no such step: its module list is the
+      # version-sensitive tests only, none of which render a graph.
+      - name: Install Graphviz
+        if: steps.changed.outputs.run == 'true'
+        run: make install-graphviz
+
       # benchmarks/ and stress/ are excluded to match `make test`: the benchmark
       # suite needs pytest-benchmark, which the benchmark target installs ad-hoc
       # rather than declaring, and stress tests are opt-in via their marker.
@@ -86,8 +103,8 @@ jobs:
           version: "0.11.7"
           python-version: "3.11"
 
-      # The target lives in .rhiza/make.d/20-compat-tests.mk, so the list of
-      # version-sensitive modules is defined once rather than here as well.
+      # The target lives in local.mk, so the list of version-sensitive modules
+      # is defined once rather than here as well.
       - name: Run the version-sensitive tests against pandas ${{ matrix.pandas }}
         run: |
           make test-compat PANDAS_MIN=${{ matrix.pandas }}

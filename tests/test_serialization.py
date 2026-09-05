@@ -355,25 +355,17 @@ def test_nd_array_transformer():
 class Foo:
     """Base test class for transformer subtype testing."""
 
-    pass
-
 
 class FooA(Foo):
     """Subclass A of Foo for testing."""
-
-    pass
 
 
 class FooB(Foo):
     """Subclass B of Foo for testing."""
 
-    pass
-
 
 class FooUnregistered(Foo):
     """Unregistered subclass of Foo for testing."""
-
-    pass
 
 
 class FooTransformer(CustomTransformer):

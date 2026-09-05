@@ -5,9 +5,9 @@ Nodes can be tagged with string tags, either when the node is added, using the `
 ```pycon
 >>> from loman import *
 >>> comp = Computation()
->>> comp.add_node('a', value=1, tags=['foo'])
->>> comp.add_node('b', lambda a: a + 1)
->>> comp.set_tag(['a', 'b'], 'bar')
+>>> comp.add_node("a", value=1, tags=["foo"])
+>>> comp.add_node("b", lambda a: a + 1)
+>>> comp.set_tag(["a", "b"], "bar")
 ```
 
 !!! note
@@ -16,7 +16,7 @@ Nodes can be tagged with string tags, either when the node is added, using the `
 The tags associated with a node can be inspected using the `tags` method, or the `t` attribute-style accessor. Both return a `set`, so the examples below sort it to give a stable order:
 
 ```pycon
->>> sorted(comp.tags('a'))
+>>> sorted(comp.tags("a"))
 ['__serialize__', 'bar', 'foo']
 >>> sorted(comp.t.b)
 ['__serialize__', 'bar']
@@ -25,7 +25,7 @@ The tags associated with a node can be inspected using the `tags` method, or the
 Tags can also be cleared with the `clear_tag` and `clear_tags` methods:
 
 ```pycon
->>> comp.clear_tag(['a', 'b'], 'foo')
+>>> comp.clear_tag(["a", "b"], "foo")
 >>> sorted(comp.t.a)
 ['__serialize__', 'bar']
 ```

@@ -5,19 +5,19 @@ Loman provide a decorator `@node`, which allows functions to be added to computa
 ```pycon
 >>> from loman import *
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
+>>> comp.add_node("a", value=1)
 
 >>> @node(comp)
 ... def b(a):
-...    return a + 1
+...     return a + 1
 
->>> @node(comp, 'c', args=['a'])
+>>> @node(comp, "c", args=["a"])
 ... def foo(x):
-...    return 2 * x
+...     return 2 * x
 
->>> @node(comp, kwds={'x': 'a', 'y': 'b'})
+>>> @node(comp, kwds={"x": "a", "y": "b"})
 ... def d(x, y):
-...    return x + y
+...     return x + y
 
 >>> comp.draw()
 ```

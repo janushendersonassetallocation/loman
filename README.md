@@ -1,5 +1,5 @@
 
-<div align="center">
+<div align="center" markdown="1">
 
 # Loman
 
@@ -9,7 +9,6 @@
 [![Python versions](https://img.shields.io/badge/Python-3.11%20•%203.12%20•%203.13%20•%203.14-blue?logo=python)](https://www.python.org/)
 [![PyPI - Version](https://img.shields.io/pypi/v/loman.svg)](https://pypi.python.org/pypi/loman)
 [![PyPI - Wheel](https://img.shields.io/pypi/wheel/loman.svg)](https://pypi.python.org/pypi/loman)
-[![ReadTheDocs](https://readthedocs.org/projects/loman/badge/?version=latest)](http://loman.readthedocs.io/)
 
 ![Github](https://img.shields.io/badge/GitHub-181717?style=flat&logo=github)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=white)
@@ -65,14 +64,14 @@ from loman import Computation
 
 # Create a computation graph
 comp = Computation()
-comp.add_node('a', value=1)                    # Input node
-comp.add_node('b', lambda a: a + 1)            # b depends on a
-comp.add_node('c', lambda a, b: 2 * a)         # c depends on a and b
-comp.add_node('d', lambda b, c: b + c)         # d depends on b and c
-comp.add_node('e', lambda c: c + 1)            # e depends on c
+comp.add_node("a", value=1)  # Input node
+comp.add_node("b", lambda a: a + 1)  # b depends on a
+comp.add_node("c", lambda a, b: 2 * a)  # c depends on a and b
+comp.add_node("d", lambda b, c: b + c)  # d depends on b and c
+comp.add_node("e", lambda c: c + 1)  # e depends on c
 
 # Smart computation - only calculates what's needed
-comp.compute('d')  # Will not compute 'e' unnecessarily!
+comp.compute("d")  # Will not compute 'e' unnecessarily!
 
 # Inspect intermediate values
 comp.to_dict()
@@ -113,7 +112,7 @@ Loman transforms how you build and maintain complex data processing pipelines by
   - Track complex dependencies in evolving analysis pipelines
   - Reuse expensive intermediate computations across experiments
 
-📖 **Learn More**: The [Introduction](http://loman.readthedocs.io/en/latest/user/intro.html) explains in detail how Loman can transform your workflow.
+📖 **Learn More**: The [Introduction](https://janushendersonassetallocation.github.io/loman/user/intro/) explains in detail how Loman can transform your workflow.
 
 ## 📥 Installation
 
@@ -212,7 +211,7 @@ Whether you're fixing bugs, adding features, or improving documentation, your he
 
 ---
 
-<div align="center">
+<div align="center" markdown="1">
 
 ⭐ **If you find Loman useful, please consider giving it a star!** ⭐
 

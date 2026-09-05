@@ -1746,7 +1746,7 @@ class Computation:
     @overload
     def styles(self, name: Names) -> list[str | None]: ...
 
-    def styles(self, name: Name | Names) -> str | None | list[str | None]:
+    def styles(self, name: Name | Names) -> str | list[str | None] | None:
         """Get the tags associated with a node.
 
             >>> comp = Computation()
@@ -1791,7 +1791,7 @@ class Computation:
     @overload
     def get_timing(self, name: Names) -> list[TimingData | None]: ...
 
-    def get_timing(self, name: Name | Names) -> TimingData | None | list[TimingData | None]:
+    def get_timing(self, name: Name | Names) -> TimingData | list[TimingData | None] | None:
         """Get the timing information for a node.
 
         :param name: Name or names of the node to get the timing information of
