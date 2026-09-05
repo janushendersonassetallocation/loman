@@ -349,7 +349,7 @@ class ComputationWidget(anywidget.AnyWidget):
         return self.computation.draw(
             self._root,
             node_transformations=transformations,
-            **options,  # type: ignore[arg-type]
+            **options,
         )
 
     @contextmanager
