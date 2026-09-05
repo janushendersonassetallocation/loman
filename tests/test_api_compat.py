@@ -266,6 +266,46 @@ class TestReleasedCallPatternsStillWork:
 
         assert (Computation.__getstate__, Computation.__setstate__) == before
 
+    def test_write_dill_old_blanks_a_node_marked_not_to_serialize(self, tmp_path):
+        """``serialize=False`` still means the value does not travel.
+
+        The deprecated path applies the ``__serialize__`` tag rule itself rather
+        than going through ``__getstate__``, which it has deleted for the
+        duration of the write. So the rule is implemented twice, and only the
+        other copy was covered.
+        """
+        import dill  # nosec B403
+
+        from loman import States
+
+        comp = Computation()
+        comp.add_node("kept", value=1)
+        comp.add_node("dropped", value=2, serialize=False)
+        path = tmp_path / "comp.dill"
+
+        with pytest.warns(DeprecationWarning, match="write_dill_old"):
+            comp.write_dill_old(str(path))
+
+        with path.open("rb") as f:
+            loaded = dill.load(f)  # nosec B301  # noqa: S301
+
+        assert loaded.v.kept == 1
+        assert loaded.state("dropped") == States.UNINITIALIZED
+
+    def test_write_dill_old_accepts_an_open_file(self, tmp_path):
+        """A file object is written to directly, as the signature promises."""
+        import dill  # nosec B403
+
+        comp = Computation()
+        comp.add_node("a", value=42)
+        path = tmp_path / "comp.dill"
+
+        with path.open("wb") as f, pytest.warns(DeprecationWarning, match="write_dill_old"):
+            comp.write_dill_old(f)
+
+        with path.open("rb") as f:
+            assert dill.load(f).v.a == 42  # nosec B301  # noqa: S301
+
 
 class TestWriteJsonOutputShape:
     """write_json still produces the document shape people parse."""
