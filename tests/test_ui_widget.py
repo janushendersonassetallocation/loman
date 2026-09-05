@@ -2351,9 +2351,7 @@ class TestEveryNameSurfaceKeepsItsType:
         return sorted(
             attribute
             for attribute, value in vars(ComputationWidget).items()
-            if isinstance(value, property)
-            and not attribute.startswith("_")
-            and (attribute.endswith("_name") or attribute.endswith("_names"))
+            if isinstance(value, property) and not attribute.startswith("_") and attribute.endswith(("_name", "_names"))
         )
 
     def test_the_sweep_actually_covers_something(self):

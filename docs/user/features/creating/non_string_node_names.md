@@ -4,11 +4,10 @@ In the previous example, the nodes have all been given strings as keys. This is 
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node(('fib', 1), value=1)
->>> comp.add_node(('fib', 2), value=1)
->>> for i in range(3,7):
-...    comp.add_node(('fib', i), lambda x, y: x + y, kwds={'x': ('fib', i - 1), 'y': ('fib', i - 2)})
-...
+>>> comp.add_node(("fib", 1), value=1)
+>>> comp.add_node(("fib", 2), value=1)
+>>> for i in range(3, 7):
+...     comp.add_node(("fib", i), lambda x, y: x + y, kwds={"x": ("fib", i - 1), "y": ("fib", i - 2)})
 >>> comp.draw()
 ```
 
@@ -33,6 +32,6 @@ In the previous example, the nodes have all been given strings as keys. This is 
 
 ```pycon
 >>> comp.compute_all()
->>> comp.value(('fib', 6))
+>>> comp.value(("fib", 6))
 8
 ```

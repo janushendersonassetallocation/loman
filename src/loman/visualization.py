@@ -63,12 +63,12 @@ class NodeFormatter(ABC):
     @abstractmethod
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @abstractmethod
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node appearance returning dict of graphviz attributes."""
-        pass  # pragma: no cover
+        # pragma: no cover
 
     @staticmethod
     def create(
@@ -151,7 +151,6 @@ class ColorByState(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format node color based on computation state."""
@@ -201,7 +200,6 @@ class ShapeByType(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with type-based shape styling."""
@@ -232,7 +230,6 @@ class RectBlocks(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return rectangle shape for composite nodes."""
@@ -246,7 +243,6 @@ class StandardLabel(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Return standard label for node."""
@@ -268,7 +264,6 @@ class StandardGroup(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard group styling."""
@@ -287,7 +282,6 @@ class StandardStylingOverrides(NodeFormatter):
 
     def calibrate(self, nodes: list[Node]) -> None:
         """Calibrate formatter based on all nodes in the graph."""
-        pass
 
     def format(self, name: NodeKey, nodes: list[Node], is_composite: bool) -> dict[str, Any] | None:
         """Format a node with standard styling overrides."""

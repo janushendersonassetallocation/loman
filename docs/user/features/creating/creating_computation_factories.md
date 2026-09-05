@@ -99,7 +99,7 @@ class ExampleComputation3:
         return b + c
 
 >>> comp = ExampleComputation3()
->>> comp.insert('a', 3)
+>>> comp.insert("a", 3)
 >>> comp.compute_all()
 >>> comp
 ```
