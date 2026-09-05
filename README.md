@@ -64,14 +64,14 @@ from loman import Computation
 
 # Create a computation graph
 comp = Computation()
-comp.add_node('a', value=1)                    # Input node
-comp.add_node('b', lambda a: a + 1)            # b depends on a
-comp.add_node('c', lambda a, b: 2 * a)         # c depends on a and b
-comp.add_node('d', lambda b, c: b + c)         # d depends on b and c
-comp.add_node('e', lambda c: c + 1)            # e depends on c
+comp.add_node("a", value=1)  # Input node
+comp.add_node("b", lambda a: a + 1)  # b depends on a
+comp.add_node("c", lambda a, b: 2 * a)  # c depends on a and b
+comp.add_node("d", lambda b, c: b + c)  # d depends on b and c
+comp.add_node("e", lambda c: c + 1)  # e depends on c
 
 # Smart computation - only calculates what's needed
-comp.compute('d')  # Will not compute 'e' unnecessarily!
+comp.compute("d")  # Will not compute 'e' unnecessarily!
 
 # Inspect intermediate values
 comp.to_dict()

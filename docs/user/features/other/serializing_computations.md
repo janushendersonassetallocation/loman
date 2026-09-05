@@ -6,10 +6,10 @@ Loman can serialize computations to a JSON file for later inspection or post-mor
 >>> import math
 >>> from loman import Computation
 >>> comp = Computation()
->>> comp.add_node('x', value=4.0)
+>>> comp.add_node("x", value=4.0)
 >>> def area(x):
-...     return math.pi * x ** 2
->>> comp.add_node('area', area)
+...     return math.pi * x**2
+>>> comp.add_node("area", area)
 >>> comp.compute_all()
 >>> comp.to_dict()
 {NodeKey('x'): 4.0, NodeKey('area'): 50.26548245743669}
@@ -18,8 +18,8 @@ Loman can serialize computations to a JSON file for later inspection or post-mor
 To save and reload the computation:
 
 ```pycon
->>> comp.write_json('comp.json')
->>> comp2 = Computation.read_json('comp.json')
+>>> comp.write_json("comp.json")
+>>> comp2 = Computation.read_json("comp.json")
 >>> comp2.v.area
 50.26548245743669
 ```
@@ -33,11 +33,11 @@ Sometimes a node holds a value that should not (or cannot) be saved — for exam
 ```pycon
 >>> import threading
 >>> comp = Computation()
->>> comp.add_node('lock', value=threading.Lock(), serialize=False)
->>> comp.add_node('result', value=42)
->>> comp.write_json('comp.json')
->>> comp2 = Computation.read_json('comp.json')
->>> comp2.state('lock')
+>>> comp.add_node("lock", value=threading.Lock(), serialize=False)
+>>> comp.add_node("result", value=42)
+>>> comp.write_json("comp.json")
+>>> comp2 = Computation.read_json("comp.json")
+>>> comp2.state("lock")
 <States.UNINITIALIZED: 1>
 >>> comp2.v.result
 42
@@ -55,8 +55,8 @@ A lambda cannot be serialized because it has no importable module path. Use a mo
 ```pycon
 >>> from loman import Computation, ComputationSerializer, SerializationError
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', lambda a: a + 1)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", lambda a: a + 1)
 >>> comp.compute_all()
 >>> import io
 >>> try:
@@ -71,9 +71,9 @@ Replace the lambda with a named function defined at module level:
 ```pycon
 >>> def increment(a):
 ...     return a + 1
->>> comp.add_node('b', increment)
+>>> comp.add_node("b", increment)
 >>> comp.compute_all()
->>> comp.write_json('comp.json')       # now succeeds
+>>> comp.write_json("comp.json")  # now succeeds
 ```
 
 ### Using dill to serialize lambdas and closures
@@ -83,8 +83,8 @@ When refactoring to named functions is impractical, pass `use_dill_for_functions
 ```pycon
 >>> s = ComputationSerializer(use_dill_for_functions=True)
 >>> comp = Computation()
->>> comp.add_node('a', value=3)
->>> comp.add_node('b', lambda a: a * 2)
+>>> comp.add_node("a", value=3)
+>>> comp.add_node("b", lambda a: a * 2)
 >>> comp.compute_all()
 >>> buf = io.StringIO()
 >>> comp.write_json(buf, serializer=s)
@@ -92,7 +92,7 @@ When refactoring to named functions is impractical, pass `use_dill_for_functions
 >>> comp2 = Computation.read_json(buf, serializer=s)
 >>> comp2.v.b
 6
->>> comp2.insert('a', 10)
+>>> comp2.insert("a", 10)
 >>> comp2.compute_all()
 >>> comp2.v.b
 20
@@ -110,8 +110,8 @@ Both `write_json` and `read_json` accept either a file path (string) or any text
 ```pycon
 >>> import io
 >>> comp = Computation()
->>> comp.add_node('a', value=1)
->>> comp.add_node('b', increment)
+>>> comp.add_node("a", value=1)
+>>> comp.add_node("b", increment)
 >>> comp.compute_all()
 >>> buf = io.StringIO()
 >>> comp.write_json(buf)
@@ -127,11 +127,11 @@ Pinned nodes round-trip correctly — their `PINNED` state and value are preserv
 
 ```pycon
 >>> comp = Computation()
->>> comp.add_node('a', value=10)
->>> comp.pin('a')
->>> comp.write_json('comp.json')
->>> comp2 = Computation.read_json('comp.json')
->>> comp2.state('a')
+>>> comp.add_node("a", value=10)
+>>> comp.pin("a")
+>>> comp.write_json("comp.json")
+>>> comp2 = Computation.read_json("comp.json")
+>>> comp2.state("a")
 <States.PINNED: 6>
 >>> comp2.v.a
 10
@@ -145,15 +145,15 @@ If a node is in `ERROR` state, its exception type, message, and traceback are pr
 >>> def bad_func():
 ...     raise ValueError("something went wrong")
 >>> comp = Computation()
->>> comp.add_node('result', bad_func)
+>>> comp.add_node("result", bad_func)
 >>> comp.compute_all()
->>> comp.state('result')
+>>> comp.state("result")
 <States.ERROR: 5>
->>> comp.write_json('comp.json')
->>> comp2 = Computation.read_json('comp.json')
->>> comp2.state('result')
+>>> comp.write_json("comp.json")
+>>> comp2 = Computation.read_json("comp.json")
+>>> comp2.state("result")
 <States.ERROR: 5>
->>> comp2['result'].value.exception
+>>> comp2["result"].value.exception
 ValueError('something went wrong')
 ```
 
@@ -169,10 +169,10 @@ module as attributes so the post-mortem still tells you what was raised:
 >>> def also_bad():
 ...     raise MyLibraryError("domain-specific failure")
 >>> comp = Computation()
->>> comp.add_node('result', also_bad)
+>>> comp.add_node("result", also_bad)
 >>> comp.compute_all()
->>> comp.write_json('comp.json')
->>> exc = Computation.read_json('comp.json')['result'].value.exception
+>>> comp.write_json("comp.json")
+>>> exc = Computation.read_json("comp.json")["result"].value.exception
 >>> isinstance(exc, DeserializedError)
 True
 >>> exc.exception_type
@@ -194,15 +194,15 @@ For types that are not handled by the default serializer, pass a custom `Computa
 ...         self.x = x
 ...         self.y = y
 >>> point_transformer = SimpleTransformer(
-...     'point',
+...     "point",
 ...     Point,
-...     to_dict=lambda v: {'x': v.x, 'y': v.y},
-...     from_dict=lambda d: Point(d['x'], d['y']),
+...     to_dict=lambda v: {"x": v.x, "y": v.y},
+...     from_dict=lambda d: Point(d["x"], d["y"]),
 ... )
 >>> s = ComputationSerializer()
 >>> s.register(point_transformer)
 >>> comp = Computation()
->>> comp.add_node('origin', value=Point(0, 0))
+>>> comp.add_node("origin", value=Point(0, 0))
 >>> buf = io.StringIO()
 >>> comp.write_json(buf, serializer=s)
 >>> _ = buf.seek(0)
@@ -224,11 +224,14 @@ bytes out-of-line, subclass `CustomTransformer` instead:
 >>> class PolygonTransformer(CustomTransformer):
 ...     @property
 ...     def name(self):
-...         return 'polygon'
+...         return "polygon"
+...
 ...     def to_dict(self, transformer, o):
-...         return {'points': transformer.to_dict(o.points)}
+...         return {"points": transformer.to_dict(o.points)}
+...
 ...     def from_dict(self, transformer, d):
-...         return Polygon(transformer.from_dict(d['points']))
+...         return Polygon(transformer.from_dict(d["points"]))
+...
 ...     @property
 ...     def supported_direct_types(self):
 ...         return [Polygon]
@@ -246,8 +249,8 @@ the missing argument on the first recalculation:
 ```pycon
 >>> from loman import Computation, C, ComputationSerializer
 >>> comp = Computation()
->>> comp.add_node('number', value=1.2345)
->>> comp.add_node('rounded', round, kwds={'ndigits': C(object())})
+>>> comp.add_node("number", value=1.2345)
+>>> comp.add_node("rounded", round, kwds={"ndigits": C(object())})
 >>> comp.write_json(io.StringIO())
 Traceback (most recent call last):
     ...
@@ -272,7 +275,7 @@ explicitly — the constant is omitted and an `UnserializableConstantWarning` sa
 so, which is a step towards fixing it rather than a setting to leave in place:
 
 ```pycon
->>> serializer = ComputationSerializer(on_unserializable_constant='drop')
+>>> serializer = ComputationSerializer(on_unserializable_constant="drop")
 >>> comp.write_json(io.StringIO(), serializer=serializer)  # doctest: +SKIP
 UnserializableConstantWarning: Cannot serialize constant argument 'ndigits' on node
 NodeKey('rounded') ... Dropping it, because on_unserializable_constant='drop'. The
@@ -287,7 +290,7 @@ DataFrames and Series are serialized automatically:
 ```pycon
 >>> import pandas as pd
 >>> comp = Computation()
->>> comp.add_node('df', value=pd.DataFrame({'a': [1, 2], 'b': [3, 4]}))
+>>> comp.add_node("df", value=pd.DataFrame({"a": [1, 2], "b": [3, 4]}))
 >>> buf = io.StringIO()
 >>> comp.write_json(buf)
 >>> _ = buf.seek(0)

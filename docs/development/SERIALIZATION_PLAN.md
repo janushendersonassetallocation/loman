@@ -171,14 +171,14 @@ together.
 ## API
 
 ```python
-comp.save("run.loman")                      # efficient + zip (the default)
+comp.save("run.loman")  # efficient + zip (the default)
 comp.save("run.loman", profile="readable")  # inline JSON, zipped
-comp.save("run.json")                       # inferred: json container, readable
+comp.save("run.json")  # inferred: json container, readable
 comp.save("run_dir", container="dir")
 comp.save("run.loman", profile=EfficientProfile(compression="zstd:9"))
 
-Computation.load("run.loman")               # container sniffed
-Computation.load("legacy.json")             # v1 / v2 / v3 single document
+Computation.load("run.loman")  # container sniffed
+Computation.load("legacy.json")  # v1 / v2 / v3 single document
 ```
 
 **Profile and container are orthogonal axes.** Collapsing them into one setting
@@ -204,12 +204,12 @@ diffable text artifact, which is a real thing to want and not a legacy path.
 @attrs.frozen
 class SerializationProfile:
     name: str
-    inline_max_bytes: int | None   # None = always inline; default 8 KiB
-    compression: str               # "none" | "zstd:N" | "zlib:1..9"
-    array_encoding: str            # "json" | "npy"
-    frame_encoding: str            # "json" | "npy" | "parquet"
+    inline_max_bytes: int | None  # None = always inline; default 8 KiB
+    compression: str  # "none" | "zstd:N" | "zlib:1..9"
+    array_encoding: str  # "json" | "npy"
+    frame_encoding: str  # "json" | "npy" | "parquet"
     checksums: bool = False
-    dedupe: str = "identity"       # "none" | "identity" | "content"
+    dedupe: str = "identity"  # "none" | "identity" | "content"
     overrides: Mapping[str, BlobSpec] = {}
 ```
 
@@ -244,7 +244,8 @@ class NdArrayTransformer(CustomTransformer):
             head["encoding"] = "npy"
             head["data"] = t.put_blob(
                 lambda f: np.save(f, o, allow_pickle=False),
-                codec="npy", compressible=True,
+                codec="npy",
+                compressible=True,
             )
         else:
             head["encoding"] = "json"
@@ -284,10 +285,12 @@ will eventually serialize from a worker. Outside the scope `offer_blob()` return
 Per-save policy lives on the profile, as a selector-to-spec map:
 
 ```python
-EfficientProfile(overrides={
-    "market_data/**": BlobSpec(codec="parquet", compression="zstd:9"),
-    "tag:already_compressed": BlobSpec(compression="none"),
-})
+EfficientProfile(
+    overrides={
+        "market_data/**": BlobSpec(codec="parquet", compression="zstd:9"),
+        "tag:already_compressed": BlobSpec(compression="none"),
+    }
+)
 ```
 
 Compression level is a property of *this file* — an archive versus a quick

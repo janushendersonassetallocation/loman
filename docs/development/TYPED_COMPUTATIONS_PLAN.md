@@ -94,8 +94,8 @@ class Signal(ComputationInterface):
 One declaration serves three jobs — specification, checking, and typed access.
 
 ```python
-Signal.check(comp)      # -> report; reasons it does not conform, empty if it does
-Signal.view(comp)       # -> Signal; refuses a non-conforming computation
+Signal.check(comp)  # -> report; reasons it does not conform, empty if it does
+Signal.view(comp)  # -> Signal; refuses a non-conforming computation
 ```
 
 Verified behaviour of the facade under `ty`:

@@ -10,20 +10,20 @@ out the rest:
 
 ```python
 # Before (deprecated)
-comp.write_dill('comp.dill')
-comp2 = Computation.read_dill('comp.dill')
+comp.write_dill("comp.dill")
+comp2 = Computation.read_dill("comp.dill")
 
 # After
-comp.save('comp.loman')
-comp2 = Computation.load('comp.loman')
+comp.save("comp.loman")
+comp2 = Computation.load("comp.loman")
 ```
 
 If you specifically want a text file you can read and diff, use
 `write_json` / `read_json`, which are unchanged:
 
 ```python
-comp.write_json('comp.json')
-comp2 = Computation.read_json('comp.json')
+comp.write_json("comp.json")
+comp2 = Computation.read_json("comp.json")
 ```
 
 See [Saving computations](saving_computations.md) for profiles, containers and
@@ -51,13 +51,15 @@ need to inspect a file you do not trust.
 
 ```python
 # Before — works with write_dill, fails with write_json
-comp.add_node('b', lambda a: a + 1)
+comp.add_node("b", lambda a: a + 1)
+
 
 # After — works with write_json
 def increment(a):
     return a + 1
 
-comp.add_node('b', increment)
+
+comp.add_node("b", increment)
 ```
 
 If refactoring is impractical, there are two escape hatches:
@@ -65,7 +67,7 @@ If refactoring is impractical, there are two escape hatches:
 **Option 1 — serialize the value only** (function is lost, node cannot be re-run after load):
 
 ```python
-comp.add_node('b', lambda a: a + 1, serialize=False)
+comp.add_node("b", lambda a: a + 1, serialize=False)
 ```
 
 **Option 2 — use `ComputationSerializer(use_dill_for_functions=True)`** (function is preserved as a dill blob, re-computation works after load):
@@ -74,8 +76,8 @@ comp.add_node('b', lambda a: a + 1, serialize=False)
 from loman import ComputationSerializer
 
 s = ComputationSerializer(use_dill_for_functions=True)
-comp.write_json('comp.json', serializer=s)
-comp2 = Computation.read_json('comp.json', serializer=s)
+comp.write_json("comp.json", serializer=s)
+comp2 = Computation.read_json("comp.json", serializer=s)
 ```
 
 The same serializer instance must be used for both write and read. The dill blob is not portable across Python versions.

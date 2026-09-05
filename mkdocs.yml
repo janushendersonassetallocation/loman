@@ -102,11 +102,11 @@ nav:
   - API Reference: api.md
   - Developer:
       - Release Checklist: dev/release.md
-      - DevContainer: development/DEVCONTAINER.md
-      - Marimo: development/MARIMO.md
-      - Testing: development/TESTS.md
-      - UI Extra Design: development/UI_EXTRA_PLAN.md
-      - UI Extra As Built: development/UI_EXTRA_AS_BUILT.md
-      - UI Extra UX Review: development/UI_EXTRA_UX_REVIEW.md
+      # One entry where DevContainer, Marimo and Testing used to be three. rhiza 1.x
+      # stopped syncing DEVCONTAINER.md, MARIMO.md and TESTS.md into consumers and
+      # ships development/rhiza.md instead, which links out to the hosted copies --
+      # so the pages this nav pointed at are gone and their content now lives at
+      # jebel-quant.github.io/rhiza.
+      - Rhiza tooling: development/rhiza.md
       - Contributing: CONTRIBUTING.md
       - Code of Conduct: CODE_OF_CONDUCT.md
