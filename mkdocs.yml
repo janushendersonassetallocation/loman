@@ -101,7 +101,7 @@ nav:
       - Coverage Report: reports/html-coverage/index.html
   - API Reference: api.md
   - Developer:
-      - Release Checklist: dev/release.md
+      - Release Checklist: development/release.md
       # One entry where DevContainer, Marimo and Testing used to be three. rhiza 1.x
       # stopped syncing DEVCONTAINER.md, MARIMO.md and TESTS.md into consumers and
       # ships development/rhiza.md instead, which links out to the hosted copies --
