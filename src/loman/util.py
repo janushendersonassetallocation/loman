@@ -815,6 +815,9 @@ def value_eq(a: Any, b: Any) -> bool:
         try:
             return bool(np.array_equal(a, b, equal_nan=True))
         except Exception:
+            # ``equal_nan=True`` raises on an object-dtype or ragged array, where
+            # numpy cannot decide what a NaN is. Reporting "not equal" is the safe
+            # direction -- see the note on the default comparison below.
             return False
 
     # Default comparison; ensure a single boolean
@@ -825,4 +828,10 @@ def value_eq(a: Any, b: Any) -> bool:
             return bool(np.all(result))
         return bool(result)
     except Exception:
+        # An arbitrary object's ``__eq__`` may raise, and its caller is
+        # ``Computation.insert``, which uses this only to skip a redundant write.
+        # "Not equal" therefore means the value is written and descendents marked
+        # stale -- a recomputation that was not needed, rather than a stale graph
+        # that looks up to date. Letting the exception escape would instead fail an
+        # insert over a comparison the caller never asked to be able to fail.
         return False
