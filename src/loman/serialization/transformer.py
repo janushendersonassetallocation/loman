@@ -1050,6 +1050,7 @@ def _encode_frame_as_parquet(transformer: "Transformer", frame: "pd.DataFrame") 
         return None
 
     def write(f: Any) -> None:
+        """Stream the parquet table into the blob's file object."""
         pq.write_table(table, f, compression="zstd")
 
     return {
