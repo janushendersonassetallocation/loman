@@ -7,6 +7,7 @@ import graphlib
 import importlib
 import math
 import types
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from enum import Enum
@@ -1019,6 +1020,21 @@ class DillFunctionTransformer(CustomTransformer):
         return [Callable]
 
 
+class FrameEncodingFallbackWarning(UserWarning):
+    """A frame the profile asked to store as parquet was stored the default way.
+
+    The frame is still saved and still round-trips exactly. What is lost is the
+    encoding that was asked for, and with it the ability to read the blob with
+    other tools --- which is the documented reason to choose parquet at all.
+
+    pyarrow simply not being installed does not raise this. That fallback is
+    deliberate and needs no warning. This fires only where pyarrow is present
+    and the conversion itself failed: an unsupported dtype, duplicate column
+    names, a non-representable index, or an install broken against the numpy it
+    was built for.
+    """
+
+
 def _encode_frame_as_parquet(transformer: "Transformer", frame: "pd.DataFrame") -> dict[str, Any] | None:
     """Encode *frame* as a parquet blob, or return ``None`` to use the default path.
 
@@ -1031,7 +1047,8 @@ def _encode_frame_as_parquet(transformer: "Transformer", frame: "pd.DataFrame") 
     represent this particular frame. That last case is why the conversion is
     attempted before anything is written: a frame with duplicate column names or
     an exotic dtype should fall back to an encoding that works, not fail the
-    save.
+    save. It warns on the way past, because a caller who asked for parquet and
+    silently got something else has no way to find out otherwise.
     """
     if transformer.blob_setting("frame_encoding", "npy") != "parquet":
         return None
@@ -1045,8 +1062,25 @@ def _encode_frame_as_parquet(transformer: "Transformer", frame: "pd.DataFrame") 
 
         pa = require("pyarrow", "efficient")
         pq = require("pyarrow.parquet", "efficient")
+    except ImportError:
+        # The extra is not installed. Nothing is wrong, nothing was promised,
+        # and this is the one case not worth a word.
+        return None
+
+    # Anything at all: pyarrow raises ArrowInvalid, ArrowNotImplementedError,
+    # ValueError and TypeError for the frames it cannot take, and an install
+    # broken against its numpy raises from here too. Catching narrowly would
+    # mean a new pyarrow error type failing a save that used to succeed.
+    try:
         table = pa.Table.from_pandas(frame, preserve_index=True)
-    except Exception:
+    except Exception as exc:
+        rows, cols = frame.shape
+        warnings.warn(
+            f"pyarrow could not convert this {rows}x{cols} DataFrame, so it was stored with the default "
+            f"encoding instead of parquet: {exc!r}",
+            FrameEncodingFallbackWarning,
+            stacklevel=2,
+        )
         return None
 
     def write(f: Any) -> None:
