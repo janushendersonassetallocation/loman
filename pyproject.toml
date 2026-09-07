@@ -235,12 +235,19 @@ skips = ["B301", "B403", "B404"]
 # so they should not count against docstring coverage.
 ignore-overloaded-functions = true
 
-# Functions and classes defined *inside* another function are local scaffolding,
-# not API: the tests build computation graphs from inline node functions such as
-# `def b(a): return a + 1`, and documenting those only restates the body. The
-# enclosing test keeps its docstring, which is where the intent belongs.
-ignore-nested-functions = true
-ignore-nested-classes = true
+# Nested functions and classes are counted. The exclusion that used to sit here
+# was written for the tests, which build computation graphs from inline node
+# functions such as `def b(a): return a + 1` where a docstring would only
+# restate the body --- but interrogate is only ever pointed at `src/`, by
+# `make docs-coverage` and by the pre-commit hook alike, so it never reached
+# them. In `src/` a nested function is a decorator body, a codec closure or a
+# writer callback, and each one is documented.
+
+# Counting them only holds the line if falling below it fails, so the floor is
+# where the measurement is. ruff's pydocstyle rules already require a docstring
+# on every module-level and class-level definition; they do not look inside a
+# function body, which is how the last five came to be missing at all.
+fail-under = 100
 
 [tool.check_test_layout]
 # Tests live flat under tests/ and are grouped by behaviour rather than
