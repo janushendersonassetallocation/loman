@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
-import itertools
-import types
-from collections.abc import Callable, Generator, Hashable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, cast
 
 import numpy as np
 import pandas as pd
 
+from loman.consts import NodeAttributes, States
+from loman.iterables import apply1
+from loman.nodedefs import C, ConstantValue, _bind_self, identity_function
+from loman.nodekey import Name, NodeKey, to_nodekey
+
 if TYPE_CHECKING:
     from loman.computeengine import Computation
-    from loman.nodekey import Name, NodeKey
 else:
+    # The engine imports this module, so it can only be named in an annotation.
     Computation = Any
-    Name = Any
-    NodeKey = Any
 
-T = TypeVar("T")
-R = TypeVar("R")
 K = TypeVar("K", bound=Hashable)
 
 
@@ -52,8 +51,6 @@ class PlannedNode:
     @classmethod
     def link(cls, node_key: NodeKey, source: NodeKey, label: Name | None = None) -> PlannedNode:
         """Plan a node that takes its value from another node unchanged."""
-        from loman.computeengine import identity_function
-
         return cls(node_key, identity_function, (source,), label=label)
 
     @classmethod
@@ -66,8 +63,6 @@ class PlannedNode:
     @property
     def predecessors(self) -> tuple[NodeKey, ...]:
         """Return the nodes this planned node would depend on."""
-        from loman.computeengine import ConstantValue
-
         return tuple(arg for arg in self.args if not isinstance(arg, ConstantValue))
 
     def apply_to(self, comp: Computation) -> NodeKey:
@@ -123,8 +118,6 @@ class BlockContext(Generic[K]):
         otherwise add a dead node to every block — pass ``create=True`` to allow
         it deliberately.
         """
-        from loman.consts import NodeAttributes
-
         node_key = _to_node_name(name, description)
         if not self.block.has_node(node_key):
             if self._is_planned_in_every_block(node_key) or create:
@@ -146,8 +139,6 @@ class BlockContext(Generic[K]):
         Returns anything that is not callable unchanged, so a plain node name
         passes through.
         """
-        from loman.computeengine import _bind_self
-
         return _bind_self(func, self.definition_object, self.ignore_self)
 
 
@@ -186,8 +177,6 @@ class FanOut(Generic[K]):
 
     def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
         """Plan one target node per key, linked or transformed from its source."""
-        from loman.computeengine import C
-
         target = ctx.require_block_input(self.target, "Fan-out target", create=self.create)
         sources = _resolve_fan_out_sources(ctx.bind(self.source), ctx.blocks)
         transform = ctx.bind(self.transform)
@@ -242,8 +231,6 @@ class FanIn(Generic[K]):
 
     def plan(self, ctx: BlockContext[K]) -> Iterable[PlannedNode]:
         """Plan one result node gathering the same relative node from every block."""
-        from loman.computeengine import C
-
         source = ctx.require_block_node(self.source, "Fan-in source")
         result = _to_node_name(self.result, "Fan-in result")
         sources = [block_path.join(source) for block_path in ctx.blocks.values()]
@@ -373,8 +360,6 @@ def _to_node_name(name: Name, description: str) -> NodeKey:
     node whose key is the function object itself. Only a fan-out source may be a
     callable, where it resolves a different source node for each key.
     """
-    from loman.nodekey import to_nodekey
-
     if callable(name):
         msg = f"{description} must be a node name, not a callable: {name!r}"
         raise TypeError(msg)
@@ -395,8 +380,6 @@ def _resolve_fan_out_sources(source: Name | Callable[[K], Name], keys: Iterable[
 
 def _repeated_block_paths(keys: Iterable[K], base_path: Name) -> dict[K, NodeKey]:
     """Build and validate the paths for repeated block keys."""
-    from loman.nodekey import to_nodekey
-
     base_path_node_key = to_nodekey(base_path)
     blocks: dict[K, NodeKey] = {}
     for key in keys:
@@ -416,8 +399,6 @@ def _validate_block_template(comp: Computation, block: Computation) -> None:
 
 def _is_placeholder(comp: Computation, node_key: NodeKey) -> bool:
     """Return whether a node exists only as an unfulfilled forward reference."""
-    from loman.consts import NodeAttributes, States
-
     return comp.dag.nodes[node_key][NodeAttributes.STATE] == States.PLACEHOLDER
 
 
@@ -521,9 +502,6 @@ def add_fan_out(
             transformed target is also its own source.
         TypeError: If a node name is a callable, or ``source`` resolves one.
     """
-    from loman.computeengine import C
-    from loman.consts import NodeAttributes
-
     source_node_keys = _resolve_fan_out_sources(source, targets)
     target_node_keys = {key: _to_node_name(target, "Fan-out target") for key, target in targets.items()}
     if len(set(target_node_keys.values())) != len(target_node_keys):
@@ -576,8 +554,6 @@ def add_fan_in(
             result is also a source, or a source already depends on the result.
         TypeError: If a node name is a callable.
     """
-    from loman.computeengine import C
-
     result_node_key = _to_node_name(result, "Fan-in result")
     source_node_keys = [_to_node_name(source, "Fan-in source") for source in sources.values()]
     if len(set(source_node_keys)) != len(source_node_keys):
@@ -620,8 +596,6 @@ def add_id_nodes(comp: Computation, blocks: Mapping[K, NodeKey], name: Name) -> 
         ValueError: If a generated node would replace a calculation node.
         TypeError: If ``name`` is a callable.
     """
-    from loman.consts import NodeAttributes
-
     id_node_key = _to_node_name(name, "Identifier node name")
     id_nodes = {key: block_path.join(id_node_key) for key, block_path in blocks.items()}
     for node_key in id_nodes.values():
@@ -691,42 +665,6 @@ def _add_repeated_blocks_definition(
         if planned_node.label is not None:
             named[planned_node.label] = planned_node.node_key
     return BuiltRepeatedBlocks(blocks, tuple(planned_node.node_key for planned_node in planned), named)
-
-
-@overload
-def apply1(f: Callable[..., R], xs: list[T], *args: Any, **kwds: Any) -> list[R]: ...
-
-
-@overload
-def apply1(f: Callable[..., R], xs: T, *args: Any, **kwds: Any) -> R: ...
-
-
-@overload
-def apply1(f: Callable[..., R], xs: Generator[T, None, None], *args: Any, **kwds: Any) -> Generator[R, None, None]: ...
-
-
-def apply1(
-    f: Callable[..., R], xs: T | list[T] | Generator[T, None, None], *args: Any, **kwds: Any
-) -> R | list[R] | Generator[R, None, None]:
-    """Apply function f to xs, handling generators, lists, and single values."""
-    if isinstance(xs, types.GeneratorType):
-        return (f(x, *args, **kwds) for x in xs)
-    if isinstance(xs, list):
-        return [f(x, *args, **kwds) for x in xs]
-    return f(xs, *args, **kwds)
-
-
-def as_iterable(xs: T | Iterable[T]) -> Iterable[T]:
-    """Convert input to iterable form if not already iterable."""
-    if isinstance(xs, (types.GeneratorType, list, set)):
-        return xs  # type: ignore[return-value]
-    return (xs,)  # type: ignore[return-value]
-
-
-def apply_n(f: Callable[..., Any], *xs: Any, **kwds: Any) -> None:
-    """Apply function f to the cartesian product of iterables xs."""
-    for p in itertools.product(*[as_iterable(x) for x in xs]):
-        f(*p, **kwds)
 
 
 class AttributeView:

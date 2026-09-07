@@ -1,12 +1,10 @@
-"""Tests for the util module.
+"""Tests for the util module, and for the loman.iterables helpers it was split from.
 
 This module tests:
-- apply1 function for applying functions to various input types
-- as_iterable function for converting inputs to iterables
-- apply_n function for cartesian product application
 - repeated block, fan-out, and fan-in graph builders
 - AttributeView class for dynamic attribute access
 - value_eq function for safe value comparison
+- apply1, as_iterable and apply_n, which now live in loman.iterables
 """
 
 import types
@@ -19,6 +17,7 @@ import pytest
 
 from loman import Computation, NodeKey, States
 from loman.consts import NodeAttributes
+from loman.iterables import apply1, apply_n, as_iterable
 from loman.util import (
     AttributeView,
     FanIn,
@@ -32,9 +31,6 @@ from loman.util import (
     add_fan_out,
     add_id_nodes,
     add_repeated_blocks,
-    apply1,
-    apply_n,
-    as_iterable,
     value_eq,
 )
 
