@@ -663,6 +663,34 @@ class TestNoStoreAvailable:
         assert manifest["nodes"][0]["value"].get("encoding") != "npy"
 
 
+class TestMissingDestinationDirectory:
+    """A destination whose parent does not exist is reported as such.
+
+    Both containers build into a sibling ``.tmp`` first, so without the check
+    the error names a temporary file the caller never asked for and never sees.
+    """
+
+    def test_zip_save_names_the_missing_directory(self, tmp_path):
+        """Saving a .loman file names the directory, not the temporary."""
+        comp = _sample_computation()
+        target = tmp_path / "no_such_dir" / "c.loman"
+
+        with pytest.raises(SerializationError, match="does not exist") as excinfo:
+            comp.save(str(target))
+
+        message = str(excinfo.value)
+        assert "no_such_dir" in message
+        assert ".tmp" not in message
+
+    def test_dir_save_names_the_missing_directory(self, tmp_path):
+        """The directory container reports it the same way."""
+        comp = _sample_computation()
+        target = tmp_path / "no_such_dir" / "c_dir"
+
+        with pytest.raises(SerializationError, match="does not exist"):
+            comp.save(str(target), container="dir")
+
+
 class TestBlobReaderErrors:
     """Reading a blob the manifest describes but nothing can supply."""
 
