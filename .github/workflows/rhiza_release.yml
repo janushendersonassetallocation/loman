@@ -345,7 +345,7 @@ jobs:
 
       - name: Upload SBOM artifacts
         if: hashFiles('pyproject.toml') != ''
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: sbom
           path: |
@@ -369,7 +369,7 @@ jobs:
 
       - name: Upload dist artifact
         if: steps.buildable.outputs.buildable == 'true'
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: dist
           path: dist
@@ -396,7 +396,7 @@ jobs:
 
       - name: Download SBOM artifact
         # Downloads sbom.cdx.json and sbom.cdx.xml into sbom/ directory
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           name: sbom
           path: sbom
@@ -405,7 +405,7 @@ jobs:
       - name: Download dist artifact
         # Brings in provenance.intoto.jsonl (and the built distributions) staged
         # by the build job, so the SLSA provenance ships as a release asset.
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           name: dist
           path: dist
@@ -440,7 +440,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download dist artifact
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           name: dist
           path: dist
@@ -553,7 +553,7 @@ jobs:
 
       - name: Upload conda recipe artifact
         if: steps.check_conda.outputs.should_generate == 'true'
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: conda-recipe
           path: conda-recipe/meta.yaml
