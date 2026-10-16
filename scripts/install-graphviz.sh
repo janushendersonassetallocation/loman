@@ -69,8 +69,19 @@ install_once() {
                 sudo dnf install -y graphviz
                 return $?
             fi
+            if have pacman; then
+                log "installing via pacman"
+                # Do not refresh package indexes alone (-Sy): Arch requires
+                # system upgrades to keep refreshed indexes consistent.
+                if [ "$(id -u)" -eq 0 ]; then
+                    pacman -S --needed --noconfirm graphviz
+                else
+                    sudo pacman -S --needed --noconfirm graphviz
+                fi
+                return $?
+            fi
             log "no supported Linux package manager found" >&2
-            return 1
+            return 2
             ;;
         *)
             # Windows: try both, in order, rather than only whichever is first
@@ -108,10 +119,16 @@ main() {
             sleep "${pause}"
         fi
         install_once
+        local status=$?
         # The installer's exit status is a hint; whether `dot` runs is the fact.
         if dot_present; then
             log "installed: $(dot -V 2>&1 | head -1)"
             return 0
+        fi
+        # An unsupported Linux package manager cannot recover on retry.
+        if [ "${status}" -eq 2 ] && [ "$(uname -s)" = Linux ] &&
+            ! have apt-get && ! have dnf && ! have pacman; then
+            break
         fi
         attempt=$((attempt + 1))
     done
@@ -127,6 +144,7 @@ test failure: continuing would report a hundred or more failures that all say
 Install it and try again:
   macOS         brew install graphviz
   Debian/Ubuntu sudo apt-get install graphviz
+  Arch Linux    sudo pacman -S --needed graphviz
   Windows       choco install graphviz   (or: winget install Graphviz.Graphviz)
 EOF
     return 1
