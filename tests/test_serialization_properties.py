@@ -15,7 +15,7 @@ The central property is that encoding is *lossless*: whatever goes in comes back
 equal, of the same type, through every container.
 """
 
-import datetime
+import datetime as dt
 import json
 import math
 import pathlib
@@ -320,7 +320,7 @@ class TestDatetimeResolution:
 
     @SETTINGS
     @given(
-        value=st.datetimes(min_value=datetime.datetime(1900, 1, 1), max_value=datetime.datetime(2200, 1, 1)),
+        value=st.datetimes(min_value=dt.datetime(1900, 1, 1), max_value=dt.datetime(2200, 1, 1)),
         unit=st.sampled_from(["s", "ms", "us", "ns"]),
     )
     def test_timestamp_resolution(self, value, unit, tmp_path):
