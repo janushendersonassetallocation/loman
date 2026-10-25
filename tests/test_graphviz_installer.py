@@ -56,18 +56,30 @@ class TestGraphvizInstaller(unittest.TestCase):
             body += "exit 1"
         self.command("pacman", body)
 
-    def test_pacman_root_and_nonroot(self):
-        """Use sudo only for non-root users and never refresh indexes alone."""
+    def test_pacman_root(self):
+        """Root can install directly without refreshing indexes alone."""
         self.pacman()
-        for uid in ("1000", "0"):
-            with self.subTest(uid=uid):
-                (self.bin / "dot").unlink(missing_ok=True)
-                (self.bin / "calls").unlink(missing_ok=True)
-                result = self.run_installer(TEST_UID=uid)
-                assert result.returncode == 0, result.stderr
-                expected = ([] if uid == "0" else ["sudo"]) + ["pacman -S --needed --noconfirm graphviz"]
-                assert self.calls() == expected
-                assert "installed:" in result.stdout
+        result = self.run_installer(TEST_UID="0")
+        assert result.returncode == 0, result.stderr
+        assert self.calls() == ["pacman -S --needed --noconfirm graphviz"]
+        assert "installed:" in result.stdout
+
+    def test_nonroot_prints_instructions_without_installing(self):
+        """Never invoke sudo, package managers, or backoff as a normal user."""
+        for manager in ("apt-get", "dnf", "pacman", None):
+            with self.subTest(manager=manager):
+                if manager:
+                    self.command(manager, 'printf "unexpected install\\n" >> "$PATH/calls"')
+                result = self.run_installer()
+                assert result.returncode != 0
+                assert self.calls() == []
+                assert "install it manually" in result.stderr
+                assert "sudo apt-get install graphviz" in result.stderr
+                assert "sudo dnf install graphviz" in result.stderr
+                assert "sudo pacman -S --needed graphviz" in result.stderr
+                assert "attempt" not in result.stdout
+                if manager:
+                    (self.bin / manager).unlink()
 
     def test_existing_dot_skips_install(self):
         """An existing Graphviz installation needs no package-manager call."""
@@ -80,7 +92,7 @@ class TestGraphvizInstaller(unittest.TestCase):
 
     def test_unsupported_linux_fails_without_backoff(self):
         """Retrying cannot supply a missing package manager."""
-        result = self.run_installer()
+        result = self.run_installer(TEST_UID="0")
         assert result.returncode != 0
         assert self.calls() == []
         assert result.stderr.count("no supported Linux package manager") == 1
