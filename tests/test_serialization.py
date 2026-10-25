@@ -1,6 +1,6 @@
 """Tests for serialization and transformation functionality in Loman."""
 
-import datetime
+import datetime as dt
 import decimal
 import io
 import json
@@ -1886,10 +1886,10 @@ AWKWARD_VALUES = {
     "bytes": b"\x00\xff",
     "bytearray": bytearray(b"\x01\x02"),
     "decimal": decimal.Decimal("1.10"),
-    "datetime": datetime.datetime(2020, 1, 1, 12, 30),
-    "date": datetime.date(2020, 1, 1),
-    "time": datetime.time(12, 30, 15),
-    "timedelta": datetime.timedelta(days=1, microseconds=5),
+    "datetime": dt.datetime(2020, 1, 1, 12, 30),
+    "date": dt.date(2020, 1, 1),
+    "time": dt.time(12, 30, 15),
+    "timedelta": dt.timedelta(days=1, microseconds=5),
     "timestamp": pd.Timestamp("2020-01-01"),
     "tz_timestamp": pd.Timestamp("2020-01-01", tz="UTC"),
     "pd_timedelta": pd.Timedelta("1D"),

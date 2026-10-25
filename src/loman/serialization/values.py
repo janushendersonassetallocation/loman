@@ -19,7 +19,7 @@ keeps a ``MultiIndex`` a ``MultiIndex`` and turns the default ``RangeIndex`` of 
 
 import base64
 import contextlib
-import datetime
+import datetime as dt
 import decimal
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
@@ -48,7 +48,7 @@ class DateTimeTransformer(CustomTransformer):
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Encode a datetime as ISO 8601, keeping the zone name when present."""
-        assert isinstance(o, datetime.datetime)  # noqa: S101
+        assert isinstance(o, dt.datetime)  # noqa: S101
         d: dict[str, Any] = {"iso": o.isoformat()}
         tzname = getattr(o.tzinfo, "key", None)  # zoneinfo.ZoneInfo
         if tzname is not None:
@@ -57,7 +57,7 @@ class DateTimeTransformer(CustomTransformer):
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct a datetime, restoring its named zone when recorded."""
-        dt = datetime.datetime.fromisoformat(d["iso"])
+        dt = dt.datetime.fromisoformat(d["iso"])
         tzname = d.get("tz")
         if tzname is not None:
             from zoneinfo import ZoneInfo
@@ -68,7 +68,7 @@ class DateTimeTransformer(CustomTransformer):
     @property
     def supported_direct_types(self) -> Iterable[type]:
         """Return the exact type handled; pandas Timestamps go elsewhere."""
-        return [datetime.datetime]
+        return [dt.datetime]
 
 
 class DateTransformer(CustomTransformer):
@@ -81,17 +81,17 @@ class DateTransformer(CustomTransformer):
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Encode a date as an ISO 8601 string."""
-        assert isinstance(o, datetime.date)  # noqa: S101
+        assert isinstance(o, dt.date)  # noqa: S101
         return {"iso": o.isoformat()}
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct a date from its ISO 8601 string."""
-        return datetime.date.fromisoformat(d["iso"])
+        return dt.date.fromisoformat(d["iso"])
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
         """Return the exact type handled."""
-        return [datetime.date]
+        return [dt.date]
 
 
 class TimeTransformer(CustomTransformer):
@@ -104,17 +104,17 @@ class TimeTransformer(CustomTransformer):
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Encode a time as an ISO 8601 string."""
-        assert isinstance(o, datetime.time)  # noqa: S101
+        assert isinstance(o, dt.time)  # noqa: S101
         return {"iso": o.isoformat()}
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct a time from its ISO 8601 string."""
-        return datetime.time.fromisoformat(d["iso"])
+        return dt.time.fromisoformat(d["iso"])
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
         """Return the exact type handled."""
-        return [datetime.time]
+        return [dt.time]
 
 
 class TimeDeltaTransformer(CustomTransformer):
@@ -131,17 +131,17 @@ class TimeDeltaTransformer(CustomTransformer):
 
     def to_dict(self, transformer: "Transformer", o: object) -> dict[str, Any]:
         """Encode a timedelta as its normalised day/second/microsecond parts."""
-        assert isinstance(o, datetime.timedelta)  # noqa: S101
+        assert isinstance(o, dt.timedelta)  # noqa: S101
         return {"days": o.days, "seconds": o.seconds, "microseconds": o.microseconds}
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct a timedelta from its parts."""
-        return datetime.timedelta(days=d["days"], seconds=d["seconds"], microseconds=d["microseconds"])
+        return dt.timedelta(days=d["days"], seconds=d["seconds"], microseconds=d["microseconds"])
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
         """Return the exact type handled."""
-        return [datetime.timedelta]
+        return [dt.timedelta]
 
 
 class TimestampTransformer(CustomTransformer):
