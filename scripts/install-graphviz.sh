@@ -57,20 +57,23 @@ install_once() {
         Linux)
             if have apt-get; then
                 log "installing via apt-get"
-                if [ "$(id -u)" -eq 0 ]; then
-                    apt-get update && apt-get install -y graphviz
-                else
-                    sudo apt-get update && sudo apt-get install -y graphviz
-                fi
+                apt-get update && apt-get install -y graphviz
                 return $?
             fi
             if have dnf; then
                 log "installing via dnf"
-                sudo dnf install -y graphviz
+                dnf install -y graphviz
+                return $?
+            fi
+            if have pacman; then
+                log "installing via pacman"
+                # Do not refresh package indexes alone (-Sy): Arch requires
+                # system upgrades to keep refreshed indexes consistent.
+                pacman -S --needed --noconfirm graphviz
                 return $?
             fi
             log "no supported Linux package manager found" >&2
-            return 1
+            return 2
             ;;
         *)
             # Windows: try both, in order, rather than only whichever is first
@@ -99,6 +102,14 @@ main() {
         return 0
     fi
 
+    # System package installation is only automatic when already running as
+    # root. Leave privilege escalation to the user rather than prompting sudo.
+    if [ "$(uname -s)" = Linux ] && [ "$(id -u)" -ne 0 ]; then
+        log "Graphviz's dot is missing; install it manually and try again." >&2
+        installation_instructions >&2
+        return 1
+    fi
+
     log "not found; installing (up to ${ATTEMPTS} attempts)"
     local attempt=1
     while [ "${attempt}" -le "${ATTEMPTS}" ]; do
@@ -108,10 +119,16 @@ main() {
             sleep "${pause}"
         fi
         install_once
+        local status=$?
         # The installer's exit status is a hint; whether `dot` runs is the fact.
         if dot_present; then
             log "installed: $(dot -V 2>&1 | head -1)"
             return 0
+        fi
+        # An unsupported Linux package manager cannot recover on retry.
+        if [ "${status}" -eq 2 ] && [ "$(uname -s)" = Linux ] &&
+            ! have apt-get && ! have dnf && ! have pacman; then
+            break
         fi
         attempt=$((attempt + 1))
     done
@@ -124,12 +141,20 @@ and widget tests cannot run without it. This is an environment problem, not a
 test failure: continuing would report a hundred or more failures that all say
 "InvocationException: GraphViz's executables not found".
 
+EOF
+    installation_instructions >&2
+    return 1
+}
+
+installation_instructions() {
+    cat <<'EOF'
 Install it and try again:
   macOS         brew install graphviz
   Debian/Ubuntu sudo apt-get install graphviz
+  Fedora/RHEL   sudo dnf install graphviz
+  Arch Linux    sudo pacman -S --needed graphviz
   Windows       choco install graphviz   (or: winget install Graphviz.Graphviz)
 EOF
-    return 1
 }
 
 main "$@"
