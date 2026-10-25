@@ -109,6 +109,51 @@ class TestGraphvizInstaller(unittest.TestCase):
             "pacman -S --needed --noconfirm graphviz",
         ]
 
+    def run_setup(self, **extra):
+        """Run the setup hook with the same isolated commands as the installer."""
+        self.command("dirname", f'printf "%s\\n" "{self.script.parents[1]}"')
+        (self.bin / "bash").symlink_to(shutil.which("bash"))
+        return subprocess.run(
+            [shutil.which("bash"), str(self.script.parents[1] / "local-setup.sh")],
+            env={"PATH": str(self.bin), "GRAPHVIZ_INSTALL_BACKOFF": "0", **extra},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_github_actions_setup_provisions_without_prompting(self):
+        """The CI hook explicitly elevates while local provisioning does not."""
+        self.pacman()
+        self.command(
+            "sudo",
+            'printf "sudo %s\\n" "$1" >> "$PATH/calls"; [ "$1" = -n ] || exit 1; shift; export TEST_UID=0; exec "$@"',
+        )
+        result = self.run_setup(GITHUB_ACTIONS="true")
+        assert result.returncode == 0, result.stderr
+        assert self.calls() == ["sudo -n", "pacman -S --needed --noconfirm graphviz"]
+
+    def test_local_setup_does_not_elevate(self):
+        """Local setup preserves manual installation for normal users."""
+        self.pacman()
+        result = self.run_setup()
+        assert result.returncode != 0
+        assert self.calls() == []
+        assert "install it manually" in result.stderr
+
+    def test_github_actions_setup_skips_existing_dot(self):
+        """A provisioned runner needs no elevation or package-manager call."""
+        self.command("dot", "printf 'Graphviz\\n'")
+        result = self.run_setup(GITHUB_ACTIONS="true")
+        assert result.returncode == 0, result.stderr
+        assert self.calls() == []
+
+    def test_github_actions_setup_elevation_failure_is_fatal(self):
+        """A runner without passwordless sudo fails without retries or prompts."""
+        self.command("sudo", 'printf "sudo %s\\n" "$1" >> "$PATH/calls"; exit 1')
+        result = self.run_setup(GITHUB_ACTIONS="true")
+        assert result.returncode != 0
+        assert self.calls() == ["sudo -n"]
+
     def test_success_without_dot_still_fails(self):
         """A package-manager success is insufficient without the executable."""
         self.command("pacman", "exit 0")
