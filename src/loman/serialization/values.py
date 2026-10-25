@@ -57,13 +57,13 @@ class DateTimeTransformer(CustomTransformer):
 
     def from_dict(self, transformer: "Transformer", d: dict[str, Any]) -> object:
         """Reconstruct a datetime, restoring its named zone when recorded."""
-        dt = dt.datetime.fromisoformat(d["iso"])
+        value = dt.datetime.fromisoformat(d["iso"])
         tzname = d.get("tz")
         if tzname is not None:
             from zoneinfo import ZoneInfo
 
-            dt = dt.astimezone(ZoneInfo(tzname))
-        return dt
+            value = value.astimezone(ZoneInfo(tzname))
+        return value
 
     @property
     def supported_direct_types(self) -> Iterable[type]:
