@@ -18,4 +18,14 @@ set -euo pipefail
 # separate script because it retries transient failures, falls back between
 # package managers, and verifies `dot` actually appeared rather than trusting
 # the installer's exit status.
-exec bash "$(dirname "$0")/scripts/install-graphviz.sh"
+installer="$(dirname "$0")/scripts/install-graphviz.sh"
+
+# Hosted Linux jobs start as a non-root user without Graphviz. Provision it
+# explicitly here, leaving the installer free of automatic sudo for local use.
+# -n fails immediately if the runner cannot elevate without a password.
+if [ "${GITHUB_ACTIONS:-}" = true ] && [ "$(uname -s)" = Linux ] &&
+    [ "$(id -u)" -ne 0 ] && ! command -v dot >/dev/null 2>&1; then
+    exec sudo -n /bin/bash "$installer"
+fi
+
+exec bash "$installer"
