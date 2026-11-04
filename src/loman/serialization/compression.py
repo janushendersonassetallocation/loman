@@ -44,9 +44,11 @@ def _zstd_codec(level: int) -> Codec:
     import zstandard
 
     def compress(data: bytes) -> bytes:
+        """Compress *data* at the level this codec was built for."""
         return zstandard.ZstdCompressor(level=level).compress(data)
 
     def decompress(data: bytes) -> bytes:
+        """Restore the original bytes; the level is recorded in the frame."""
         return zstandard.ZstdDecompressor().decompress(data)
 
     return compress, decompress
