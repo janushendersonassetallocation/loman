@@ -30,7 +30,6 @@ on:
 jobs:
   devcontainer:
     uses: jebel-quant/rhiza/.github/workflows/rhiza_devcontainer.yml@v1.11.0
-    secrets: inherit
     permissions:
       contents: read
       packages: read   # Read-only: image is built with `push: never`, login only pulls cache
