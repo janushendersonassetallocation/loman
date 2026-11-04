@@ -7,6 +7,7 @@ import json
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 import attrs
 import numpy as np
@@ -1887,6 +1888,9 @@ AWKWARD_VALUES = {
     "bytearray": bytearray(b"\x01\x02"),
     "decimal": decimal.Decimal("1.10"),
     "datetime": datetime.datetime(2020, 1, 1, 12, 30),
+    # A named zone, not just an offset: the encoding records tzinfo.key so the
+    # zone survives rather than collapsing to whatever offset applied that day.
+    "zoned_datetime": datetime.datetime(2020, 1, 1, 12, 30, tzinfo=ZoneInfo("Europe/London")),
     "date": datetime.date(2020, 1, 1),
     "time": datetime.time(12, 30, 15),
     "timedelta": datetime.timedelta(days=1, microseconds=5),
@@ -1948,6 +1952,38 @@ def test_awkward_value_produces_strict_json(label):
     text = ComputationSerializer().dumps(comp)
 
     json.loads(text, parse_constant=_reject)
+
+
+class TestNamedTimezonesSurvive:
+    """A zone is not the same thing as the offset it happened to have.
+
+    ``==`` on two aware datetimes compares instants, so a round-trip that
+    silently replaced ``Europe/London`` with a fixed ``+00:00`` would still
+    compare equal in the table above. These assert the zone itself.
+    """
+
+    def test_the_zone_name_is_recorded(self):
+        """The encoding carries ``tzinfo.key``, not just the ISO offset."""
+        t = default_computation_transformer()
+        encoded = t.to_dict(datetime.datetime(2020, 6, 1, 12, 0, tzinfo=ZoneInfo("Europe/London")))
+
+        assert encoded["tz"] == "Europe/London"
+
+    def test_the_zone_name_is_restored(self):
+        """It comes back as the same named zone, not a fixed offset."""
+        original = datetime.datetime(2020, 6, 1, 12, 0, tzinfo=ZoneInfo("Europe/London"))
+        t = default_computation_transformer()
+        restored = t.from_dict(t.to_dict(original))
+
+        assert restored == original
+        assert restored.tzinfo.key == "Europe/London"
+
+    def test_a_plain_offset_records_no_zone(self):
+        """A datetime with no named zone carries no ``tz`` field."""
+        t = default_computation_transformer()
+        encoded = t.to_dict(datetime.datetime(2020, 6, 1, 12, 0, tzinfo=datetime.UTC))
+
+        assert "tz" not in encoded
 
 
 class TestDictKeyFidelity:

@@ -16,7 +16,7 @@ import pytest
 from loman import Computation
 from loman.exception import SerializationError
 from loman.serialization import SerializationProfile
-from loman.serialization.blobs import MANIFEST_NAME, BlobStore
+from loman.serialization.blobs import MANIFEST_NAME, BlobStore, MemoryBlobStore
 
 LARGE = 20_000
 
@@ -484,3 +484,102 @@ class TestCustomTransformerWithAStore:
 
         assert store.writes
         assert restored.v.m == matrix
+
+
+class TestMemoryBlobStore:
+    """The store that ships as the worked example of the interface.
+
+    ``MemoryBlobStore`` is exported from ``loman.serialization`` and named in the
+    paper alongside ``DirBlobStore`` and ``ZipBlobStore``, but the suite had
+    always brought its own store --- ``RecordingStore`` above --- so nothing
+    exercised the one users are pointed at.
+    """
+
+    def test_a_fresh_store_starts_empty(self):
+        """Constructed with no argument, it owns a new dict."""
+        assert MemoryBlobStore().data == {}
+
+    def test_it_adopts_a_supplied_dict(self):
+        """Given a dict, it writes into that one rather than a copy."""
+        backing = {}
+        store = MemoryBlobStore(backing)
+        store.write_blob("k", b"payload")
+
+        assert backing == {"k": b"payload"}
+
+    def test_a_blob_round_trips(self):
+        """What was written under a key is what comes back."""
+        store = MemoryBlobStore()
+        store.write_blob("k", b"payload")
+
+        assert store.read_blob("k") == b"payload"
+
+    def test_a_missing_key_names_itself(self):
+        """A key that was never written raises, quoting the key."""
+        with pytest.raises(SerializationError, match="No blob stored under 'absent'"):
+            MemoryBlobStore().read_blob("absent")
+
+    def test_it_works_as_a_real_store(self, tmp_path):
+        """It routes a node's values out of the container like any other store."""
+        store = MemoryBlobStore()
+        comp = Computation()
+        comp.add_node("big", value=np.arange(LARGE, dtype="float64"), store="warehouse")
+
+        comp.save(str(tmp_path / "c.loman"), stores={"warehouse": store})
+        restored = Computation.load(str(tmp_path / "c.loman"), stores={"warehouse": store})
+
+        assert store.data
+        assert np.array_equal(restored.v.big, np.arange(LARGE, dtype="float64"))
+
+
+class TestRawBytesPayload:
+    """``put_blob`` takes bytes as well as a writer callable.
+
+    The callable form is what the built-in transformers use, so it is the only
+    one the suite reached. Both are documented on ``put_blob``, and a transformer
+    that already holds its bytes has no reason to wrap them in a writer.
+    """
+
+    def test_bytes_are_stored_and_returned(self, tmp_path):
+        """A transformer handing over raw bytes round-trips through a store."""
+        from loman.serialization import ComputationSerializer, CustomTransformer
+
+        class Doc:
+            """A user type that is already a bag of bytes."""
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def __eq__(self, other):
+                return isinstance(other, Doc) and other.raw == self.raw
+
+        class DocTransformer(CustomTransformer):
+            """Encodes a Doc by handing its bytes straight to put_blob."""
+
+            @property
+            def name(self):
+                return "doc"
+
+            def to_dict(self, transformer, o):
+                return {"data": transformer.put_blob(o.raw, codec="bin")}
+
+            def from_dict(self, transformer, d):
+                return Doc(transformer.get_blob(d["data"]))
+
+            @property
+            def supported_direct_types(self):
+                return [Doc]
+
+        doc = Doc(b"\x00\xff" * LARGE)
+        comp = Computation()
+        comp.add_node("d", value=doc, store="warehouse")
+
+        serializer = ComputationSerializer()
+        serializer.register(DocTransformer())
+        store = MemoryBlobStore()
+
+        comp.save(str(tmp_path / "c.loman"), serializer=serializer, stores={"warehouse": store})
+        restored = Computation.load(str(tmp_path / "c.loman"), serializer=serializer, stores={"warehouse": store})
+
+        assert store.data
+        assert restored.v.d == doc
