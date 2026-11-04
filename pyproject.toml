@@ -96,7 +96,10 @@ test = [
     # `uv run --all-groups ... pytest`, which fails with "Failed to spawn:
     # pytest". pytest-mock supplies the `mocker` fixture and pytest-timeout backs
     # the `timeout` setting in pytest.ini.
-    "pytest>=8.0",
+    # Rhiza's benchmark task pins pytest-benchmark 5.2.3, which reads the private
+    # node._nodeid attribute removed in pytest 9.2. Lift this ceiling when the
+    # task provisions pytest-benchmark >=5.3.1 (upstream fix ionelmc/pytest-benchmark#323).
+    "pytest>=8.0,<9.2",
     "pytest-mock>=3.14",
     "pytest-timeout>=2.3",
     # test_ui_value, test_ui_viewmodel and test_visualization import hypothesis at
