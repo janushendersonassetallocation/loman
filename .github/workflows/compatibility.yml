@@ -68,7 +68,7 @@ jobs:
       # version-sensitive tests only, none of which render a graph.
       - name: Install Graphviz
         if: steps.changed.outputs.run == 'true'
-        run: make install-graphviz
+        run: sudo bash scripts/install-graphviz.sh
 
       # benchmarks/ and stress/ are excluded to match `make test`: the benchmark
       # suite needs pytest-benchmark, which the benchmark target installs ad-hoc
