@@ -12,7 +12,7 @@ other direction is covered by the pandas-2 CI job, which runs the whole
 serialization suite against the minimum supported version.
 """
 
-import datetime
+import datetime as dt
 import pathlib
 
 import numpy as np
@@ -169,7 +169,7 @@ class TestStandardLibraryDatetimes:
 
     def test_datetime_roundtrips(self, tmp_path):
         """A stdlib datetime is stored as ISO 8601 and returns unchanged."""
-        value = datetime.datetime(2020, 1, 1, 12, 30, 15, 123456)
+        value = dt.datetime(2020, 1, 1, 12, 30, 15, 123456)
 
         comp = Computation()
         comp.add_node("dt", value=value)
