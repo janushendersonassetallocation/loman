@@ -181,8 +181,11 @@ def _notifies_subscribers(*, graph_changed: bool = False) -> Callable[[F], F]:
     """
 
     def decorate(method: F) -> F:
+        """Wrap one mutation method so its changes are published as a batch."""
+
         @functools.wraps(method)
         def wrapped(self: "Computation", *args: Any, **kwargs: Any) -> Any:
+            """Run the mutation inside a change batch, notifying once it settles."""
             if self._change_depth == 0 and not self._subscriptions:
                 return method(self, *args, **kwargs)
             self._change_depth += 1
