@@ -6,7 +6,7 @@ from typing import Any
 import networkx as nx
 
 from loman.exception import LoopDetectedError
-from loman.util import apply_n
+from loman.iterables import apply_n
 
 
 def contract_node_one(g: nx.DiGraph, n: Any) -> None:

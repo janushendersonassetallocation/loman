@@ -38,8 +38,8 @@ from dataclasses import dataclass, field
 from textwrap import indent
 from typing import TYPE_CHECKING, Any
 
-from loman.computeengine import ConstantValue
 from loman.consts import NodeAttributes
+from loman.nodedefs import ConstantValue
 from loman.nodekey import Name, NodeKey, to_nodekey
 
 from .value import from_wire

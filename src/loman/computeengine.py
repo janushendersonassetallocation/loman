@@ -40,9 +40,11 @@ from .exception import (
     ValidationError,
 )
 from .graph_utils import topological_sort
+from .iterables import apply1, apply_n, as_iterable
+from .nodedefs import C, ConstantValue, identity_function
 from .nodekey import Name, Names, NodeKey, names_to_node_keys, node_keys_to_names, to_nodekey
 from .planning import ExecutionPlan, ValidationReport, create_execution_plan, validate_graph
-from .util import AttributeView, BlockFeature, RepeatedBlocks, apply1, apply_n, as_iterable, value_eq
+from .util import AttributeView, BlockFeature, RepeatedBlocks, value_eq
 from .visualization import GraphView, NodeFormatter
 
 LOG = logging.getLogger("loman.computeengine")
@@ -237,16 +239,6 @@ def node(comp: "Computation", name: Name | None = None, *args: Any, **kw: Any) -
     return inner
 
 
-@dataclass()
-class ConstantValue:
-    """Container for constant values in computations."""
-
-    value: object
-
-
-C = ConstantValue
-
-
 class Node:
     """Base class for computation graph nodes."""
 
@@ -273,31 +265,6 @@ class InputNode(Node):
 
 
 input_node = InputNode
-
-
-def _bind_self(f: Any, obj: object, ignore_self: bool) -> Any:
-    """Bind a callback to the definition object when its first parameter is 'self'.
-
-    Anything that is not callable, including ``None`` and a plain node name, is
-    returned unchanged.
-
-    Asking for ``self`` when there is no definition object to bind to is a
-    contradiction, so it is reported here rather than as the bare
-    ``TypeError: instance must not be None`` that binding would otherwise raise.
-    """
-    if not callable(f) or not ignore_self:
-        return f
-    signature = get_signature(f)
-    if len(signature.kwd_params) > 0 and signature.kwd_params[0] == "self":
-        if obj is None:
-            name = getattr(f, "__qualname__", repr(f))
-            msg = (
-                f"Cannot bind 'self' for {name}: no definition object was supplied. "
-                "Pass one, drop the 'self' parameter, or use ignore_self=False."
-            )
-            raise ValueError(msg)
-        return types.MethodType(f, obj)
-    return f
 
 
 @dataclass
@@ -527,11 +494,6 @@ class NullObject:
         """Return string representation of NullObject."""
         print(f"__repr__: {object.__getattribute__(self, '__dict__')}")
         return "<NullObject>"
-
-
-def identity_function(x: Any) -> Any:
-    """Return the input value unchanged."""
-    return x
 
 
 class Computation:

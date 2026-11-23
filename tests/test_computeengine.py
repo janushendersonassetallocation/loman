@@ -48,10 +48,9 @@ from loman.computeengine import (
     NullObject,
     RepeatedBlocksNode,
     TimingData,
-    _bind_self,
-    identity_function,
 )
 from loman.exception import NodeAlreadyExistsException, NonExistentNodeException
+from loman.nodedefs import _bind_self, identity_function
 from loman.nodekey import to_nodekey
 from loman.visualization import GraphView
 from tests.conftest import BasicFourNodeComputation
