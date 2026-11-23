@@ -181,8 +181,11 @@ def _notifies_subscribers(*, graph_changed: bool = False) -> Callable[[F], F]:
     """
 
     def decorate(method: F) -> F:
+        """Wrap *method* so its changes are batched into one notification."""
+
         @functools.wraps(method)
         def wrapped(self: "Computation", *args: Any, **kwargs: Any) -> Any:
+            """Run the method inside a change batch, publishing when it unwinds."""
             if self._change_depth == 0 and not self._subscriptions:
                 return method(self, *args, **kwargs)
             self._change_depth += 1
