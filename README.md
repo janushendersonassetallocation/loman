@@ -86,7 +86,7 @@ comp.draw()  # Creates the graph shown above
 ```
 
 
-📚 **Explore More**: Check out our [Interactive Examples](examples/) including:
+📚 **Explore More**: Check out our [Interactive Examples](docs/notebooks.md) including:
 - 💰 Interest Rate Swap Pricing
 - 📈 Portfolio Valuation
 - 🏦 CDO Modeling
